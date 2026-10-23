@@ -240,7 +240,8 @@
   // Para la puerta de ejecución: rol y nivel según el SERVIDOR (último ping), no el rol guardado del POS.
   function roles() {
     if (!access) return { role: 'unknown' };
-    return { role: access.role, level: access.level, isOwner: function () { return access.role === 'owner'; } };
+    // cambios: nivel 3 con «costos y cambios» según el ping del servidor (solo para tarjetas de Configuración con destino servidor)
+    return { role: access.role, level: access.level, cambios: access.cambios === true, isOwner: function () { return access.role === 'owner'; } };
   }
   // Mismo pedido que NA_ROLES.api (endpoint, Bearer, sin cookies) pero con límite de tiempo propio del asistente.
   // Un timeout lanza un error (timeout=true); un error HTTP vuelve como { error, status }.
@@ -319,6 +320,9 @@
     return isOwnerAccess()?root.NA_CONFIG_V9:null;
   }
   var deps = {
+    // (#967 teléfono) destino servidor: el confirm ya guardó; se vuelven a leer pos.business, pos.ticket y pos.flags con el lector EXISTENTE
+    // de Configuración (config-g.js pullSettings: GET /settings y aplica con los mismos setters), sin recargar la página
+    reloadSettings: function () { var G = root.NA_CONFIG_G; return G && typeof G.pullSettings === 'function' ? G.pullSettings() : null; },
     applyConfiguration: async function(p) { var api=await configurationApi(); return api&&api.assistantApply?api.assistantApply(p):{ok:false,msg:'No se pudo cargar Configuración.'}; },
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
@@ -522,7 +526,9 @@
           : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
         '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') +
         (tot.filas[i] != null ? '<div class="lt" data-lt="' + i + '">Total ' + soles(tot.filas[i]) + '</div>' : '') + '</td></tr>'; }).join('') + totalRow(tot);
-    if (p.type === 'configuracion') rows = '<tr><td>'+E(p.nombre)+'<div class="note">'+E(p.alcance)+'</div></td><td>'+E(typeof p.antes==='boolean'?(p.antes?'Activado':'Desactivado'):p.antes)+' → <b>'+E(typeof p.valor==='boolean'?(p.valor?'Activado':'Desactivado'):p.valor)+'</b></td></tr>';
+    // RUC tapado: sin valor en la tarjeta; se escribe en el campo de abajo (needFields)
+    var cfgVal = function (v) { return typeof v==='boolean'?(v?'Activado':'Desactivado'):v; }, rucNeed = C.isRucCard && C.isRucCard(p) && C.fillValues && (Array.isArray(p.completar) || Array.isArray(p.needFields));
+    if (p.type === 'configuracion') rows = '<tr><td>'+E(p.nombre)+'<div class="note">'+E(p.alcance)+'</div></td><td>'+E(cfgVal(p.antes))+' → <b>'+(rucNeed?'Escríbalo abajo':E(cfgVal(p.valor)))+'</b></td></tr>';
     if (p.type === 'precio') rows = '<tr><td>' + E(p.nombre) + '</td><td class="r">' + soles(p.precio_actual) + ' → <b>' + soles(p.precio_nuevo) + '</b></td></tr>';
     if (p.type === 'costo') rows = '<tr><td>' + E(p.nombre) + '<div class="note">Costo</div></td><td class="r">' + (p.costo_actual != null ? soles(p.costo_actual) : 'sin costo') + ' → <b>' + soles(p.costo_nuevo) + '</b></td></tr>';
     if (p.type === 'ajuste') rows = '<tr><td>' + E(p.nombre) + '<div class="note">' + E(p.motivo) + '</div></td><td class="r">' + (p.tipo === 'entrada' ? '+' : '−') + E(p.cantidad) + '</td></tr>' +
@@ -540,12 +546,12 @@
     if (p.type === 'producto' && p.parecidos && p.parecidos.length) warn += '<div class="warn">Ya hay productos parecidos: ' + E(p.parecidos.join(', ')) + '.</div>';
     if (p.type === 'producto' && p.revisar) warn += '<div class="warn">Precio o costo fuera de lo normal. Revisa bien.</div>';
     var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
-      configuracion: 'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
+      configuracion: p.destino==='servidor'?'Al confirmar se guarda en el servidor. Afecta a toda la tienda.':'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
     var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note" data-docnote></div>' : '';
-    return '<h4>' + E(p.title) + '<span class="pill">Solo Admin</span></h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
+    return '<h4>' + E(p.title) + (C.isServerConfig && C.isServerConfig(p) ? '<span class="pill">Toda la tienda</span>' : '<span class="pill">Solo Admin</span>') + '</h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
       '<div class="meta"><span>Vence en <b data-left>5:00</b></span><span>Se usa una sola vez</span></div>' +
       '<div class="res" aria-live="polite"></div>' +
       '<div class="acts"><button type="button" class="na-asst-ok" data-ok>Confirmar</button><button type="button" class="na-asst-no" data-no>Cancelar</button>' +
@@ -673,7 +679,8 @@
         // (Bot 4 sobre 58200f60) nada que arreglar en la tarjeta: aviso claro y solo «Cancelar» (ningún botón que no lleve a ningún lado)
         if (f.kind === 'blocked') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (again) again.hidden = true; no.hidden = false; no.disabled = false; no.textContent = 'Cancelar'; return; }
         if (f.kind === 'review' || f.kind === 'limit') markRows(f.rows, f.kind === 'limit');
-        if (f.kind === 'fields') { var rest = need ? need.flag(f.fields) : f.fields; res.textContent = rest.length || !need ? f.msg : 'Complete los datos marcados y vuelva a confirmar.'; }
+        if (f.kind === 'fields' && p.type === 'configuracion') { if (need) need.flag(f.fields, f.msg); res.textContent = f.msg; } // RUC: el aviso del servidor junto al campo y en la tarjeta
+        else if (f.kind === 'fields') { var rest = need ? need.flag(f.fields) : f.fields; res.textContent = rest.length || !need ? f.msg : 'Complete los datos marcados y vuelva a confirmar.'; }
         if (again) { again.hidden = !f.again; again.disabled = false; }
         if (c.dataset.st === 'pending') { c.dataset.btn = f.button; ok.disabled = false; no.disabled = false; ok.textContent = f.button; syncOk(); }
       });
@@ -723,17 +730,18 @@
     return true;
   }
   function roleLost(c, key, p, need) {
+    var lostMsg = p && p.type === 'configuracion' && C.CONFIG_LOST_MSG ? C.CONFIG_LOST_MSG : C.ROLE_LOST_MSG; // Configuración: aviso propio
     try { gate.forget(key); } catch (_) {}
     try { if (gate.forgetAll) gate.forgetAll(); } catch (_) {}
     if (c) { if (!c._naNeed) c._naNeed = need; if (!c._naP) c._naP = p; }
     wipeCard(c); C.wipeManual(p);
     Array.prototype.forEach.call(doc.querySelectorAll('.na-asst-card'), wipeCard);
     closeAssistantPurchase();
-    var m = el('div', 'na-asst-msg sys na-asst-rolelost'), t = el('div'); t.textContent = C.ROLE_LOST_MSG; m.appendChild(t);
+    var m = el('div', 'na-asst-msg sys na-asst-rolelost'), t = el('div'); t.textContent = C.ROLE_LOST_MSG; if (lostMsg !== C.ROLE_LOST_MSG) t.textContent = lostMsg; m.appendChild(t);
     var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Cerrar'; b.onclick = function () { m.remove(); closePanel(); }; m.appendChild(b);
-    if (msgsEl) { msgsEl.appendChild(m); scrollEnd(); } announce(C.ROLE_LOST_MSG);
+    if (msgsEl) { msgsEl.appendChild(m); scrollEnd(); } announce(lostMsg);
     // el servidor dice el rol nuevo; si al cambiar de rol se rearma el panel (sin la charla), el aviso queda en el aviso del POS
-    lastPing = 0; Promise.resolve(refreshAccess()).then(function () { if (!m.isConnected && !doc.querySelector('.na-asst-rolelost')) posNotice(C.ROLE_LOST_MSG); }, function () {});
+    lastPing = 0; Promise.resolve(refreshAccess()).then(function () { if (!m.isConnected && !doc.querySelector('.na-asst-rolelost')) posNotice(lostMsg); }, function () {});
   }
   function accessLost(code) {
     access = null; adminOff = true; noRole = false;
@@ -1130,7 +1138,7 @@
     // Corto (3 s) y sin bloquear nada: con mala señal se corta (timeout del pedido) y queda lo que ya había.
     var prevRole = access ? access.role : null;
     pinging = post('/auth/assistant/chat', { ping: true }, null, PING_TIMEOUT_MS).then(function (d) {
-      if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level, vision: d.vision !== false }; adminOff = false; }
+      if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level, vision: d.vision !== false }; access.cambios = d.role !== 'owner' && d.cambios === true; adminOff = false; }
       else if (d && (d.status === 403 || d.status === 401 || d.status === 404)) { access = null; offNow = d.error === 'assistant_off' && d.reason !== 'sin_rol'; }
       else lastPing = 0; // sin respuesta clara: se puede volver a preguntar al reconectar
       noRole = !!(d && d.reason === 'sin_rol'); if (d && 'owner_bootstrap' in d) bootstrapOn = !!d.owner_bootstrap; // solo viene en el 403 sin_rol
