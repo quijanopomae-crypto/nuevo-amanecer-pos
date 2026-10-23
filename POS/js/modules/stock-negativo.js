@@ -34,6 +34,12 @@
   // Productos con lotes: no se regularizan aquí (la regla de lotes se define aparte); solo se marcan.
   var LOTS_MESSAGE = 'Este producto tiene lotes: regularízalo desde Inventario. Aquí no se ajusta para no tocar los lotes.';
   function lotsOf(p) { var a = aj(); try { return !!(a && typeof a.hasLots === 'function' && a.hasLots(p)); } catch (_) { return true; } }
+  // Id único por simulación: cada «Revisar ajuste» crea uno nuevo; reintentar la MISMA simulación no duplica.
+  var simSeq = 0;
+  function newSimId() {
+    try { if (root.crypto && typeof root.crypto.randomUUID === 'function') return 'sn-' + root.crypto.randomUUID(); } catch (_) {}
+    return 'sn-' + Date.now().toString(36) + '-' + (++simSeq).toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
   function fmt(v) { return Number(v).toLocaleString('es-PE', { maximumFractionDigits: 3 }); }
   // Simulación pura: valida el valor elegido y devuelve el ajuste. No hay valor por defecto: vacío = error.
   function simulate(row, target) {
@@ -46,7 +52,7 @@
     if (!FRACTIONAL_UNITS.test(row.unit) && !Number.isInteger(t)) return { ok: false, message: 'Este producto se mueve en unidades enteras.' };
     var delta = Math.round((t - row.stock) * 1000) / 1000;
     if (!(delta > 0)) return { ok: false, message: 'El stock final debe ser mayor que el actual.' };
-    return { ok: true, productId: row.id, before: row.stock, after: t, delta: delta,
+    return { ok: true, simId: newSimId(), productId: row.id, before: row.stock, after: t, delta: delta,
       summary: row.name + ': ' + fmt(row.stock) + ' → ' + fmt(t) + ' (suma ' + fmt(delta) + ')' };
   }
   function noteFor(sim, extra) {
@@ -55,12 +61,12 @@
     return (extra ? n + '. ' + extra : n).slice(0, 300);
   }
   // Registro de idempotencia persistido (localStorage), además de la verificación de stock esperado.
-  var DONE_KEY = 'na_stock_negativo_done_v1', MAX_DONE = 200, inFlight = {};
+  var DONE_KEY = 'na_stock_negativo_done_v1', MAX_DONE = 50, inFlight = {};
   function store() { try { return root.localStorage || null; } catch (_) { return null; } }
   function readDone() { var s = store(); try { var v = s && JSON.parse(s.getItem(DONE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } }
   function isDone(k) { return readDone().indexOf(k) >= 0; }
   function markDone(k) { var s = store(); if (!s) return; var v = readDone().filter(function (x) { return x !== k; }); v.push(k); try { s.setItem(DONE_KEY, JSON.stringify(v.slice(-MAX_DONE))); } catch (_) {} }
-  function key(sim) { return sim.productId + '|' + sim.before + '|' + sim.after; }
+  function key(sim) { return String(sim.simId || ''); }
   function products() {
     var c = root.NuevoAmanecerCanonical;
     try { if (c && typeof c.enabled === 'function' && c.enabled()) { var s = c.snapshot(); if (s && Array.isArray(s.products)) return s.products; } } catch (_) {}
@@ -71,6 +77,7 @@
     if (!available()) return { ok: false, message: 'Sin permiso.' };
     if (!sim || !sim.ok) return { ok: false, message: 'Primero revisa el ajuste.' };
     var k = key(sim);
+    if (!k) return { ok: false, message: 'Primero revisa el ajuste.' };
     if (isDone(k)) return { ok: true, duplicate: true, message: 'Este ajuste ya se registró.' };
     if (inFlight[k]) return { ok: false, duplicate: true, message: 'Este ajuste ya se está registrando.' };
     var prod = products().find(function (p) { return p && pid(p) === sim.productId; });

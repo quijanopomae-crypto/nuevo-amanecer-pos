@@ -100,7 +100,7 @@ test('lotes: producto negativo con lotes queda marcado y bloqueado, sin movimien
   const row = sn.negatives(c.productos).find(r => r.id === '1');
   assert.equal(row.lots, true);
   const sim = sn.simulate(row, '0'); assert.equal(sim.ok, false); assert.equal(sim.blocked, 'LOTS');
-  const forced = await sn.apply({ ok: true, productId: '1', before: -3, after: 0, delta: 3 });
+  const forced = await sn.apply({ ok: true, simId: 'sn-forced', productId: '1', before: -3, after: 0, delta: 3 });
   assert.equal(forced.blocked, 'LOTS'); assert.equal(c.inventoryMovements.length, 0);
 });
 
@@ -108,7 +108,7 @@ test('idempotencia persistida: tras recargar, el mismo ajuste no se repite', asy
   const ls = memStore(), a = ctx({ localStorage: ls });
   const sim = a.NA_STOCK_NEGATIVO.simulate(a.NA_STOCK_NEGATIVO.negatives(a.productos).find(r => r.id === '1'), '0');
   assert.equal((await a.NA_STOCK_NEGATIVO.apply(sim)).ok, true);
-  assert.match(ls.getItem('na_stock_negativo_done_v1'), /1\|-3\|0/);
+  assert.deepEqual(JSON.parse(ls.getItem('na_stock_negativo_done_v1')), [sim.simId]);
   const b = ctx({ localStorage: ls }); // otra pestaña / recarga, mismos datos sintéticos (stock -3 otra vez)
   const r = await b.NA_STOCK_NEGATIVO.apply(sim);
   assert.equal(r.duplicate, true); assert.equal(b.inventoryMovements.length, 0);
@@ -118,4 +118,24 @@ test('unidades: decimales solo kg, g, L, mL; UND y metros enteros', () => {
   const sn = ctx().NA_STOCK_NEGATIVO;
   for (const u of ['kg', 'g', 'L', 'mL', 'litros']) assert.equal(sn.simulate({ id: 'x', name: 'x', stock: -1, unit: u }, '0.5').ok, true, u);
   for (const u of ['unidad', 'UND', 'm', '']) assert.equal(sn.simulate({ id: 'x', name: 'x', stock: -1, unit: u }, '0.5').ok, false, u);
+});
+
+test('mismo caso otra vez después de completar: nueva simulación sí se registra; reintento de la misma no', async () => {
+  const ls = memStore(), c = ctx({ localStorage: ls }), sn = c.NA_STOCK_NEGATIVO;
+  const row = () => sn.negatives(c.productos).find(r => r.id === '1');
+  const s1 = sn.simulate(row(), '0');
+  assert.equal((await sn.apply(s1)).ok, true);
+  c.productos[0].stock = -3; // vuelve al mismo negativo
+  assert.equal((await sn.apply(s1)).duplicate, true); // reintento de la misma simulación
+  const s2 = sn.simulate(row(), '0');
+  assert.notEqual(s2.simId, s1.simId);
+  const r2 = await sn.apply(s2); assert.equal(r2.ok, true); assert.equal(r2.duplicate, undefined);
+  assert.equal(c.inventoryMovements.length, 2); assert.equal(c.productos[0].stock, 0);
+  assert.equal((await sn.apply({ ...s2, simId: '' })).ok, false);
+});
+
+test('registro podado: guarda solo los últimos 50', async () => {
+  const ls = memStore(), c = ctx({ localStorage: ls }), sn = c.NA_STOCK_NEGATIVO;
+  for (let i = 0; i < 55; i++) { c.productos[0].stock = -3; assert.equal((await sn.apply(sn.simulate(sn.negatives(c.productos).find(r => r.id === '1'), '0'))).ok, true); }
+  assert.equal(JSON.parse(ls.getItem('na_stock_negativo_done_v1')).length, 50);
 });
