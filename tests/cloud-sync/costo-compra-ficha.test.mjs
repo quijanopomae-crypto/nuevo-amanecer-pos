@@ -176,6 +176,7 @@ test('product.update: se envían exactamente los campos que el Worker reescribe,
 test('CANON: el historial queda como «Compra» con ref (recordPurchase) y la actualización no agrega «Ficha»', async () => {
   const { ctx, sent } = canonCtx();
   ctx.NA_ROLES = { isOwner: () => true, label: 'Ana', deviceId: 'dev-1' };
+  ctx.NA_PERMISSIONS = Object.assign({}, ctx.NA_PERMISSIONS, { featureLocked: id => id !== 'historial-precios-producto' }); // CM-162: candado abierto
   vm.runInContext(read('POS/js/products/price-history.js'), ctx);
   ctx.productos = [{ id: 'p1', costo: 4 }, { id: 'p2', costo: 0.5 }];
   ctx.NA_PRICE_HISTORY.recordPurchase('PUR-7', lines, applied); // lo que hace submit antes del gancho

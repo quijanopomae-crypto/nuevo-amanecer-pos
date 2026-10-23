@@ -13,6 +13,7 @@
     catch (_) {}
     return root.invEditId;
   }
+  var filterType = '';
   function render() {
     var doc = root.document;
     if (!doc) return;
@@ -20,7 +21,7 @@
     var modal = doc.getElementById('mProd');
     var api = root.NA_PRICE_HISTORY;
     if (!host || !modal || !api) return;
-    if (!modal.classList.contains('open')) { host.hidden = true; host.replaceChildren(); return; }
+    if (!modal.classList.contains('open') || typeof api.enabled !== 'function' || !api.enabled()) { host.hidden = true; host.replaceChildren(); return; }
     host.hidden = false;
     host.replaceChildren();
     var title = doc.createElement('p');
@@ -35,7 +36,27 @@
       host.appendChild(pending);
       return;
     }
-    var rows = api.list(id);
+    // Filtro por tipo solo para el dueño (el empleado solo ve precio de venta/mayorista, nunca costo).
+    var owner = api.canSeeCost();
+    if (!owner) filterType = '';
+    if (owner) {
+      var bar = doc.createElement('div');
+      bar.className = 'na-ph-filter';
+      bar.setAttribute('role', 'group');
+      bar.setAttribute('aria-label', 'Filtrar por tipo');
+      bar.setAttribute('data-ph-filter', '');
+      [['', 'Todos'], ['venta', 'Venta'], ['mayorista', 'Mayorista'], ['costo', 'Costo']].forEach(function (o) {
+        var btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.textContent = o[1];
+        btn.setAttribute('data-ph-type-filter', o[0]);
+        btn.setAttribute('aria-pressed', filterType === o[0] ? 'true' : 'false');
+        btn.addEventListener('click', function () { filterType = o[0]; render(); });
+        bar.appendChild(btn);
+      });
+      host.appendChild(bar);
+    }
+    var rows = api.list(id, filterType ? { type: filterType } : undefined);
     if (!rows.length) {
       var empty = doc.createElement('p');
       empty.className = 'na-ph-empty';
@@ -50,6 +71,7 @@
       var when = doc.createElement('time');
       when.dateTime = row.at;
       when.textContent = localWhen(row.at);
+      item.setAttribute('data-ph-type', row.type);
       var change = doc.createElement('span');
       change.textContent = api.labels.type[row.type] + ': ' + api.money(row.before) + ' → ' + api.money(row.after);
       var meta = doc.createElement('small');

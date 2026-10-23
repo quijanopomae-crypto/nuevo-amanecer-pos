@@ -44,6 +44,7 @@ function loadWeb(owner = true) {
   const listeners = {};
   const ctx = vm.createContext({
     localStorage: storage,
+    NA_PERMISSIONS: { featureLocked: id => id !== 'historial-precios-producto' }, // CM-162: candado abierto
     fetch: async (input) => { calls.push(String(input)); return { ok: true, status: 200, json: async () => ({}) }; },
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     dispatchEvent: event => { (listeners[event && event.type] || []).forEach(fn => fn(event)); return true; },
