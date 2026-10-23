@@ -120,16 +120,50 @@ test('2) «don/doña + nombre» con verbo de deuda o pago se tapa siempre (le ga
     assert.equal(A.sanitizeLesson(t, [], KNOWN), t, t);
   assert.equal(A.sanitizeLesson('doña pepa viene en caja de 6', [], KNOWN), 'doña pepa viene en caja de 6', 'producto conocido sin verbo');
   // «producto» y «marca» ya no destapan solos; las mayúsculas solas tampoco
-  assert.equal(A.sanitizeLesson('el producto don Pedro llegó', [], []), 'el producto don llegó');
+  assert.equal(A.sanitizeLesson('el producto don Pedro trae 3', [], []), 'el producto don trae 3');
   assert.equal(A.sanitizeLesson('MARCA DON PEDRO', [], []), 'MARCA DON');
   // clientes de la lista: siempre primero
   const o = A.sanitizeLesson('fideo don vittorio ramos debe 30', CUST, KNOWN);
   assert.ok(o.includes('#c9'), o); assert.doesNotMatch(o, /vittorio|ramos/i, o);
 });
+// isBrandDon(text, start, end, known): ¿el tramo text[start,end) («don/doña + nombre») es una MARCA? Regla compartida (lecciones y #998).
+test('2) isBrandDon: verbo de deuda o pago gana siempre; mayúsculas, «producto», «marca» o un tamaño solos no destapan', () => {
+  assert.equal(typeof A.isBrandDon, 'function');
+  const KNOWN = [{ nombre: 'Café Don Juan 250g' }, { nombre: 'Galletas Doña Pepa x 6' }];
+  const span = (t) => { const m = /\b(?:don|do[nñ]a)\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/i.exec(t); assert.ok(m, t); return [m.index, m.index + m[0].length]; };
+  const brand = (t, known = KNOWN) => A.isBrandDon(t, ...span(t), known);
+  for (const t of ['leche don pedro debe 20', 'le di arroz don Pedro, debe 5 soles', 'el producto don Pedro debe', 'DON JUAN DEBE 2 KG', 'DEBE DON PEDRO',
+    'CLIENTE DON PEDRO', 'A DON JUAN LE FIÉ 3 KG', 'DON PEDRO 2 KG', 'DOÑA ROSA PAGÓ 20', 'DOÑA ROSA PAGÓ 2 KG', 'don juan debe 2 kg', 'a don juan le fié',
+    'recuerda que la leche doña Rosa debe 2 kg', 'anota: el arroz don Pedro paga el viernes 20 soles', 'los fideos de don Pedro, le fío hasta el lunes',
+    'doña pepa me debe 20', 'MARCA DON PEDRO', 'el producto don Pedro', 'arroz don Lucho pagan los dos', 'leche doña Rosa abona 5', 'le fía arroz don Pedro',
+    'cobrar a don Pedro el arroz', 'prestar a doña Rosa 10'])
+    assert.equal(brand(t), false, 'persona: ' + t);
+  for (const t of ['FIDEO DON VITTORIO SPAGHETTI 500GR X 20', 'fideo don vittorio', 'fideo don vittorio cuesta 2.20', 'trae 6 cajas de doña pepa', 'el café don juan sube a 9.50'])
+    assert.equal(brand(t), true, 'marca: ' + t);
+  assert.equal(A.isBrandDon('señora Rosa', 0, 11, KNOWN), false, 'solo «don/doña»');
+  assert.equal(A.isBrandDon('la doña pepa', 3, 12, ['Galletas Doña Pepa x 6']), true, 'known también acepta nombres sueltos');
+});
+test('2) sanitizeLesson con la regla compartida: frases de las dos revisiones', () => {
+  const KNOWN = [{ nombre: 'Café Don Juan 250g' }, { nombre: 'Galletas Doña Pepa x 6' }];
+  for (const t of ['CLIENTE DON PEDRO', 'A DON JUAN LE FIÉ 3 KG', 'DOÑA ROSA PAGÓ 20', 'DOÑA ROSA PAGÓ 2 KG', 'recuerda que la leche doña Rosa debe 2 kg',
+    'anota: el arroz don Pedro paga el viernes 20 soles', 'arroz don Lucho pagan los dos', 'leche doña Rosa le fía'])
+    assert.doesNotMatch(A.sanitizeLesson(t, [], KNOWN), /pedro|juan|rosa|lucho/i, t);
+  assert.equal(A.sanitizeLesson('FIDEO DON VITTORIO SPAGHETTI 500GR X 20', [], KNOWN), 'FIDEO DON VITTORIO SPAGHETTI 500GR X 20');
+});
 test('2) chat del Admin: P-027 se guarda con la marca', async () => {
   const p027 = 'pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50';
   const r = await chat(p027);
   assert.deepEqual(r.lessons, [p027]);
+});
+
+test('2) chat del Admin (taughtFact → redactModelOwner → sanitizeLesson): producto + «don/doña» + verbo de deuda o pago guarda el nombre tapado', async () => {
+  for (const [t, cue] of [['recuerda que la leche doña Rosa debe 2 kg', /doña debe 2 kg/i], ['anota: el arroz don Pedro paga el viernes 20 soles', /don paga el viernes 20 soles/i]]) {
+    const r = await chat(t);
+    assert.equal(r.status, 200);
+    assert.equal(r.lessons.length, 1, t + ' -> ' + JSON.stringify(r.lessons));
+    assert.match(r.lessons[0], cue, r.lessons[0]);
+    for (const l of r.lessons) assert.doesNotMatch(String(l), /rosa|pedro/i, t + ' -> ' + l); // lo guardado en pos_settings
+  }
 });
 
 // ---------- 3) costo dicho en el chat ----------
