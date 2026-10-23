@@ -216,7 +216,7 @@
     return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' + esc(title) + '</title><style>' +
       'body{font:14px/1.4 system-ui,sans-serif;margin:24px;color:#0f172a}h1{font-size:20px;margin:0 0 2px}.s{color:#334155;margin-bottom:6px}.w{border:2px dashed #b91c1c;color:#991b1b;padding:6px 10px;font-weight:800;margin:10px 0;text-align:center}' +
       'table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #cbd5e1;padding:6px 4px;text-align:left}th{background:#f1f5f9}.r{text-align:right}tfoot td{font-weight:800}.n{color:#334155;font-size:12px;margin-top:10px}@media print{.w{border-color:#000;color:#000}}</style></head><body>' +
-      '<h1>' + esc(business || 'Botica Nuevo Amanecer') + '</h1><div class="s">' + esc(title) + (sub ? ' · ' + esc(sub) : '') + ' · Generado ' + esc(new Date().toLocaleString('es-PE')) + '</div>' +
+      '<h1>' + esc(business || MEMORY.fallbackName) + '</h1><div class="s">' + esc(title) + (sub ? ' · ' + esc(sub) : '') + ' · Generado ' + esc(new Date().toLocaleString('es-PE')) + '</div>' +
       '<div class="w">DOCUMENTO INTERNO · NO ES COMPROBANTE SUNAT</div>' +
       '<table><thead><tr>' + head.map(function (h, i) { return '<th' + (i && h.r ? ' class="r"' : '') + '>' + esc(h.t || h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       (rows.length ? rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td' + (head[i] && head[i].r ? ' class="r"' : '') + '>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') : '<tr><td colspan="' + head.length + '">Sin datos.</td></tr>') +
@@ -897,10 +897,18 @@
   // ---------- Clientes en el mensaje (auditoría de privacidad 2026-10-22) ----------
   // Antes de mandar el mensaje del chat, los nombres de clientes que este aparato YA conoce (lista de Clientes del POS) se cambian por
   // «cliente #código» y sus direcciones por «[dirección oculta]». El nombre nunca sale del aparato: la respuesta se pinta con el nombre
-  // buscado aquí (linkCustomers). Coincide sin tildes ni mayúsculas y solo palabras enteras. Un nombre suelto (solo «Rosa») cuenta si tiene
-  // 4+ letras y no es parte del nombre de un producto; si varios clientes lo comparten, se mandan sus códigos (hasta 3) o «un cliente».
+  // buscado aquí (linkCustomers). Coincide sin tildes ni mayúsculas y solo palabras enteras: el nombre COMPLETO, dos palabras seguidas de un
+  // nombre de 3+ palabras («Rosa Quispe» de «Rosa Quispe Mamani») y también un nombre o apellido SUELTO («Juan», «Pérez» de «Juan Pérez»;
+  // regla de privacidad: el nombre de un cliente nunca llega a la IA). Excepciones (pedido del jefe 22-10: «Distribuidora San Juan» salía
+  // «Distribuidora cliente #c4»): nunca dentro del nombre de un producto o proveedor que este aparato conoce (lista de productos, su
+  // campo proveedor y los proveedores de los movimientos de compra), y tampoco en
+  // contexto de empresa («Distribuidora …», «Comercial …», «proveedor …», «… S.A.C.»; para la palabra suelta también con palabras en
+  // mayúscula en medio: «Distribuidora San Juan», «San Juan S.A.C.»). Si varios clientes comparten el nombre, se mandan sus códigos (hasta 3)
+  // o «un cliente».
   var CLI_CODE_RE = /^[A-Za-z0-9_-]{1,40}$/;
   var NAME_STOP = { de: 1, del: 1, la: 1, las: 1, los: 1, el: 1, y: 1, e: 1, san: 1, santa: 1, sr: 1, sra: 1, don: 1, dona: 1 };
+  // palabras de clientes genéricos («Cliente Varios», «Público General», «SIN DOC»): sueltas no son un nombre y no se tapan
+  var SINGLE_STOP = { cliente: 1, clientes: 1, varios: 1, varias: 1, general: 1, publico: 1, consumidor: 1, final: 1, sin: 1, doc: 1, documento: 1, nombre: 1, otro: 1, otros: 1, casa: 1, tienda: 1 };
   function foldCh(ch) { return ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function foldStr(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function nameTokens(v) { return foldStr(v).split(/[^a-z0-9ñ]+/).filter(Boolean); }
@@ -910,7 +918,26 @@
     return redactText(r) === r ? r : null; // un código que el redactor taparía (8 dígitos…) no sirve: «un cliente»
   }
   var ADDRESS_RE = /\b(?:av(?:da|enida)?|jr|jir[oó]n|calle|psje|pje|pasaje|prol(?:ongaci[oó]n)?|mz|manzana|urb(?:anizaci[oó]n)?|asoc(?:iaci[oó]n)?|aa\.?\s?hh)\.?\s+(?:[A-Za-zÁÉÍÓÚÑáéíóúñü.'°ºª-]+\s+){0,5}?(?:n[°ºo]?\.?\s*)?\d{1,5}[A-Za-z]?\b(?:\s*,?\s*(?:mz|lt|lote|int|dpto|of)\.?\s*[A-Za-z0-9]{1,4}\b)*/gi;
-  function maskCustomers(text, clientes, productos) {
+  // Palabras de empresa JUSTO antes o después: «Distribuidora San Juan», «Comercial Rosa Quispe», «San Juan S.A.C.» son proveedores o
+  // negocios, no clientes. Con algo en medio («la bodega de Rosa Quispe», «farmacia y Rosa Quispe») el nombre se tapa igual.
+  var BIZ_WORDS = 'distribuidora|distribuciones|distribuidor|comercial|comercializadora|corporacion|corp|inversiones|importadora|importaciones|botica|boticas|farmacia|farmacias|drogueria|laboratorio|laboratorios|bodega|minimarket|market|supermercado|almacen|negociaciones|grupo|proveedor|proveedora|proveedores|industrias|representaciones|multiservicios|agroveterinaria|veterinaria|libreria|ferreteria|panificadora|panaderia|transportes';
+  var BIZ_BEFORE_RE = new RegExp('(?:^|[^a-z0-9ñ])(?:' + BIZ_WORDS + ')[^a-z0-9ñ]{1,3}$'), BIZ_WORD = {}; BIZ_WORDS.split('|').forEach(function (w) { BIZ_WORD[w] = 1; });
+  var BIZ_AFTER_RE = /^[^a-z0-9ñ]{0,3}(?:s[^a-z0-9ñ]?a[^a-z0-9ñ]?c|s[^a-z0-9ñ]?a[^a-z0-9ñ]?a|e[^a-z0-9ñ]?i[^a-z0-9ñ]?r[^a-z0-9ñ]?l|s[^a-z0-9ñ]?r[^a-z0-9ñ]?l|s[^a-z0-9ñ]?a|sociedad|hermanos|hnos|e hijos|import|export)(?![a-z0-9ñ])/;
+  function bizName(f, a, b) { return BIZ_BEFORE_RE.test(f.slice(Math.max(0, a - 40), a)) || BIZ_AFTER_RE.test(f.slice(b, b + 24)); }
+  // Palabra suelta: contexto de empresa también con hasta 3 palabras en Mayúscula (o «de/san…») en medio: «Distribuidora San Juan» -> «Juan»,
+  // «San Juan S.A.C.» -> «San». «el proveedor me dijo que Juan…» SÍ se tapa (en medio hay palabras en minúscula).
+  function bizWide(f, src, map, a, b) {
+    if (bizName(f, a, b)) return true;
+    var isW = function (ch) { return /[a-z0-9ñ]/.test(ch || ''); }, cap = function (x) { var ch = src[map[x]]; return !!ch && ch !== ch.toLowerCase(); };
+    var pos = a, k, n, e, w;
+    for (k = 0; k < 4; k++) { n = 0; while (pos > 0 && !isW(f[pos - 1]) && n < 3) { pos--; n++; } if (!n || pos === 0) break; e = pos; while (pos > 0 && isW(f[pos - 1])) pos--;
+      w = f.slice(pos, e); if (BIZ_WORD[w]) return true; if (!cap(pos) && !NAME_STOP[w]) break; }
+    pos = b;
+    for (k = 0; k < 4; k++) { if (BIZ_AFTER_RE.test(f.slice(pos, pos + 24))) return true; n = 0; while (pos < f.length && !isW(f[pos]) && n < 3) { pos++; n++; } if (!n || pos >= f.length) break;
+      e = pos; while (pos < f.length && isW(f[pos])) pos++; w = f.slice(e, pos); if (!cap(e) && !NAME_STOP[w]) break; }
+    return false;
+  }
+  function maskCustomers(text, clientes, productos, proveedores) {
     var src = String(text == null ? '' : text).normalize('NFC'), codes = [];
     var list = Array.isArray(clientes) ? clientes.slice(0, 5000) : [];
     if (!src) return { text: src, codes: codes };
@@ -918,26 +945,48 @@
     var f = '', map = [];
     for (var i = 0; i < src.length; i++) { var fc = foldCh(src[i]); for (var k = 0; k < fc.length; k++) { f += fc[k]; map.push(i); } }
     map.push(src.length);
-    var prodWords = {}; (Array.isArray(productos) ? productos.slice(0, 5000) : []).forEach(function (p) { nameTokens(p && (p.nombre || p.name)).forEach(function (w) { prodWords[w] = 1; }); });
+    // pares de palabras seguidas de un producto/proveedor («leche gloria» de «Leche Gloria 400g»): una palabra suelta junto a su pareja no se tapa
+    var prodPairs = {}, pairsOf = function (pt) { for (var q = 0; q + 1 < pt.length; q++) prodPairs[pt[q] + ' ' + pt[q + 1]] = 1; };
+    var prodWords = {}, prodNames = {}; (Array.isArray(productos) ? productos.slice(0, 5000) : []).forEach(function (p) { var pt = nameTokens(p && (p.nombre || p.name)); pt.forEach(function (w) { prodWords[w] = 1; }); pairsOf(pt);
+      if (pt.length > 1 || (pt.length === 1 && pt[0].length >= 4)) prodNames[pt.join(' ')] = 1; });
+    // proveedores que el aparato conoce (lista + campo proveedor de cada producto): su nombre queda reservado como el de un producto
+    (Array.isArray(proveedores) ? proveedores.slice(0, 2000) : []).concat((Array.isArray(productos) ? productos.slice(0, 5000) : []).map(function (p) { return p && (p.proveedor || p.supplier); }))
+      .forEach(function (v) { var st = nameTokens(typeof v === 'string' ? v : v && (v.nombre || v.name)); pairsOf(st); if (st.length > 1 || (st.length === 1 && st[0].length >= 4)) prodNames[st.join(' ')] = 1; });
     var phrases = {}; // frase plegada -> { refs, addr }
-    function add(ph, ref, addr) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr }); if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    function add(ph, ref, addr, single) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr, single: !!single }); if (!single) o.single = false; if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    function inPair(a, b) { var w = f.slice(a, b), pm = /([a-z0-9ñ]+)[^a-z0-9ñ]{1,3}$/.exec(f.slice(Math.max(0, a - 40), a)), nm = /^[^a-z0-9ñ]{1,3}([a-z0-9ñ]+)/.exec(f.slice(b, b + 40));
+      return !!((pm && prodPairs[pm[1] + ' ' + w]) || (nm && prodPairs[w + ' ' + nm[1]])); }
     list.forEach(function (c) {
       if (!c || typeof c !== 'object') return;
       var ref = customerRef(c), t = nameTokens(c.nombre || c.name);
       if (t.length) {
-        var full = t.join(' '); if (full.replace(/ /g, '').length >= 4) add(full, ref);
-        var core = t.filter(function (w) { return !NAME_STOP[w] && w.length >= 3; });
-        for (var j = 0; j + 1 < core.length; j++) add(core[j] + ' ' + core[j + 1], ref);
-        core.forEach(function (w) { if (w.length >= 4 && !/^\d+$/.test(w) && !prodWords[w]) add(w, ref); });
+        var full = t.join(' '); if (full.replace(/ /g, '').length >= 4 && !(t.length === 1 && prodWords[full])) add(full, ref);
+        // nombre de 3+ palabras: también dos palabras SEGUIDAS de ese nombre («Rosa Quispe», «Quispe Mamani»), sin «de/san…» ni palabras de producto
+        if (t.length >= 3) for (var j = 0; j + 1 < t.length; j++) { var w1 = t[j], w2 = t[j + 1];
+          if (!NAME_STOP[w1] && !NAME_STOP[w2] && !(prodWords[w1] && prodWords[w2]) && (w1 + w2).length >= 6) add(w1 + ' ' + w2, ref); }
+        // nombre o apellido SUELTO: se tapa salvo «de/san…», 1-2 letras o números (dentro de un producto/proveedor ya está reservado arriba)
+        if (t.length >= 2) t.forEach(function (w) { if (!NAME_STOP[w] && !SINGLE_STOP[w] && w.length >= 3 && !/^\d+$/.test(w)) add(w, ref, false, true); });
       }
       var dir = nameTokens(c.dir || c.direccion || c.address); if (dir.length && dir.join('').length >= 6) add(dir.join(' '), undefined, true);
     });
     var keys = Object.keys(phrases).filter(function (ph) { return f.indexOf(ph.split(' ')[0]) >= 0; }).sort(function (a, b) { return b.length - a.length; });
     var taken = new Array(f.length).fill(0), hits = [];
+    function phraseRe(ph) { return new RegExp('(?<![a-z0-9ñ])' + ph.split(' ').map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('[^a-z0-9ñ]{1,3}') + '(?![a-z0-9ñ])', 'g'); }
+    // 0) CÓDIGOS (prueba en CANON 22-10: «cliente SIN-DOC-MISAEL» salía «cliente #SIN-DOC-un cliente»): nunca se tapa dentro de «#código»,
+    // de un código en MAYÚSCULAS/números con guion o guion bajo («SIN-DOC-MISAEL», «CLI_0042») ni de un código de cliente de la lista
+    var ids = {}; list.forEach(function (c) { if (c && c.id != null && String(c.id).length >= 2) ids[String(c.id).toLowerCase()] = 1; });
+    var codeRe = /#[A-Za-z0-9_-]+|[A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+(?:[-_][A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+)+/g, cm;
+    while ((cm = codeRe.exec(src))) { var cw = cm[0], ca = cm.index, cb = ca + cw.length;
+      if (cw[0] === '#' || ids[cw.toLowerCase()] || /\d/.test(cw) || cw === cw.toUpperCase()) for (var fx = 0; fx < f.length; fx++) if (map[fx] >= ca && map[fx] < cb) taken[fx] = 2; }
+    ids = null;
+    // 1) nombres de producto que están en el texto: ese tramo queda reservado (un cliente nunca se tapa dentro de un producto)
+    Object.keys(prodNames).filter(function (ph) { return f.indexOf(ph.split(' ')[0]) >= 0; }).sort(function (a, b) { return b.length - a.length; }).forEach(function (ph) {
+      var re = phraseRe(ph), m; while ((m = re.exec(f))) { for (var x = m.index; x < m.index + m[0].length; x++) taken[x] = 2; } });
+    // 2) nombre COMPLETO del cliente (y direcciones), el más largo primero; no si es el nombre de una empresa («Distribuidora San Juan»)
     keys.forEach(function (ph) {
-      var re = new RegExp('(?<![a-z0-9ñ])' + ph.split(' ').map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('[^a-z0-9ñ]{1,3}') + '(?![a-z0-9ñ])', 'g'), m;
+      var re = phraseRe(ph), m;
       while ((m = re.exec(f))) { var a = m.index, b = a + m[0].length, free = true; for (var x = a; x < b; x++) if (taken[x]) { free = false; break; }
-        if (!free) continue; for (x = a; x < b; x++) taken[x] = 1; hits.push([a, b, phrases[ph]]); }
+        if (!free || (!phrases[ph].addr && (phrases[ph].single ? (bizWide(f, src, map, a, b) || inPair(a, b)) : bizName(f, a, b)))) continue; for (x = a; x < b; x++) taken[x] = 1; hits.push([a, b, phrases[ph]]); }
     });
     hits.sort(function (p, q) { return p[0] - q[0]; });
     var out = '', last = 0;
@@ -993,7 +1042,116 @@
     return out;
   }
 
-  var api = { compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, purchaseTotals: purchaseTotals, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  // ---------- Memoria de la charla en el aparato (contrato de #946) ----------
+  // El celular guarda la charla SOLO en memoria (nunca localStorage/sessionStorage) hasta «Nueva conversación», un cambio de rol o recargar.
+  // Lo que se manda: los turnos más nuevos que entran en memoria.max_bytes del servidor (menos un margen) y en max_turnos (40). Las notas de
+  // foto («[Foto leída] …», solo Admin) quedan fijas. Lo que ya no entra:
+  // - Admin: se pasa a un resumen corto armado aquí (mismo formato que el servidor) que va en «resumen» (el servidor acepta su texto suelto).
+  // - Empleado: su resumen debe venir FIRMADO por el servidor; se mandan hasta 2 pares viejos de más para que el servidor los recorte y
+  //   devuelva resumen_sugerido firmado; al llegar, esos pares se quitan de aquí. Cuerpo del empleado: bajo 64 KB (tope del servidor).
+  // Servidor viejo (sin «memoria» en la respuesta): como antes, los últimos 8 turnos.
+  var MEMORY = Object.freeze({ maxTurns: 40, defaultBytes: 24000, ownerBytes: 48000, margin: 1024, spillPairs: 2, employeeBodyCap: 60000, oldTurns: 8,
+    pinnedMax: 3, notaPrefix: '[Foto leída]', notaTurnPrefix: '[nota]', resumenChars: 2000, resumenLineChars: 160, notaChars: 400, resumenMaxAgeMs: 24 * 60 * 60 * 1000,
+    notice: 'Resumí la charla para seguir más rápido', fallbackName: 'Nuevo Amanecer' });
+  function utf8Len(v) { var s = String(v == null ? '' : v); if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s + '').length;
+    var n = 0; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); n += c < 0x80 ? 1 : c < 0x800 ? 2 : (c >= 0xd800 && c < 0xdc00) ? (i++, 4) : 3; } return n; }
+  // Nombre del negocio: el de Configuración (appConfig.business.nombre); sin él, «Nuevo Amanecer». Nunca «Botica» fijo.
+  function businessName(cfg) { var n = cfg && cfg.business && typeof cfg.business.nombre === 'string' ? cfg.business.nombre.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    return n ? n.slice(0, 80) : MEMORY.fallbackName; }
+  function memNew() { return { resumen: null, maxBytes: null, maxTurns: null, legacy: false, notified: false }; }
+  function isPinned(pair) { var c = pair && pair[0] && typeof pair[0].content === 'string' ? pair[0].content : ''; return c.indexOf(MEMORY.notaPrefix) >= 0 || c.indexOf(MEMORY.notaTurnPrefix) === 0; }
+  // pares (usuario, asistente) en orden; un turno suelto (no debería haber) se descarta
+  function memPairs(history) { var h = Array.isArray(history) ? history : [], out = [];
+    for (var i = 0; i + 1 < h.length; i += 2) { if (h[i] && h[i].role === 'user' && h[i + 1] && h[i + 1].role === 'assistant') out.push([h[i], h[i + 1]]); else { i -= 1; } }
+    return out; }
+  function pairBytes(p) { return utf8Len(p[0].content) + utf8Len(p[1].content); }
+  function wireTurn(m) { var o = { role: m.role, content: String(m.content == null ? '' : m.content) };
+    if (typeof m.sig === 'string') o.sig = m.sig; if (typeof m.n === 'number') o.n = m.n; if (typeof m.iat === 'number') o.iat = m.iat; if (m.cut === true) o.cut = true; return o; }
+  // par del empleado que el servidor acepta: firmado, mismo sig/n/iat en los dos turnos y con menos de 24 h (hora del servidor)
+  function employeePairOk(p, now) { var a = p[0], b = p[1]; return typeof a.sig === 'string' && a.sig === b.sig && typeof a.n === 'number' && a.n === b.n && typeof a.iat === 'number' && a.iat === b.iat &&
+    (now == null || now - a.iat < MEMORY.resumenMaxAgeMs - 5 * 60 * 1000); }
+  function clip(t, max) { t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 1) + '…' : t; }
+  // resumen del Admin (mismo formato que buildResumen del servidor): lo anterior + una línea corta por turno; notas de foto enteras
+  function memFold(prev, pairs) {
+    var lines = prev ? String(prev).split('\n').filter(Boolean) : [];
+    pairs.forEach(function (p) { p.forEach(function (m) { var c = redactOwnerContext(String(m.content || '')).replace(/\s+/g, ' ').trim(); if (!c) return;
+      var note = c.indexOf(MEMORY.notaPrefix) >= 0 || c.indexOf(MEMORY.notaTurnPrefix) === 0;
+      lines.push((m.role === 'assistant' ? 'Asistente: ' : 'Persona: ') + clip(c, note ? MEMORY.notaChars : MEMORY.resumenLineChars)); }); });
+    while (lines.length > 1 && lines.join('\n').length > MEMORY.resumenChars) lines.shift();
+    var out = lines.join('\n'); return out.length > MEMORY.resumenChars ? out.slice(out.length - MEMORY.resumenChars) : out;
+  }
+  function resumenText(r) { return r && typeof r === 'object' ? String(r.texto || '') : typeof r === 'string' ? r : ''; }
+  // Arma history/resumen del pedido. Puede QUITAR de «history» (en el sitio) lo que ya pasó al resumen del Admin o lo que el servidor ya no
+  // acepta (pares del empleado sin firma o de más de 24 h). Devuelve { history, resumen, folded } (folded: turnos que pasaron al resumen aquí).
+  // opts: { role, now (hora del servidor), bodyBase (cuerpo sin history/resumen, para medir el del empleado) }
+  function memRequest(history, mem, opts) {
+    opts = opts || {}; mem = mem || memNew();
+    var owner = opts.role === 'owner', now = typeof opts.now === 'number' ? opts.now : null, h = Array.isArray(history) ? history : [];
+    if (mem.legacy) { var lt = h.slice(-MEMORY.oldTurns); return { history: lt.map(wireTurn), refs: lt.slice(), resumen: null, folded: 0 }; }
+    var pairs = memPairs(h);
+    if (!owner) pairs = pairs.filter(function (p) { return employeePairOk(p, now); });
+    // resumen del empleado: solo firmado y de menos de 24 h; si no, se suelta
+    if (!owner && mem.resumen && !(typeof mem.resumen === 'object' && mem.resumen.sig && typeof mem.resumen.iat === 'number' && (now == null || now - mem.resumen.iat < MEMORY.resumenMaxAgeMs - 5 * 60 * 1000))) mem.resumen = null;
+    var maxBytes = Math.max(2048, (typeof mem.maxBytes === 'number' && mem.maxBytes > 0 ? mem.maxBytes : MEMORY.defaultBytes) - MEMORY.margin);
+    var maxTurns = Math.min(MEMORY.maxTurns, typeof mem.maxTurns === 'number' && mem.maxTurns > 0 ? mem.maxTurns : MEMORY.maxTurns);
+    var spillTurns = owner ? 0 : MEMORY.spillPairs * 2;
+    var keep = [], bytes = 0, turns = 0, i;
+    // 1) notas de foto (Admin): las más nuevas, hasta pinnedMax y la mitad del tope
+    if (owner) { var pinned = 0; for (i = pairs.length - 1; i >= 0; i--) { if (!isPinned(pairs[i]) || pinned >= MEMORY.pinnedMax) continue; var pb = pairBytes(pairs[i]);
+      if (bytes + pb > maxBytes / 2 || turns + 2 > maxTurns) continue; keep.push(pairs[i]); bytes += pb; turns += 2; pinned++; } }
+    // 2) lo más nuevo que entra
+    var stop = false;
+    for (i = pairs.length - 1; i >= 0; i--) { if (keep.indexOf(pairs[i]) >= 0) continue; var b = pairBytes(pairs[i]);
+      if (stop || bytes + b > maxBytes || turns + 2 > maxTurns - spillTurns) { stop = true; continue; } keep.push(pairs[i]); bytes += b; turns += 2; }
+    var out = pairs.filter(function (p) { return keep.indexOf(p) >= 0; }), rest = pairs.filter(function (p) { return keep.indexOf(p) < 0; }), folded = 0;
+    if (owner && rest.length) { mem.resumen = memFold(resumenText(mem.resumen), rest); folded = rest.length * 2; }
+    // empleado: los 2 pares MÁS NUEVOS de los que no entran van primero (pegados a lo demás); el servidor los recorta y los resume firmado.
+    // Lo más viejo que eso ya no se puede mandar (el servidor no acepta un resumen sin su firma): sale.
+    if (!owner && rest.length) out = rest.slice(-MEMORY.spillPairs).concat(out);
+    h.length = 0; pairs.forEach(function (p) { if (out.indexOf(p) >= 0) h.push(p[0], p[1]); });
+    var refs = [], wire = [], res = mem.resumen && resumenText(mem.resumen) ? mem.resumen : null;
+    out.forEach(function (p) { refs.push(p[0], p[1]); wire.push(wireTurn(p[0]), wireTurn(p[1])); });
+    if (owner) wire.forEach(function (m) { m.content = redactOwnerContext(m.content); });
+    // tope del cuerpo del empleado (64 KB en el servidor): sale lo más viejo; al final, el resumen
+    if (!owner) { var base = opts.bodyBase || {};
+      var size = function () { var o = {}; for (var k in base) o[k] = base[k]; o.history = wire; if (res) o.resumen = res; return utf8Len(JSON.stringify(o)); };
+      while (wire.length && size() > MEMORY.employeeBodyCap) { wire.splice(0, 2); refs.splice(0, 2); }
+      if (res && size() > MEMORY.employeeBodyCap) res = null; }
+    return { history: wire, refs: refs, resumen: res ? (typeof res === 'object' ? { texto: String(res.texto || ''), iat: res.iat, sig: res.sig } : String(res)) : null, folded: folded };
+  }
+  // Después de la respuesta: guarda el tope del servidor, el resumen_sugerido y quita lo que el servidor ya resumió.
+  // Devuelve { notice: true } la PRIMERA vez (por conversación) que un resumen reemplaza turnos viejos.
+  function memAfter(history, mem, d, req) {
+    mem = mem || memNew(); req = req || {}; d = d || {}; var h = Array.isArray(history) ? history : [], replaced = req.folded > 0;
+    var m = d.memoria && typeof d.memoria === 'object' ? d.memoria : null;
+    if (!m) { mem.legacy = true; return { notice: false }; }
+    mem.legacy = false;
+    if (typeof m.max_bytes === 'number' && m.max_bytes > 0) mem.maxBytes = Math.min(m.max_bytes, MEMORY.ownerBytes);
+    if (typeof m.max_turnos === 'number' && m.max_turnos > 0) mem.maxTurns = Math.min(m.max_turnos, MEMORY.maxTurns);
+    var rs = d.resumen_sugerido;
+    if (rs && typeof rs === 'object' && typeof rs.texto === 'string' && rs.texto.trim()) {
+      mem.resumen = { texto: rs.texto.slice(0, MEMORY.resumenChars * 2), iat: typeof rs.iat === 'number' ? rs.iat : null, sig: typeof rs.sig === 'string' ? rs.sig : null };
+      // el servidor quitó los «recortados» turnos más viejos de los que se mandaron: aquí también (ya están en el resumen)
+      var sent = Array.isArray(req.refs) ? req.refs : [], k = Math.min(typeof m.recortados === 'number' ? m.recortados : 0, sent.length);
+      for (var i = 0; i < k; i++) { var j = h.indexOf(sent[i]); if (j >= 0) h.splice(j, 1); }
+      while (h.length && h[0].role !== 'user') h.shift();
+      if (k > 0) replaced = true;
+    }
+    if (replaced && !mem.notified) { mem.notified = true; return { notice: true }; }
+    return { notice: false };
+  }
+  // Guarda el turno como se va a mandar después: el del Admin, limpio (redactOwnerContext); el del empleado, tal cual (firmado) o nada si
+  // el limpiador lo cambiaría (no se puede tocar sin romper la firma). nota: lo leído de la foto, si el servidor no la puso en el turno.
+  function memStore(history, role, nota) {
+    var h = Array.isArray(history) ? history : []; if (h.length < 2) return;
+    var u = h[h.length - 2], a = h[h.length - 1];
+    if (role === 'owner') {
+      if (typeof nota === 'string' && nota && String(u.content || '').indexOf(MEMORY.notaPrefix) < 0 && !u.sig) u.content = (u.content && u.content !== 'Foto' ? u.content + ' ' : '') + nota;
+      u.content = redactOwnerContext(u.content); a.content = redactOwnerContext(a.content);
+    } else if (redactText(u.content) !== u.content || redactText(a.content) !== a.content || !u.sig) h.splice(h.length - 2, 2);
+  }
+
+  var api = { MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
