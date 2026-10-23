@@ -103,7 +103,15 @@
       cost_cents: keep(raw.cost_cents), price_cents: priceCents, box_price_cents: keep(raw.box_price_cents),
       units_per_box: keep(raw.units_per_box), stock_min_quantity: raw.stock_min_quantity == null ? 0 : raw.stock_min_quantity, expiry_date: keep(raw.expiry_date) };
   }
-  async function applyCanon(client, rows, onStep) {
+  // Historial por producto (CM-162): ref = opId del lote + producto, estable al reintentar. Nunca bloquea el guardado.
+  function recordHistory(hist, row) {
+    if (!hist || !hist.opId) return;
+    try {
+      if (root.NA_PRICE_HISTORY && typeof root.NA_PRICE_HISTORY.recordDiff === 'function')
+        root.NA_PRICE_HISTORY.recordDiff({ productId: row.id, origin: hist.origin, ref: hist.opId + ':' + row.id, partial: true, before: { venta: row.before / 100 }, after: { venta: row.after / 100 } });
+    } catch (_) {}
+  }
+  async function applyCanon(client, rows, onStep, hist) {
     var done = [], failed = [];
     for (var i = 0; i < rows.length; i++) {
       if (!allowed() || !edicionPreciosUnlocked()) { failed.push({ id: rows[i].id, error: 'not_owner' }); break; }
@@ -112,13 +120,13 @@
       var raw = (snap.products || []).find(function (p) { return String(p.product_id) === id; });
       if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'metadata_revision')) { failed.push({ id: id, error: 'not_found' }); break; }
       if (Math.round(Number(raw.price_cents)) !== rows[i].before) { failed.push({ id: id, error: 'changed' }); break; }
-      try { await client.updateProduct(payload(raw, rows[i].after)); done.push(rows[i]); }
+      try { await client.updateProduct(payload(raw, rows[i].after)); done.push(rows[i]); recordHistory(hist, rows[i]); }
       catch (e) { failed.push({ id: id, error: String(e && e.message || e) }); break; } // una pendiente bloquea las demás
       if (onStep) onStep(done.length, rows.length);
     }
     return { done: done, failed: failed };
   }
-  async function applyLocal(rows) {
+  async function applyLocal(rows, hist) {
     if (!edicionPreciosUnlocked()) return { done: [], failed: rows.map(function (r) { return { id: r.id, error: 'locked' }; }) };
     var list; try { list = productos; } catch (_) { list = []; } // eslint-disable-line no-undef
     var changes = rows.map(function (r) { var p = list.find(function (x) { return String(x.id) === r.id; }); return p && Math.round(Number(p.precio) * 100) === r.before ? { p: p, before: p.precio, row: r } : null; }).filter(Boolean);
@@ -131,9 +139,7 @@
       try { if (typeof saveAllData === 'function') await saveAllData(); } catch (_) {} // eslint-disable-line no-undef
       return { done: [], failed: changes.map(function (c) { return { id: c.row.id, error: 'NO_PERSISTIDO' }; }) };
     }
-    changes.forEach(function (c) {
-      try { if (root.NA_PRICE_HISTORY) root.NA_PRICE_HISTORY.recordDiff({ productId: c.p.id, origin: 'masivo', partial: true, before: { precio: c.before }, after: { precio: c.p.precio } }); } catch (_) {}
-    });
+    changes.forEach(function (c) { recordHistory(hist, c.row); });
     try { if (typeof root.invRender === 'function') root.invRender(); } catch (_) {}
     return { done: changes.map(function (c) { return c.row; }), failed: [] };
   }
@@ -243,8 +249,8 @@
       var c = canon();
       status.textContent = 'Aplicando…';
       var out = c && typeof c.updateProduct === 'function'
-        ? await applyCanon(c, rows, function (n, total) { status.textContent = 'Aplicando… ' + n + ' de ' + total; })
-        : await applyLocal(rows);
+        ? await applyCanon(c, rows, function (n, total) { status.textContent = 'Aplicando… ' + n + ' de ' + total; }, { origin: 'masivo', opId: myOp })
+        : await applyLocal(rows, { origin: 'masivo', opId: myOp });
       if (out.done.length) recordOp(myOp, meta, out.done);
       status.textContent = out.failed.length
         ? 'Se cambiaron ' + out.done.length + ' de ' + rows.length + '. Se detuvo en un producto que no se pudo actualizar; revisa y vuelve a intentar.'
@@ -266,7 +272,8 @@
       if (!(await askOwnerPin(rows.length))) { status.textContent = 'No se cambió nada: falta el PIN del dueño.'; return null; }
       if (!edicionPreciosUnlocked() || !allowed()) return null;
       var c = canon();
-      var out = c && typeof c.updateProduct === 'function' ? await applyCanon(c, rows) : await applyLocal(rows);
+      var hist = { origin: 'deshacer', opId: undoOp };
+      var out = c && typeof c.updateProduct === 'function' ? await applyCanon(c, rows, null, hist) : await applyLocal(rows, hist);
       if (out.done.length) recordOp(undoOp, { kind: 'deshacer', undoOf: out.failed.length ? null : u.entry.opId }, out.done);
       var msg = out.failed.length ? 'Se devolvieron ' + out.done.length + ' de ' + rows.length + ' precios. Vuelve a intentar.' : 'Listo: se devolvió el precio anterior a ' + out.done.length + (out.done.length === 1 ? ' producto.' : ' productos.');
       if (u.skipped) msg += ' ' + u.skipped + ' no se tocaron porque su precio cambió después.';
