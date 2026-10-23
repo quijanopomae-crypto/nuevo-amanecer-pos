@@ -346,6 +346,14 @@ test('chat: «era antier» tras «ayer» vuelve a consultar con periodo antier (
 // Prompt y herramientas por rol (alfa, 22-10): el empleado solo ve sus tipos y sus líneas; el Admin recibe todo.
 const ADMIN_TYPES = ['ganancia', 'caja_abierta', 'creditos_atrasados', 'deuda_cliente', 'deudas_clientes', 'resumen_dia', 'resumen_mes', 'sin_costo', 'ventas_periodo', 'compras_recientes', 'productos_sin_ventas', 'ventas_por_hora', 'top_productos'];
 const ADMIN_LINES = [/CAJA DE HOY/, /caja_abierta/, /MEMORIA DE BOLETA/, /leer_factura_compra/, /deuda_cliente/, /estado de cuenta/, /ganancia/i, /creditos_atrasados|créditos atrasados/];
+// (revisión #1018) Lo ÚNICO de deudas que ve el empleado es «cuánto debe UN cliente» (deuda_cliente por código). Fuera de esa frase exacta,
+// la descripción no habla de deudas, deudores ni de todos los clientes (la lista de deudores de la tienda, deudas_clientes, es del Admin).
+const ONE_DEBT = 'cuánto debe UN cliente (deuda_cliente: cliente_id = el código de «cliente #CODIGO», nunca el nombre)';
+function debtOnlyOne(desc, label) {
+  assert.equal(desc.split(ONE_DEBT).length, 2, label + ': la frase de UN cliente, una sola vez: ' + desc);
+  assert.doesNotMatch(desc.replace(ONE_DEBT, ''), /deud|debe|deudor|fiad|todos los clientes|clientes que/i, label + ': nada más de deudas');
+  assert.doesNotMatch(desc, /deudas_clientes|deudores/i, label);
+}
 const consultarOf = (role) => toolsForRole(role).find((t) => t.function.name === 'consultar').function;
 test('por rol: el enum de consultar del empleado no trae tipos del Admin ni de costos; el del Admin los trae todos', () => {
   for (const role of ['empleado:consultas', 'empleado:consultas_documentos']) {
@@ -353,7 +361,8 @@ test('por rol: el enum de consultar del empleado no trae tipos del Admin ni de c
     // Decisión del Admin (23-10): el empleado consulta cuánto debe UN cliente (deuda_cliente con cliente_id = su código).
     assert.deepEqual(c.parameters.properties.tipo.enum, ['stock_producto', 'bajo_stock', 'deuda_cliente'], role);
     for (const t of ADMIN_TYPES.filter((x) => x !== 'deuda_cliente')) assert.ok(!c.description.includes(t), role + ': la descripción no nombra ' + t);
-    assert.doesNotMatch(c.description, /ganancia|costo|caja|deudas|atrasad/i, role);
+    assert.doesNotMatch(c.description, /ganancia|costo|caja|atrasad/i, role);
+    debtOnlyOne(c.description, role);
     assert.ok(c.parameters.properties.cliente_id, role + ': cliente_id para deuda_cliente');
     const all = JSON.stringify(toolsForRole(role));
     for (const t of ['ganancia', 'caja_abierta', 'creditos_atrasados', 'deudas_clientes']) assert.ok(!all.includes(t), role + ': ' + t);
@@ -395,7 +404,8 @@ for (const [label, role, types, names, denied] of LEVELS) {
     assert.deepEqual([...c.parameters.properties.tipo.enum].sort(), [...types].sort(), label + ': tipos de consultar');
     assert.ok('cliente_id' in c.parameters.properties, label + ': cliente_id solo para deuda_cliente');
     for (const t of types) assert.ok(c.description.includes(t), label + ': la descripción nombra ' + t);
-    assert.ok(!/deudas|crédito|credito|caja/i.test(c.description), label + ': la descripción no habla de deudas de la tienda, créditos ni caja');
+    assert.ok(!/crédito|credito|caja/i.test(c.description), label + ': la descripción no habla de créditos ni caja');
+    debtOnlyOne(c.description, label);
     for (const t of ['deudas_clientes', 'caja_abierta', 'creditos_atrasados', 'resumen_dia']) assert.ok(!c.parameters.properties.tipo.enum.includes(t), label + ': ' + t);
     const cap = [], [rd, n] = counting(reader());
     const r = await chat({ text: 'dime' }, { role, rd, fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: denied, cliente_id: 'C1' }, 'c1')] }, { content: 'Listo.' }], cap) });
@@ -405,6 +415,27 @@ for (const [label, role, types, names, denied] of LEVELS) {
     assert.ok(!(r.body.proposals || []).some((p) => p.type === 'consulta'), label + ': sin tarjeta de ' + denied);
   });
 }
+// (revisión #1018) La lista de deudores de TODA la tienda (deudas_clientes, «todos los deudores») nunca le llega al empleado, en ningún
+// nivel: ni pidiéndola tal cual, ni con deuda_cliente sin código o con «todos». Solo el Admin la ve.
+test('por nivel: la lista de todos los deudores (deudas_clientes) nunca llega al empleado; deuda_cliente sin código no la arma', async () => {
+  for (const role of ['empleado:consultas', 'empleado:consultas_documentos', 'empleado:completo', 'empleado:completo+costos']) {
+    assert.ok(!consultarOf(role).parameters.properties.tipo.enum.includes('deudas_clientes'), role);
+    assert.equal(toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: 'deudas_clientes' }) }, role, { products: [] }, 1).dropped, 'forbidden_query', role);
+    for (const [text, args] of [['¿quiénes son todos los deudores?', { tipo: 'deudas_clientes' }], ['dame la lista de todos los deudores', { tipo: 'deuda_cliente' }],
+      ['¿cuánto me deben todos los clientes?', { tipo: 'deuda_cliente', cliente_id: 'todos' }]]) {
+      const cap = [], [rd, n] = counting(reader());
+      const r = await chat({ text }, { role, rd, fetch: scripted([{ content: '', tool_calls: [tool('consultar', args, 'c1')] }, { content: 'Listo.' }], cap) });
+      const tag = role + ' / ' + text + ' / ' + JSON.stringify(args), out = JSON.stringify(r.body);
+      assert.ok([200, 403].includes(r.status), tag + ': ' + r.status);
+      if (args.tipo === 'deudas_clientes') assert.equal(n.reads, 0, tag + ': sin leer la base');
+      const cards = (r.body.proposals || []).filter((p) => p.type === 'consulta');
+      assert.ok(!cards.some((p) => p.query?.tipo === 'deudas_clientes'), tag);
+      // ni los códigos ni los saldos de los otros clientes (C1 debe 35, el 12 debe 12; la tienda, 47)
+      assert.ok(!/cliente #(C1|12)\b/.test(out), tag + ': ' + out); assert.ok(!/\b(35|47|12)(\.00)?\b/.test(out.replace(/2026-\d\d-\d\d/g, '')), tag + ': ' + out);
+      for (const x of PII) assert.ok(!out.includes(x) && !cap.join(' ').includes(x), tag + ': ' + x);
+    }
+  }
+});
 test('por nivel (Admin): consultar trae todos los tipos, con cliente_id; deuda_cliente con un código de letras y guiones da el total', async () => {
   const c = consultarOf('owner');
   for (const t of [...QUERY_TYPES]) assert.ok(c.parameters.properties.tipo.enum.includes(t), 'Admin: ' + t);
