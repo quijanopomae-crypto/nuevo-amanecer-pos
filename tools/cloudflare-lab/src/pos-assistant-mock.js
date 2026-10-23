@@ -41,13 +41,15 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/a que hora|por hora|que hora(s)? (vendo|se vende|hay mas)|horas? de mas venta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_por_hora', ...queryDates(t) })] };
   // (auditoría 500, CLI-024) cobros de fiados del período: no son ventas ni la deuda.
   // (#995) «registra / anota un pago…» es una acción, no la pregunta; con «cliente #N» van solo los cobros de ese cliente.
-  if (/\b(cobr\w*|me pagaron|pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(t) && !/\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/.test(t)
-    && !/\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b[^.?!]{0,30}\b(pagos?|abonos?|cobros?)\b/.test(t)) {
+  // «cliente nro. 5»: el punto de la abreviatura no corta la frase (igual que el chat real).
+  const tc = t.replace(/\b(nro|no|n)\.(?=\s*\d)/g, '$1');
+  if (/\b(cobr\w*|me pagaron|pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(tc) && !/\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/.test(tc)
+    && !/\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b[^.?!]{0,30}\b(pagos?|abonos?|cobros?)\b/.test(tc)) {
     const cli = clientCodesInText(text); // «cliente #5» o «el cliente 5»
     return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), ...(cli.length === 1 ? { cliente_id: cli[0] } : {}) })] };
   }
-  { const cli = /\bcliente\s*#?\s*([A-Za-z0-9_-]{1,40})\b/i.exec(String(text || '')); // solo el código («cliente #12» o «cliente 12»), nunca el nombre
-    if (cli && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }
+  { const cli = clientCodesInText(text); // solo el código («cliente #12», «cliente 12», «cliente nro. 12», «N° 12»), nunca el nombre
+    if (cli.length && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[0] })] }; }
   if (/vend|carrito|cobra/.test(t) && !/vendid|ventas|reporte/.test(t)) return { content: 'Las ventas se hacen a mano en Venta. Yo te ayudo con stock, compras, precios, productos y reportes.', calls: [] };
   if (/document|pdf|imprim|reporte de|lista de precios|estado de cuenta|inventario valorizado|valorizado|cierre de caja|pedido para|lista de pedido/.test(t)) {
     const tipo = /lista de precios/.test(t) ? 'lista_precios' : /valoriz/.test(t) ? 'inventario_valorizado' : /reponer|pedido/.test(t) ? 'lista_pedido'
