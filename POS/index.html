@@ -469,13 +469,13 @@
   <div class="pm-shell">
     <header>
       <h1 id="edicionPreciosTitle">Edición masiva de precios</h1>
-      <p class="pm-description">Cambia el precio de venta de muchos productos a la vez. Revisa la vista previa antes de aplicar. No cambia el stock ni las ventas.</p>
+      <p class="pm-description">Cambia el precio de venta de muchos productos a la vez, por % o monto, o calcúlalo con un margen sobre el costo. Revisa la vista previa antes de aplicar. No cambia el stock ni las ventas.</p>
     </header>
     <p class="pm-status" data-pm-status role="status" aria-live="polite"></p>
     <div data-pm-main hidden>
       <div class="pm-controls">
         <label>Categoría<select data-pm-category aria-label="Categoría"><option value="">Todas las categorías</option></select></label>
-        <label>Tipo de cambio<select data-pm-mode aria-label="Tipo de cambio"><option value="porcentaje">Subir o bajar %</option><option value="monto">Sumar o restar S/</option></select></label>
+        <label>Tipo de cambio<select data-pm-mode aria-label="Tipo de cambio"><option value="porcentaje">Subir o bajar %</option><option value="monto">Sumar o restar S/</option><option value="margen">Margen sobre costo (recargo) %</option></select></label>
         <label>Valor<input type="number" step="0.01" inputmode="decimal" data-pm-value aria-label="Valor" placeholder="Ej. 10 o -5"></label>
         <button type="button" data-pm-apply disabled>Aplicar</button>
       </div>

@@ -9,7 +9,7 @@ const permissionsSource = readFileSync('POS/js/config/pos-permissions.js', 'utf8
 const indexHtml = readFileSync('POS/index.html', 'utf8');
 const unlocked = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'clientes-deudores-caja': 'pageClientes', 'permisos-por-empleado': 'pageConfig', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra', 'ajustes-inventario': 'pageAjustesInventario' };
 // Hechas pero con el candado cerrado hasta abrirlos todos juntos (primero el Worker).
-const builtLocked = {'edicion-masiva-precios': 'pageEdicionPrecios'};
+const builtLocked = {'precio-por-margen': 'pageEdicionPrecios', 'edicion-masiva-precios': 'pageEdicionPrecios'};
 const MODULES = ['Ventas', 'Caja', 'Inventario', 'Clientes', 'Comprobantes', 'Extras'];
 
 function loaded() {
@@ -48,7 +48,7 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
     }
   }
   const prioritized = api.list().filter(f => f.priority);
-  assert.equal(prioritized.length, 87);
+  assert.equal(prioritized.length, 88);
   assert.deepEqual(Array.from(api.list().filter(f=>f.uncertain).map(f=>f.id)).sort(), 'app-android-nativa cpe-sin-internet venta-granel gaveta-dinero comprobante-por-correo app-almaceneros equipos-pos shopify-woocommerce bandeja-multicanal plan-distribuidor multi-ruc balanza calendario-gastos gasto-a-cuenta tipo-cierre firma-digital sunat-comprobantes'.split(' ').sort());
   for (const id of ['cuotas', 'cobro-multiple', 'lista-ventas', 'precios-mayor', 'limite-credito', 'compras', 'stock-lotes-fefo']) assert.equal(api.get(id), undefined, id + ' already exists in the POS');
 });

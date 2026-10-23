@@ -4,11 +4,12 @@
  *   aquí además la pantalla es solo del dueño). Solo cambia price_cents; los demás campos se copian
  *   de la réplica (mismo payload que costo-compra-ficha.js) con concurrencia optimista.
  * - Modo local: productos[].precio + saveAllData, con reversión si no se guarda.
- * No muestra costos en esta versión. Solo textContent. */
+ * Modo «margen» (#63): precio = costo × (1 + margen/100). Muestra el costo, por eso la pantalla es SOLO del
+ * dueño (cliente y servidor). Productos sin costo se omiten. Solo textContent. */
 (function (root) {
   'use strict';
   var PAGE_ID = 'pageEdicionPrecios';
-  var MODES = { porcentaje: 'Subir o bajar %', monto: 'Sumar o restar S/' };
+  var MODES = { porcentaje: 'Subir o bajar %', monto: 'Sumar o restar S/', margen: 'Margen sobre costo (recargo) %' };
   var running = false;
 
   function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
@@ -29,29 +30,31 @@
     if (c && typeof c.snapshot === 'function') {
       var snap = c.snapshot() || {};
       return (Array.isArray(snap.products) ? snap.products : []).filter(function (p) { return p && p.price_cents != null; }).map(function (p) {
-        return { id: String(p.product_id), name: String(p.name || p.product_id), category: String(p.category || 'Sin categoría'), priceCents: Math.round(Number(p.price_cents)) };
+        return { id: String(p.product_id), name: String(p.name || p.product_id), category: String(p.category || 'Sin categoría'), priceCents: Math.round(Number(p.price_cents)), costCents: p.cost_cents == null ? null : Math.round(Number(p.cost_cents)) };
       });
     }
     var list; try { list = typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { list = []; } // eslint-disable-line no-undef
     return list.filter(function (p) { return p && p.id != null; }).map(function (p) {
-      return { id: String(p.id), name: String(p.nombre || p.name || p.id), category: String(p.cat || p.category || 'Sin categoría'), priceCents: Math.round(Number(p.precio || 0) * 100) };
+      return { id: String(p.id), name: String(p.nombre || p.name || p.id), category: String(p.cat || p.category || 'Sin categoría'), priceCents: Math.round(Number(p.precio || 0) * 100), costCents: Number(p.costo) > 0 ? Math.round(Number(p.costo) * 100) : null };
     });
   }
   // Nuevo precio en céntimos. Nunca negativo; 0 o sin cambio se omite en el plan.
-  function newPrice(priceCents, mode, value) {
+  function newPrice(priceCents, mode, value, costCents) {
     var v = Number(value);
     if (!Number.isFinite(v)) return null;
+    if (mode === 'margen') return costCents > 0 ? Math.round(costCents * (1 + v / 100)) : null;
     var out = mode === 'porcentaje' ? Math.round(priceCents * (1 + v / 100)) : mode === 'monto' ? priceCents + Math.round(v * 100) : null;
     return out == null ? null : Math.max(0, out);
   }
   function plan(items, opts) {
     opts = opts || {};
     if (!Object.prototype.hasOwnProperty.call(MODES, opts.mode)) throw new RangeError('Elige el tipo de cambio.');
-    if (!Number.isFinite(Number(opts.value)) || String(opts.value).trim() === '' || Number(opts.value) === 0) throw new RangeError('Escribe un valor distinto de 0.');
+    if (!Number.isFinite(Number(opts.value)) || String(opts.value).trim() === '' || (Number(opts.value) === 0 && opts.mode !== 'margen')) throw new RangeError('Escribe un valor distinto de 0.');
+    if (opts.mode === 'margen' && (Number(opts.value) < 0 || Number(opts.value) > 1000)) throw new RangeError('El margen debe estar entre 0 y 1000 %.');
     if (opts.mode === 'porcentaje' && (Number(opts.value) <= -100 || Number(opts.value) > 1000)) throw new RangeError('El porcentaje debe estar entre -99 y 1000.');
     return (Array.isArray(items) ? items : []).filter(function (p) { return !opts.category || p.category === opts.category; }).map(function (p) {
-      var after = newPrice(p.priceCents, opts.mode, opts.value);
-      return { id: p.id, name: p.name, category: p.category, before: p.priceCents, after: after };
+      var after = newPrice(p.priceCents, opts.mode, opts.value, p.costCents);
+      return { id: p.id, name: p.name, category: p.category, before: p.priceCents, after: after, cost: p.costCents };
     }).filter(function (r) { return r.after != null && r.after > 0 && r.after !== r.before; })
       .sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); });
   }
@@ -111,6 +114,9 @@
     if (!edicionPreciosUnlocked()) { main.hidden = true; status.textContent = 'Disponible pronto.'; return false; }
     if (!allowed()) { main.hidden = true; status.textContent = 'Sin permiso. Solo el dueño puede cambiar precios en bloque.'; return false; }
     main.hidden = false;
+    var hint = q(page, '[data-pm-hint]');
+    if (!hint) { hint = el('p', 'pm-hint', '100% = el doble del costo'); hint.setAttribute('data-pm-hint', ''); var vl = q(page, '[data-pm-value]'); var lab = vl && vl.closest('label'); if (lab && lab.parentNode) lab.parentNode.insertBefore(hint, lab.nextSibling); }
+    hint.hidden = q(page, '[data-pm-mode]').value !== 'margen';
     var items = catalog(), cat = q(page, '[data-pm-category]'), keepCat = cat.value;
     var cats = Array.from(new Set(items.map(function (p) { return p.category; }))).sort(function (a, b) { return a.localeCompare(b, 'es'); });
     var all = el('option', '', 'Todas las categorías'); all.value = ''; cat.replaceChildren(all);
@@ -123,12 +129,15 @@
     if (!rows.length) return true;
     var wrap = el('div', 'pm-table-wrap'); wrap.tabIndex = 0; wrap.setAttribute('role', 'region'); wrap.setAttribute('aria-label', 'Vista previa de precios');
     var t = el('table', 'pm-table'), h = el('thead'), tr = el('tr');
-    ['Producto', 'Categoría', 'Precio actual', 'Precio nuevo'].forEach(function (x) { var th = el('th', '', x); th.scope = 'col'; tr.appendChild(th); });
+    var withCost = options(page).mode === 'margen' && allowed();
+    (withCost ? ['Producto', 'Categoría', 'Costo', 'Precio actual', 'Precio nuevo'] : ['Producto', 'Categoría', 'Precio actual', 'Precio nuevo']).forEach(function (x) { var th = el('th', '', x); th.scope = 'col'; tr.appendChild(th); });
     h.appendChild(tr); t.appendChild(h);
     var b = el('tbody');
     rows.forEach(function (r) {
       var line = el('tr'); var th = el('th', '', r.name); th.scope = 'row'; line.appendChild(th);
-      line.append(el('td', '', r.category), el('td', 'pm-num', money(r.before)), el('td', 'pm-num pm-new', money(r.after)));
+      line.appendChild(el('td', '', r.category));
+      if (withCost) line.appendChild(el('td', 'pm-num pm-cost', money(r.cost)));
+      line.append(el('td', 'pm-num', money(r.before)), el('td', 'pm-num pm-new', money(r.after)));
       b.appendChild(line);
     });
     t.appendChild(b); wrap.appendChild(t); content.appendChild(wrap);
@@ -161,6 +170,8 @@
     var rows = current.slice(), status = q(page, '[data-pm-status]'), apply = q(page, '[data-pm-apply]');
     running = true; apply.disabled = true;
     try {
+      if (options(page).mode === 'margen' && Number(options(page).value) === 0 && typeof root.confirm === 'function' &&
+        !root.confirm('Margen 0 %: el precio quedará igual al costo y no ganarás nada. ¿Continuar?')) { status.textContent = 'No se cambió nada.'; apply.disabled = false; return null; }
       if (!(await askOwnerPin(rows.length))) { status.textContent = 'No se cambió nada: falta el PIN del dueño.'; apply.disabled = false; return null; }
       if (!edicionPreciosUnlocked()) { status.textContent = 'No se cambió nada: la función aún no está disponible.'; return null; }
       var c = canon();

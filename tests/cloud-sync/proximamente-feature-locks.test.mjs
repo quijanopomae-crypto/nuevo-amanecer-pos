@@ -91,6 +91,7 @@ test('clientes-deudores-caja is unlocked on client and server (no feature_locked
 
 test('edicion-masiva-precios: locked for now, owner-only screen and feature route; product.update stays owner-approved', async t => {
   assert.equal(PERMISSIONS.featureLocked('edicion-masiva-precios'), true) // candado cerrado hasta abrirlos todos juntos;
+  assert.equal(PERMISSIONS.featureLocked('precio-por-margen'), true) // candado cerrado hasta abrirlos todos juntos;
   assert.equal(PERMISSIONS.canAccessScreen('owner', 'pageEdicionPrecios'), true);
   assert.equal(PERMISSIONS.canAccessScreen('empleado', 'pageEdicionPrecios'), false);
   const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
@@ -100,7 +101,9 @@ test('edicion-masiva-precios: locked for now, owner-only screen and feature rout
   const before = f.database.prepare('SELECT * FROM canonical_control').all();
   const owner = await f.fetch('http://localhost/features/edicion-masiva-precios', { headers: { authorization: 'Bearer pm-owner-token' } });
   assert.equal((await owner.json()).error, 'feature_locked'); // candado cerrado
-  const employee = await f.fetch('http://localhost/features/edicion-masiva-precios', { headers: { authorization: 'Bearer pm-employee-token' } });
-  assert.equal(employee.status, 403);
+  for (const id of ['edicion-masiva-precios', 'precio-por-margen']) {
+    const employee = await f.fetch('http://localhost/features/' + id, { headers: { authorization: 'Bearer pm-employee-token' } });
+    assert.equal(employee.status, 403, id);
+  }
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });

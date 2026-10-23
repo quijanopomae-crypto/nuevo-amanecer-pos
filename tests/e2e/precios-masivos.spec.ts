@@ -54,7 +54,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     await expect(s.locator('tbody tr')).toHaveCount(2);
     await expect(s.locator('tbody tr').first()).toContainText('S/ 1,234.50');
     await expect(s.locator('tbody tr').first()).toContainText('S/ 1,357.95');
-    await expect(s).not.toContainText(/costo|999/i);
+    await expect(s.locator('table')).not.toContainText(/Costo|999/);
     const apply = s.locator('[data-pm-apply]');
     await expect(apply).toHaveText('Aplicar a 2 productos');
     for (const sel of ['[data-pm-category]', '[data-pm-mode]', '[data-pm-value]', '[data-pm-apply]']) {
@@ -82,6 +82,40 @@ test('CANON: un product.update por producto, solo cambia price_cents', async ({ 
   expect(await page.evaluate(() => (window as any).__approvals)).toEqual(['product.update']);
   const ups = await page.evaluate(() => (window as any).__updates);
   expect(ups.map((u: any) => [u.product_id, u.price_cents, u.cost_cents, u.expected_metadata_revision])).toEqual([['p1', 123400, 99900, 3], ['p3', 200, 200, 1]]);
+});
+
+for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
+  test(`dueño fija precio por margen sobre costo (local) ${width}px ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await open(page, { dark });
+    const s = page.locator('#pageEdicionPrecios');
+    await s.locator('[data-pm-mode]').selectOption('margen');
+    await s.locator('[data-pm-value]').fill('25');
+    // p1: 999 × 1.25 = 1,248.75 ; p2: 3 × 1.25 = 3.75 ; p3: 2 × 1.25 = 2.50 = precio actual → se omite.
+    await expect(s.locator('tbody tr')).toHaveCount(2);
+    await expect(s.locator('thead th')).toHaveText(['Producto', 'Categoría', 'Costo', 'Precio actual', 'Precio nuevo']);
+    await expect(s.locator('tbody tr').first().locator('td')).toHaveText(['Abarrotes', 'S/ 999.00', 'S/ 1,234.50', 'S/ 1,248.75']);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/precio-margen-${width}-${dark ? 'oscuro' : 'claro'}.png` });
+    await expect(s.locator('[data-pm-hint]')).toHaveText('100% = el doble del costo');
+    await expect(s.locator('[data-pm-mode] option[value="margen"]')).toHaveText('Margen sobre costo (recargo) %');
+    await s.locator('[data-pm-apply]').click();
+    await page.locator('.na-pin-overlay .na-pin-input').fill('2468');
+    await page.locator('.na-pin-overlay .na-pin-ok').click();
+    await expect(s.locator('[data-pm-status]')).toHaveText('Listo: se cambió el precio de 2 productos.');
+    const out = await page.evaluate(() => (window as any).eval('JSON.stringify(productos.map(p=>[p.id,p.precio,p.costo]))'));
+    expect(JSON.parse(out)).toEqual([['p1', 1248.75, 999], ['p2', 3.75, 3], ['p3', 2.5, 2]]);
+  });
+}
+
+test('margen: sin costo se omite; el costo no aparece en los otros modos', async ({ page }) => {
+  await open(page);
+  const s = page.locator('#pageEdicionPrecios');
+  await s.locator('[data-pm-value]').fill('10');
+  await expect(s.locator('thead th')).toHaveText(['Producto', 'Categoría', 'Precio actual', 'Precio nuevo']);
+  await expect(s).not.toContainText('999');
+  const r = await page.evaluate(() => (window as any).NA_PRECIOS_MASIVOS.plan([{ id: 'x', name: 'X', category: 'C', priceCents: 100, costCents: null }], { mode: 'margen', value: 30 }));
+  expect(r).toEqual([]);
 });
 
 test('empleado: sin permiso y sin controles', async ({ page }) => {
@@ -143,3 +177,22 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
+
+test('margen 0 % pide confirmación; si se cancela no cambia nada ni pide PIN', async ({ page }) => {
+  await open(page);
+  const s = page.locator('#pageEdicionPrecios');
+  await s.locator('[data-pm-mode]').selectOption('margen');
+  await s.locator('[data-pm-value]').fill('0');
+  await page.evaluate(() => { (window as any).__asked = 0; window.confirm = () => { (window as any).__asked++; return false; }; });
+  await s.locator('[data-pm-apply]').click();
+  await expect(s.locator('[data-pm-status]')).toHaveText('No se cambió nada.');
+  expect(await page.evaluate(() => (window as any).__asked)).toBe(1);
+  await expect(page.locator('.na-pin-overlay')).toHaveCount(0);
+  const out = await page.evaluate(() => (window as any).eval('JSON.stringify(productos.map(p=>p.precio))'));
+  expect(JSON.parse(out)).toEqual([1234.5, 4, 2.5]);
+});
+
+test('en otros modos no se ve la ayuda del margen', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('#pageEdicionPrecios [data-pm-hint]')).toBeHidden();
+});
