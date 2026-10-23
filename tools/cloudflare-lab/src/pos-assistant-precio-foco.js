@@ -155,6 +155,9 @@ export function settlePriceCards({ proposals, dropped, text, products, lastAssis
   const pair = unitBoxPair(text);
   if (pair && !priceChangeAsk(text)) { out.note = unitBoxNote(pair); return out; }
   if (!priceChangeAsk(text)) { if (discountAsk(text)) out.note = DISCOUNT_NOTE; else if (boxPriceAsk(text) && /precio|cuanto|vend|sale/.test(t) && !/\d/.test(t) && !cards().length) out.note = BOX_READ_NOTE; return out; }
+  // (mezcla con #997, UNI-037) «compre 1 saco de jairito a 156.80» es una COMPRA (hay tarjeta de compra y ninguna de precio), no un
+  // cambio de precio: sin verbo de cambio («pon», «sube», «cambia»…) la respuesta de la compra queda como está.
+  if (!cards().length && proposals.some((p) => p.type === 'compra') && !CHANGE_VERB.test(t)) return out;
   if (priceZeroAsk(text)) { drop(() => true, 'bad_price'); out.reply = ZERO_PRICE_TEXT; return out; }
   if (boxPriceChange(text)) {
     drop((p) => !BOX_WORDS.test(fold(p.nombre)), 'box_price_not_available');
