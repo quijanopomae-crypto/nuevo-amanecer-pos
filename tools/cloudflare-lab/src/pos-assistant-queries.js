@@ -607,36 +607,32 @@ function nearWord(a, b) {
   return x.length > y.length ? x.slice(i + 1) === y.slice(i) : x.slice(i) === y.slice(i + 1);
 }
 export const PRODUCT_MATCH_ROWS = 8;
-// (seguimiento de #1001 y revisión de #1005) «fideo marcos» listaba el ATÚN MARCO POLO. Tipo de producto = la PRIMERA palabra con
-// contenido de lo pedido («fideo», «detergente»), si es el comienzo del nombre de algún producto: la palabra entera (o su plural) o una
-// abreviatura de 3+ letras que es su comienzo, con o sin punto y sin tildes («FID.», «DET», «JAB.BOLIVAR»). Solo la primera palabra: en
-// «atun marcos» «marcos» no es tipo aunque exista «MARCO POLO SPAGHETTI». Decisión de alfa: el tipo SOLO acota «lo más parecido» cuando
-// la marca no está; si la marca está, la lista es la de la base, completa.
-const headOf = (p) => stem(norm(p.nombre).split(/[^a-z0-9]+/).find(Boolean) || '');
-const isTypeHead = (h, w) => !!h && (h === w || (h.length >= 3 && h.length < w.length && !/\d/.test(h) && w.startsWith(h)));
+// (seguimiento de #1001, revisiones de #1005, decisión de alfa) El aviso «No tengo esa marca» sale SOLO si la marca no está en ningún nombre
+// del catálogo (missingBrand, igual que la base); si está, aunque sea con otro tipo, la lista es la de la base, completa y sin aviso: nunca
+// se dice que algo no está cuando sí está. El tipo dicho solo acota «lo más parecido» cuando hay aviso: «fideo pastalindo» sugiere fideos.
+// Tipo = la PRIMERA palabra con contenido de lo pedido. Un producto es de ese tipo si CUALQUIER palabra de su nombre es la palabra (o su
+// plural) o una abreviatura de 3+ letras que es su comienzo, con o sin punto («FID.», «DET», «JAB.BOLIVAR», «GLORIA LECHE CONDENSADA»).
+// SAL y PAN no valen como abreviatura (son productos: «salsa», «paneton»), y la ñ no se vuelve n («pañal» no es «pan»).
+const NOT_ABBR = new Set(['sal', 'pan']);
+const normT = (s) => String(s || '').toLowerCase().replace(/ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'ñ');
+const typeWords = (s) => normT(s).split(/[^a-z0-9ñ]+/).filter(Boolean);
+const isTypeWord = (t, w) => t === w || stem(t) === w || (t.length >= 3 && t.length < w.length && !NOT_ABBR.has(t) && !/\d/.test(t) && w.startsWith(t));
 export function productTypeOf(list, text) {
   const all = Array.isArray(list) ? list : [];
-  const first = norm(text).split(/[^a-z0-9]+/).find((w) => w.length >= 3 && !/\d/.test(w) && !FILLER.has(w) && !BRAND_SKIP.has(w) && !HONORIFIC.has(w));
+  const first = typeWords(text).find((w) => w.length >= 3 && !/\d/.test(w) && !FILLER.has(w) && !BRAND_SKIP.has(w) && !HONORIFIC.has(w));
   if (!first) return null;
-  const w = stem(first), sub = all.filter((p) => isTypeHead(headOf(p), w));
+  const w = stem(first), sub = all.filter((p) => typeWords(p.nombre).some((t) => isTypeWord(t, w)));
   return sub.length ? { word: w, list: sub } : null;
 }
-// Lista de stock_producto. Base: matchProducts + missingBrand sobre TODO el catálogo. Con tipo dicho, se cambia a «lo más parecido» del
-// tipo (con el aviso fijo) solo si: (a) la marca no está en ningún nombre (aviso de la base), o (b) ninguna palabra de marca está en los
-// productos de ese tipo NI encabeza el nombre de algún producto («MARCO POLO…», «LAVAGGI…»): estaba solo en productos de otro tipo
-// («fideo marcos» con solo ATÚN MARCO POLO). Lo que la base encontraba de la marca pedida nunca se cambia por otra cosa.
 export function productMatches(list, text) {
   const all = Array.isArray(list) ? list : [];
-  const hits = matchProducts(all, text), marca = missingBrand(all, text), tipo = productTypeOf(all, text);
+  const hits = matchProducts(all, text), marca = missingBrand(all, text);
+  if (!marca) return { hits, marca };
+  const tipo = productTypeOf(all, text);
   if (!tipo) return { hits, marca };
-  const words = brandWordsOf(text).filter((st) => st !== tipo.word);
-  const typed = tipo.list.map((p) => norm(p.nombre));
-  const leads = (st) => all.some((p) => { const h = headOf(p); return h === st || loose(h) === loose(st) || nearWord(st, h); });
-  const otherType = !marca && words.length > 0 && !words.some((st) => hasWord(typed, st) || leads(st));
-  if (!marca && !otherType) return { hits, marca };
   const near = matchProducts(tipo.list, text), seen = new Set(near), sub = [...near, ...tipo.list.filter((p) => !seen.has(p))];
   if (all.truncated) sub.truncated = true;
-  return { hits: sub, marca: true };
+  return { hits: sub, marca };
 }
 // (auditoría 500, INV-047 / INV-008) Marca que la tienda NO tiene: «fideo lavaggi», «cerveza pilsen». matchProducts encuentra los fideos o
 // las cervezas por la palabra genérica y antes se listaban en silencio, como si fueran la marca pedida. missingBrand dice (true/false) si
