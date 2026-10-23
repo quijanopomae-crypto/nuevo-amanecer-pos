@@ -2622,35 +2622,30 @@ const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'l
   'muy', 'más', 'mas', 'menos', 'todo', 'toda', 'todos', 'todas', 'este', 'esta', 'ese', 'esa', 'aquel', 'aquella', 'usted', 'ustedes', 'vendedor', 'vendedora', 'cajero', 'cajera']);
 const NAME_WORD_RE = /^[\p{L}][\p{L}'’-]*/u;
 // (auditoría 500, UNI-058 / INV-041) «don/doña» de una MARCA no es una persona: «FIDEO DON VITTORIO», «fideo don vittorio» quedan igual.
-// Misma regla que sanitizeLesson (#988): palabra de producto justo antes en la línea, o «don X» dentro del nombre de un producto conocido en
-// este pedido (known.products); además MAYÚSCULAS de catálogo CON medida («DON VITTORIO SPAGHETTI 500GR X 20»; las mayúsculas solas no bastan). Un cliente de la lista
-// (known.customers) se tapa SIEMPRE (también sus apellidos en minúscula); «señora/sr./srta.» siempre es persona. Sin known (o 'strict'): estricto, como antes (así el empleado, que no lo recibe).
+// (#998 sobre #988) La decisión marca/persona es la regla COMPARTIDA isBrandDon (la misma de sanitizeLesson), sobre la línea del texto:
+// verbo de deuda/pago cerca (debe, paga, pagó, abona, fía, le fié…) tapa siempre; si no, es marca solo tras una palabra de producto o si
+// «don X» está en un producto conocido de este pedido (known.products). Las MAYÚSCULAS o una medida solas no bastan. Un cliente de la lista
+// (known.customers) se tapa SIEMPRE (también sus apellidos en minúscula); «señora/sr./srta.» siempre es persona. Sin known (o 'strict'):
+// estricto, como antes (así el empleado, que no lo recibe).
 const REPLY_BRAND_CUE = /^(?:don|dona)$/;
-const REPLY_PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada|marca|producto)\s+$/i;
-// (revisión #998) la «X n» sola no basta: «DON PEDRO X 2» es una persona (2 para don Pedro); hace falta una medida con unidad (500GR, 1 L…).
-const REPLY_CATALOG_TOKEN = /(?<![\p{L}\d])\d+(?:[.,]\d+)?\s*(?:G|GR|GRS|KG|ML|L|LT|LTS|CC|OZ|UND|UNID|UN|BOT|PQT|SOB)(?![\p{L}\d])/u;
-// (revisión #998) tras «don/doña» + nombre, un verbo de deuda/pago (con o sin tilde, también «le fié») es siempre una persona: se tapa.
-const REPLY_DEBT_VERB = /^(?:deb(?:e|en|ia|ian|era|eria)|adeud\w*|pag(?:o|aba|aron|ara|ue)|abon(?:o|aba|aron|ara|e)|fi(?:o|e|aba|aron|amos|ado|ada))$/;
 const replyWords = (x) => LESSON_FOLD(x).replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' ').filter(Boolean);
 const productNameOf = (p) => (typeof p === 'string' ? p : p && p.nombre) || '';
 // palabras de un cliente que bastan para reconocerlo: el nombre completo o sus dos primeras (palabras de 3+ letras), como sanitizeLesson
 const clientKeys = (customers) => (Array.isArray(customers) ? customers : []).map((c) => replyWords(productNameOf(c)).filter((w) => w.length >= 3)).filter((w) => w.length)
   .flatMap((w) => (w.length > 2 ? [w, w.slice(0, 2)] : [w]));
 const startsWithWords = (ws, key) => key.length && key.every((k, i) => ws[i] === k);
-const debtAfter = (rest) => { const ws = replyWords(rest); return REPLY_DEBT_VERB.test(ws[0] || '') || (/^(?:le|les|me|nos|te)$/.test(ws[0] || '') && REPLY_DEBT_VERB.test(ws[1] || '')); };
-const isCaps = (w) => /\p{Lu}/u.test(w) && w === w.toUpperCase();
 // (revisión #998) dónde termina el nombre tras «don/doña/señora…»: los apellidos siguen el estilo del primer nombre (en minúscula también,
-// «doña juana pérez»), pero no se tragan un verbo de deuda/pago, una medida («KG», la «X» de «X 2»), palabras vacías ni verbos comunes.
+// «doña juana pérez»), pero no se tragan un verbo de deuda/pago (la lista de isBrandDon), una medida («KG», la «X» de «X 2»), palabras
+// vacías ni verbos comunes.
 const NAME_UNIT = new Set(['g', 'gr', 'grs', 'kg', 'kilo', 'kilos', 'ml', 'l', 'lt', 'lts', 'litro', 'litros', 'cc', 'oz', 'und', 'unid', 'un', 'bot', 'pqt', 'sob', 'soles']);
 const NAME_STOP_VERB = new Set(['tiene', 'vino', 'viene', 'esta', 'estuvo', 'quiere', 'dice', 'dijo', 'trajo', 'lleva', 'compra', 'pide', 'hoy', 'ayer', 'manana', 'siempre', 'aun', 'todavia']);
 const nameStop = (w, rest, lower) => { const f = LESSON_FOLD(w);
-  return NAME_NOT.has(w.toLowerCase()) || REPLY_DEBT_VERB.test(f) || NAME_UNIT.has(f) || (f === 'x' && /^[ \t]*\d/.test(rest)) || (lower && (NAME_STOP_VERB.has(f) || /ó$/u.test(w))); };
+  return NAME_NOT.has(w.toLowerCase()) || DEBT_VERB.test(' ' + f + ' ') || NAME_UNIT.has(f) || (f === 'x' && /^[ \t]*\d/.test(rest)) || (lower && (NAME_STOP_VERB.has(f) || /ó$/u.test(w))); };
 export function maskReplyPeople(value, known = null) {
   const s = String(value ?? '');
   if (!REPLY_PEOPLE_GATE.test(s)) return s;
   const strict = !known || typeof known !== 'object', kn = strict ? {} : known;
   const keys = strict ? [] : clientKeys(kn.customers);
-  const prods = strict ? [] : (Array.isArray(kn.products) ? kn.products : []).map((p) => ' ' + replyWords(productNameOf(p)).join(' ') + ' ');
   let out = s.replace(DNI_REPLY_RE, (m, pre, d) => pre + '****' + d.slice(4));
   HONORIFIC_RE.lastIndex = 0; let res = '', pos = 0, m;
   while ((m = HONORIFIC_RE.exec(out)) !== null) {
@@ -2665,13 +2660,8 @@ export function maskReplyPeople(value, known = null) {
       if (client) { // cliente de la lista: tapado siempre, con todas sus palabras (también en minúscula)
         let e2 = after, n = 0, wm; while (n < client && (wm = /^[^\p{L}\d\n]*([\p{L}\d][\p{L}\d'’-]*)/u.exec(out.slice(e2)))) { e2 += wm[0].length; n++; }
         end = Math.max(end, e2);
-      } else if (REPLY_BRAND_CUE.test(LESSON_FOLD(m[1])) && !debtAfter(out.slice(end, lineEnd))) {
-        const first = replyWords(w1[0])[0] || '', key = ' ' + LESSON_FOLD(m[1]) + ' ' + first + ' ';
-        const before = out.slice(nl, m.index);
-        const brand = REPLY_PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before)) // «fideo don …», «aceite doña …» (sanitizeLesson)
-          || (first.length >= 3 && prods.some((p) => p.includes(key))) // «don vittorio» en un producto conocido del pedido
-          || (isCaps(m[1]) && isCaps(w1[0]) && REPLY_CATALOG_TOKEN.test(out.slice(end, lineEnd))); // MAYÚSCULAS de catálogo, solo con medida con unidad (500GR, 2 KG…; la «X n» sola no)
-        if (brand) { HONORIFIC_RE.lastIndex = end; continue; }
+      } else if (REPLY_BRAND_CUE.test(LESSON_FOLD(m[1])) && isBrandDon(out.slice(nl, lineEnd), m.index - nl, end - nl, kn.products)) {
+        HONORIFIC_RE.lastIndex = end; continue; // marca (isBrandDon, #988): queda
       }
     }
     res += out.slice(pos, after) + NAME_MASK; pos = end; HONORIFIC_RE.lastIndex = end;
@@ -2685,6 +2675,12 @@ export function safeProductName(nombre, customers = []) {
   if (maskReplyPeople(n, { customers }) !== n) return false;
   const ws = ' ' + replyWords(n).join(' ') + ' ';
   return !clientKeys(customers).some((key) => ws.includes(' ' + key.join(' ') + ' '));
+}
+// (revisión #998) historial que manda el teléfono del Admin (mensajes anteriores, los escribe/guarda el aparato): antes del modelo, el nombre
+// tras «don/doña/señora…» se tapa con maskReplyPeople (misma regla isBrandDon); «fideo don vittorio» o un producto conocido quedan.
+export const HISTORY_DON_CUE = /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu;
+export function maskHistoryPeople(history, known) {
+  return (Array.isArray(history) ? history : []).map((m) => (m && typeof m.content === 'string' ? { ...m, content: maskReplyPeople(m.content, known) } : m));
 }
 export function finalReplyFilter(text, { change = true } = {}) { return change ? String(text ?? '') : stripConfirmHint(text); }
 // known (opcional, chatCore): lo conocido del pedido para el filtro final ({ products, customers } -> maskReplyPeople; Admin: nameRefs + names ->
@@ -3358,7 +3354,17 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } await prepKnown(result.content); if (!confirmHeld(emit)) emit.flush(); }
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
-    req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null, cards: parsed.cards });
+    // (revisión #998) Admin: el historial del teléfono va al modelo sin el nombre tras «don/doña/señora» (isBrandDon). Si solo un
+    // «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
+    let histToModel = parsed.history;
+    if (knownR && parsed.history.length) {
+      const histKnown = () => ({ products: [...(ctx.products || []), ...(sysProducts || [])] });
+      histToModel = maskHistoryPeople(parsed.history, histKnown());
+      if (!sysProducts && histToModel.some((m, i) => m.content !== parsed.history[i].content && HISTORY_DON_CUE.test(parsed.history[i].content))) {
+        sysProducts = await loadProducts(); setKnownProducts(); histToModel = maskHistoryPeople(parsed.history, histKnown());
+      }
+    }
+    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null, cards: parsed.cards });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
