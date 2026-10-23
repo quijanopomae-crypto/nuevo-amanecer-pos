@@ -2088,6 +2088,7 @@ export function createMemoryUsageStore() {
   return {
     async get(key) { const r = map.get(key); return r ? { value: JSON.parse(JSON.stringify(r.value)), revision: r.revision } : { value: {}, revision: 0 }; },
     async put(key, value, revision) { const r = map.get(key); if ((r?.revision || 0) !== revision) return false; map.set(key, { value, revision: revision + 1 }); return true; },
+    async purgeExpired(prefix, cutoff) { for (const [k, r] of map) if (k.startsWith(prefix) && !(Number.isFinite(r.value?.iat) && r.value.iat >= cutoff)) map.delete(k); },
     _map: map
   };
 }
@@ -2105,6 +2106,11 @@ export function createSettingsUsageStore(db) {
         ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,revision=pos_settings.revision+1,updated_at=excluded.updated_at
         WHERE pos_settings.revision=?4`).bind(key, JSON.stringify(value), new Date().toISOString(), revision).run();
       return !(res?.meta && res.meta.changes === 0);
+    },
+    // (INV-057) Borra las filas de un prefijo cuyo «iat» es anterior a cutoff (o no tiene: lista ya terminada «{}»). Solo ese prefijo.
+    async purgeExpired(prefix, cutoff) {
+      await db.prepare(`DELETE FROM pos_settings WHERE substr(key,1,?1)=?2
+        AND (json_extract(value_json,'$.iat') IS NULL OR CAST(json_extract(value_json,'$.iat') AS INTEGER) < ?3)`).bind(prefix.length, prefix, cutoff).run();
     }
   };
 }
@@ -2964,6 +2970,14 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
       if (missing.length) return json({ error: 'product_missing', message: 'Ese producto ya no está en el inventario. Pide la tarjeta de nuevo.' }, 409);
       const bad = lines.filter((l) => l.product_id && byId.get(String(l.product_id)).controla === false).map((l) => l.nombre);
       if (bad.length) return json({ error: 'sin_control_stock', nombres: bad, message: bad.map(NO_STOCK_TEXT).join(' ') }, 409);
+      // (revisión #996) Tarjeta del lote («sí»/«siguientes»): lleva el stock leído en el servidor en ese turno. Si la base ya tiene otro
+      // (una venta o movimiento en medio), no se aplica nada: 409 stale_stock, el mismo código que /inventory (a6-inventory.js).
+      if (tok.t === 'ajuste' && applied.stock_de_servidor === true) {
+        const cur = byId.get(String(applied.product_id)).stock, card = Number(applied.stock_actual);
+        if (cur == null || !Number.isFinite(Number(cur)) || !Number.isFinite(card)) return unavailable();
+        if (Math.abs(Number(cur) - card) > 1e-9) return json({ error: 'stale_stock', product_id: String(applied.product_id), stock_actual: Number(cur),
+          message: 'El stock de ' + String(applied.nombre || 'este producto') + ' cambió: ahora hay ' + fmtN(cur) + ' (la tarjeta decía ' + fmtN(card) + '). Pida la tarjeta de nuevo.' }, 409);
+      }
     }
   }
   // Límite de confirmaciones por aparato y minuto.
@@ -3281,6 +3295,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   result.calls = result.calls.filter((c) => { let a = c?.arguments; if (typeof a === 'string') { try { a = JSON.parse(a); } catch { /* se queda como texto */ } }
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
+  // (revisión #996) Tarjetas de ajuste del lote: su stock_actual se leyó en el servidor en ESTE turno. La marca va firmada en el token y
+  // «Aplicar» vuelve a comparar ese stock con la base (confirmCore): si hubo una venta en medio -> 409 stale_stock.
+  if (bulk && !bulk.failed) for (const p of proposals) if (p.type === 'ajuste' && Number.isFinite(Number(p.stock_actual))) p.stock_de_servidor = true;
   arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
   // (auditoría 500, CP-037) costo que nadie dijo (ni en este mensaje ni en los anteriores de la persona): queda vacío y marcado, no inventado.
   // Solo compras dictadas por texto («compré…», «me llegaron…»); una factura leída trae sus costos.
@@ -3540,6 +3557,9 @@ export function overCapCalls(proposals) {
   return ch.slice(0, BULK_MAX_ITEMS).map((p) => ({ name: String(p._call.name), arguments: typeof p._call.arguments === 'string' ? p._call.arguments : JSON.stringify(p._call.arguments || {}) }));
 }
 export async function saveBulk(store, auth, now, calls, productos) {
+  // (revisión #996) Al guardar una lista (de cualquier aparato) se borran las vencidas de TODOS: la tabla no crece con listas sin confirmar.
+  // Las vigentes de otros aparatos y las demás claves de pos_settings no se tocan. Si la limpieza falla, se guarda igual.
+  if (typeof store.purgeExpired === 'function') { try { await store.purgeExpired(BULK_PREFIX, now - BULK_TTL_MS); } catch { /* sin limpiar esta vez */ } }
   try { const key = await bulkKey(auth); for (let i = 0; i < 4; i++) { const r = await store.get(key); if (await store.put(key, { iat: now, next: 0, productos: !!productos, calls }, r.revision)) return true; } } catch { /* sin guardar: «sí» va al modelo como siempre */ }
   return false;
 }

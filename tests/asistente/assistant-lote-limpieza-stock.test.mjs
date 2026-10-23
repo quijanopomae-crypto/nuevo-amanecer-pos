@@ -80,8 +80,8 @@ test('lista pendiente: al guardar una nueva se borran las vencidas de cualquier 
   assert.ok(keys.includes(keyC), 'la lista vigente del aparato C sigue');
   assert.deepEqual(after.find((r) => r.key === keyC).value.calls, one);
   for (const k of [other, PA.USAGE_PREFIX + 'w:abc', 'negocio.nombre']) assert.ok(keys.includes(k), k + ' no se toca');
-  assert.deepEqual(keys.filter((k) => !before.includes(k)), [keyB]);
-  assert.equal(after.length, before.length, 'una fila menos (A) y una más (B)');
+  assert.deepEqual(before.filter((k) => !keys.includes(k)), [keyA], 'solo se borró la fila vencida de A');
+  assert.deepEqual(keys.filter((k) => !before.includes(k) && k.startsWith(PA.BULK_PREFIX)), [keyB], 'la única lista nueva es la de B (lo demás: cupo del turno)');
 });
 
 test('lista de hace 25 min: «sí» lleva el stock leído en ese momento; si cambia antes de «Aplicar» -> 409 stale_stock y la base queda igual', async (t) => {
