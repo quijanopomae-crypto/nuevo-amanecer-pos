@@ -1089,7 +1089,25 @@ async function customerDebtQuery(reader, args, base) {
 // Netos: una anulación (fila negativa) descuenta su monto y su cobro (+20, −20, +5 = S/ 5.00 en 1 cobro), igual que el resumen (pagos_c).
 // (#995) Con cliente_id: solo los cobros de los créditos de ESE cliente (el cobro trae credit_id, no el cliente); si no se puede separar,
 // lo dice y nunca da el total de la tienda como si fuera del cliente.
+// (#995, 2ª revisión) Códigos de cliente escritos en el mensaje: «cliente #5», «cliente 5», «el cliente nro. 5», «cliente N° 5» (la
+// herramienta enseña «cliente 12 -> cliente_id 12»). Sin «#» tiene que parecer código (lleva un dígito): «cliente nuevo», «cliente
+// frecuente» y «clientes» no son códigos. Devuelve los códigos tal como se escribieron (quien llama los valida con customerCode).
+export function clientCodesInText(text) {
+  const out = [], re = /\bcliente\b\s*(#|n(?:ro|°|º|o)?\.?(?=\s*\d)|)\s*([A-Za-z0-9_-]{1,40})/giu;
+  for (const m of String(text ?? '').matchAll(re)) if (m[1] === '#' || /\d/.test(m[2])) out.push(m[2]);
+  return out;
+}
+
 async function creditPaymentsQuery(reader, args, nowMs, base) {
+  // Pregunta por UN cliente sin poder saber cuál (el chat lo marca): se pide el código, nunca el total de la tienda.
+  if (args?.falta_cliente === 'cual' || args?.falta_cliente === 'codigo') {
+    const { customerCode: cc } = await import('./pos-assistant.js');
+    const ops = [...new Set((Array.isArray(args.opciones) ? args.opciones : []).map((x) => cc(x)).filter(Boolean))].slice(0, 5);
+    const texto = args.falta_cliente === 'cual' && ops.length > 1
+      ? '¿De cuál cliente quiere los cobros: ' + ops.map((x) => 'cliente #' + x).join(' o ') + '? Pregunte por uno a la vez.'
+      : 'Dime el código del cliente (aparece como «cliente #código» en Clientes) y te digo cuánto pagó; sin código no doy el total de la tienda como si fuera de una persona.';
+    return { ...base, columnas: [], filas: [], texto, resumen: { falta: 'cliente_id', ...(ops.length > 1 ? { opciones: ops.map((x) => 'cliente #' + x) } : {}) } };
+  }
   const p = period(args, nowMs), rango = rangeLabel(p);
   const { customerCode } = await import('./pos-assistant.js');
   const code = args?.cliente_id != null && args.cliente_id !== '' ? customerCode(args.cliente_id) : null;
@@ -1102,6 +1120,12 @@ async function creditPaymentsQuery(reader, args, nowMs, base) {
     const credits = await reader.credits();
     let mine = credits.filter((c) => String(c.cliente) === code);
     if (!mine.length) mine = credits.filter((c) => String(c.cliente).toLowerCase() === code.toLowerCase());
+    // (#995, 2ª) Sin créditos y el código no está en la lista completa de Clientes: no existe (no «no hubo cobros»).
+    if (!mine.length && typeof reader.customers === 'function') {
+      let cs = null; try { cs = await reader.customers(); } catch { cs = null; }
+      if (Array.isArray(cs) && !cs.truncated && !cs.some((c) => String(c?.id).toLowerCase() === code.toLowerCase()))
+        return { ...base, titulo: 'Cobros de fiados ' + de + rango, columnas: [], filas: [], texto: 'No encontré ' + ref + ' en Clientes. Revise el código (aparece como «cliente #código» en Clientes).', resumen: { desde: p.desde, hasta: p.hasta, cliente: ref, cliente_encontrado: false } };
+    }
     const ids = new Set(mine.map((c) => c.credito).filter((x) => x != null).map(String));
     if (mine.some((c) => c.credito == null) || pays.some((x) => x.dia && x.dia >= p.desde && x.dia <= p.hasta && x.cr == null))
       return { ...base, titulo: 'Cobros de fiados ' + de + rango, columnas: [], filas: [], texto: 'No puedo separar los cobros de ' + ref + ' ' + rango + ': se ven en Clientes > ficha del cliente.', resumen: { desde: p.desde, hasta: p.hasta, cliente: ref, no_disponible: true } };

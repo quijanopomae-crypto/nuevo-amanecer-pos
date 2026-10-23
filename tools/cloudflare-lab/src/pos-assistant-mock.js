@@ -1,7 +1,7 @@
 // Modo demostración del asistente: se usa cuando el Worker no tiene DEEPSEEK_API_KEY.
 // Responde con reglas simples y devuelve las MISMAS llamadas de herramienta que haría el modelo,
 // así la validación, los permisos y las tarjetas «Confirmar» se prueban igual sin gastar.
-import { dateWordRange } from './pos-assistant-queries.js';
+import { dateWordRange, clientCodesInText } from './pos-assistant-queries.js';
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function findProducts(text, products) {
   const t = norm(text);
@@ -43,8 +43,8 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   // (#995) «registra / anota un pago…» es una acción, no la pregunta; con «cliente #N» van solo los cobros de ese cliente.
   if (/\b(cobr\w*|me pagaron|pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(t) && !/\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/.test(t)
     && !/\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b[^.?!]{0,30}\b(pagos?|abonos?|cobros?)\b/.test(t)) {
-    const cli = /\bcliente\s*#\s*([A-Za-z0-9_-]{1,40})/i.exec(String(text || ''));
-    return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), ...(cli ? { cliente_id: cli[1] } : {}) })] };
+    const cli = clientCodesInText(text); // «cliente #5» o «el cliente 5»
+    return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), ...(cli.length === 1 ? { cliente_id: cli[0] } : {}) })] };
   }
   { const cli = /\bcliente\s*#?\s*([A-Za-z0-9_-]{1,40})\b/i.exec(String(text || '')); // solo el código («cliente #12» o «cliente 12»), nunca el nombre
     if (cli && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }

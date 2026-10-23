@@ -25,7 +25,7 @@ import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel, brandNoticeOf, BRAND_NOTICE, BRAND_NOTICE_LEAD, saysNoBrand } from './pos-assistant-queries.js';
+import { runAssistantQuery, clientCodesInText, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel, brandNoticeOf, BRAND_NOTICE, BRAND_NOTICE_LEAD, saysNoBrand } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
@@ -77,7 +77,8 @@ const CREDIT_PAYMENTS_RE = /\b(cobr\w*|me pagaron|pagaron|pagos?|abonos?|abonaro
 const CREDIT_PAYMENTS_RULE = 'COBROS DE FIADOS: «cuánto cobré de fiados o créditos», «cuánto me abonaron» = consultar cobros_creditos con el periodo; NO es ventas_periodo (las ventas no son cobros). De UN cliente («cuánto me pagó cliente #CODIGO»): manda también cliente_id.';
 // (#995) «registra / anota un pago (abono, cobro)…» es una ACCIÓN, no la pregunta por los cobros: ni regla ni cambio a cobros_creditos.
 const CREDIT_PAYMENT_ACTION_RE = /\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b[^.?!]{0,30}\b(pagos?|abonos?|cobros?)\b/;
-const asksCreditPaymentsRule = (t) => CREDIT_PAYMENTS_RE.test(t) && !CREDIT_PAYMENT_ACTION_RE.test(t);
+// «cliente nro. 5»: el punto de la abreviatura no corta la frase.
+const asksCreditPaymentsRule = (t) => { t = t.replace(/\b(nro|no|n)\.(?=\s*\d)/g, '$1'); return CREDIT_PAYMENTS_RE.test(t) && !CREDIT_PAYMENT_ACTION_RE.test(t); };
 // Mención de lo VENDIDO o FIADO (vendí, vendo, vendido, ventas, fié, fío, fiamos…): eso son ventas al fiado, no cobros; no se cambia.
 const SALES_MENTION_RE = /\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/;
 export const asksCreditPayments = (text) => { const t = foldText(text); return asksCreditPaymentsRule(t) && !SALES_MENTION_RE.test(t); };
@@ -87,14 +88,30 @@ function creditPaymentsNotSales(proposals, text, role) {
   if (role !== 'owner' || !asksCreditPayments(text)) return;
   for (const p of proposals) if (p.type === 'consulta' && p.query?.tipo === 'ventas_periodo') p.query = { ...p.query, tipo: 'cobros_creditos' };
 }
-// (#995) «¿cuánto me pagó cliente #5?»: si el modelo no mandó cliente_id, va el código del mensaje (texto real, ya sin códigos neutros);
-// así nunca sale el total de la tienda como si fuera de ese cliente. Solo el Admin (cobros_creditos es solo suyo).
+// (#995) «¿cuánto me pagó cliente #5?» o «el cliente 5»: si el modelo no mandó cliente_id, va el código del mensaje (texto real, ya
+// sin códigos neutros); así nunca sale el total de la tienda como si fuera de ese cliente. Solo el Admin (cobros_creditos es solo suyo).
+// Dos códigos distintos («cliente #5 o cliente #9»): se pregunta cuál. Una persona sin código («¿cuánto me pagó doña Rosa de su
+// deuda?»): se pide el código. «¿cuánto cobré de fiados?» (sin nadie en particular) sigue siendo el total de la tienda.
+const ONE_PAYER_VERB_RE = /\b(pago|abono|cancelo|devolvio)\b/;
+const ONE_PAYER_WHO_RE = /\bde su (deuda|fiado|credito|cuenta|saldo)\b|\b(don|dona|sr|sra|srta|senor|senora|senorita|nombre oculto)\b/;
+const ONE_PAYER_NAME_RE = /\bpag[oó]\s+(?:el |la |a )?(?!Yape\b|Plin\b|Clientes?\b|Admin\b)[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+/u;
+function asksOnePayer(text) {
+  return String(text ?? '').split(/[.?!¿¡;\n]+/).some((s) => { const f = foldText(s); return ONE_PAYER_VERB_RE.test(f) && (ONE_PAYER_WHO_RE.test(f) || ONE_PAYER_NAME_RE.test(s)); });
+}
 function creditPaymentsClient(proposals, text, role) {
   if (role !== 'owner') return;
-  const m = /\bcliente\s*#\s*([A-Za-z0-9_-]{1,40})/i.exec(String(text ?? ''));
-  const code = m ? customerCode(m[1]) : null;
-  if (!code) return;
-  for (const p of proposals) if (p.type === 'consulta' && p.query?.tipo === 'cobros_creditos' && !p.query.cliente_id) p.query = { ...p.query, cliente_id: code };
+  const qs = proposals.filter((p) => p.type === 'consulta' && p.query?.tipo === 'cobros_creditos');
+  if (!qs.length) return;
+  const codes = [...new Map(clientCodesInText(text).map((x) => customerCode(x)).filter(Boolean).map((c) => [c.toLowerCase(), c])).values()];
+  for (const p of qs) {
+    if (codes.length > 1) {
+      // Varias consultas, cada una con su cliente: el modelo ya separó. Una sola, o sin cliente_id: se pregunta cuál.
+      if (qs.length > 1 && p.query.cliente_id) continue;
+      const { cliente_id: _c, ...rest } = p.query; p.query = { ...rest, falta_cliente: 'cual', opciones: codes };
+    } else if (p.query.cliente_id) continue;
+    else if (codes.length === 1) p.query = { ...p.query, cliente_id: codes[0] };
+    else if (asksOnePayer(text)) p.query = { ...p.query, falta_cliente: 'codigo' };
+  }
 }
 export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
 // Datos del negocio o del ticket (configurar_app con destino servidor) pedidos por quien no tiene el permiso «cambios» (niveles 1, 2, 3 sin
