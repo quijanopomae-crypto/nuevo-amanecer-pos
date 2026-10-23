@@ -3324,9 +3324,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (invoiceMemory && invoiceMemory.taught.length) { const cust = await lessonCustomers(), prods = ctx.products || [];
     invoiceMemory.taught = [...new Set(invoiceMemory.taught.map((x) => sanitizeLesson(x, cust, prods).slice(0, 200)).filter(Boolean))]; }
   // (alfa) Igual con las aclaraciones de la boleta (vuelven a la IA en <boleta_recordada>): un token viejo puede traerlas crudas.
-  if (invoiceMemory && invoiceMemory.clarifications.length) { const cust = await lessonCustomers(), prods = ctx.products || [];
+  // pregunta_previa (y lastReply, de donde sale la siguiente) también: un token viejo puede traer el nombre crudo.
+  if (invoiceMemory && (invoiceMemory.clarifications.length || invoiceMemory.lastReply)) { const cust = await lessonCustomers(), prods = ctx.products || [];
+    const pq = (x) => sanitizeLesson(String(x || ''), cust, prods).slice(0, 600);
     invoiceMemory.clarifications = invoiceMemory.clarifications.filter((c) => c && typeof c === 'object')
-      .map((c) => ({ ...c, usuario: sanitizeLesson(String(c.usuario || ''), cust, prods).slice(0, 500) })).filter((c) => c.usuario); }
+      .map((c) => ({ ...c, usuario: sanitizeLesson(String(c.usuario || ''), cust, prods).slice(0, 500), pregunta_previa: pq(c.pregunta_previa) })).filter((c) => c.usuario);
+    if (typeof invoiceMemory.lastReply === 'string') invoiceMemory.lastReply = pq(invoiceMemory.lastReply); }
   const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
