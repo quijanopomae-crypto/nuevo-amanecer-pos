@@ -2497,7 +2497,8 @@ export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
 }
 // Bot 5: lo que un EMPLEADO puede recibir de una consulta (pantalla y modelo). Lista blanca por tipo; todo lo demás (costos, márgenes,
 // ganancia, inversión, caja, deudas) se quita ANTES de mandar cualquier trozo y antes de dárselo al modelo.
-const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'precio', 'stock', 'minimo', 'estado'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
+// aviso (auditoría de ventas 23-10): solo fechas y cuentas de filas («no existe», «fecha futura», «Mostrando 10 de 12», «recorté a 92 días»).
+const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'precio', 'stock', 'minimo', 'estado', 'aviso'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
 export const OWNER_ONLY_KEY = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles/i;
 const OWNER_ONLY_KEY_MODEL = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles|proveedor|supplier|compra|purchase|precio_compra/i;
 export function stripOwnerKeys(v, depth = 0) {

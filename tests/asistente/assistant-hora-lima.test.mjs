@@ -61,7 +61,8 @@ test('límite de mes: 31 a las 23:30 Lima sigue siendo el mes viejo; el 1 a las 
 test('palabras aceptadas: con tildes, mayúsculas, espacios o guion bajo; lo demás no es palabra de fecha', () => {
   for (const [w, k] of [['Hoy', 'hoy'], ['oy', 'hoy'], ['AYER', 'ayer'], ['esta semana', 'esta_semana'], ['esta_semana', 'esta_semana'], ['la semana pasada', 'semana_pasada'],
     ['Este Mes', 'este_mes'], ['mes pasado', 'mes_pasado']]) assert.equal(dateWord(w), k, w);
-  for (const w of ['', null, '2026-10-22', 'mañana', 'Rosa', 'hoyy']) assert.equal(dateWord(w), null, String(w));
+  for (const w of ['', null, '2026-10-22', 'Rosa', 'hoyy']) assert.equal(dateWord(w), null, String(w));
+  assert.equal(dateWord('mañana'), 'manana'); // (auditoría VEN-028) se reconoce para avisar que es futura; no está en DATE_WORDS
   assert.deepEqual([...DATE_WORDS], ['hoy', 'ayer', 'antier', 'mismo_dia_semana_pasada', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']); // antier y mismo día: #consultas-nuevas
   assert.equal(limaBounds('2026-10-01', '2026-10-31').toIso, '2026-11-01T05:00:00.000Z');
 });
@@ -137,7 +138,9 @@ test('herramienta consultar: «periodo» en el esquema; la validación guarda la
   assert.deepEqual(c.function.parameters.properties.periodo.enum, [...DATE_WORDS]);
   const prop = (args) => toProposal({ name: 'consultar', arguments: JSON.stringify(args) }, 'owner', { products: [] }, 1).query;
   assert.equal(prop({ tipo: 'ventas_periodo', periodo: 'esta_semana' }).periodo, 'esta_semana');
-  assert.equal(prop({ tipo: 'ventas_periodo', periodo: 'pasado mañana' }).periodo, null);
+  // (auditoría VEN-028) antes «pasado mañana» se descartaba (null → la consulta contaba HOY sin decirlo); ahora llega y la consulta avisa que es futura.
+  assert.equal(prop({ tipo: 'ventas_periodo', periodo: 'pasado mañana' }).periodo, 'pasado_manana');
+  assert.equal(prop({ tipo: 'ventas_periodo', periodo: 'pasado mañana o lo que sea' }).periodo, null);
   assert.equal(prop({ tipo: 'ventas_periodo', desde: 'esta semana' }).desde, 'esta_semana'); // antes: «esta seman» -> hoy
   assert.equal(prop({ tipo: 'ventas_periodo', desde: '2026-10-01', hasta: '2026-10-05' }).hasta, '2026-10-05');
   // «periodo» no abre nada al empleado: ventas y más vendidos siguen fuera de sus consultas.

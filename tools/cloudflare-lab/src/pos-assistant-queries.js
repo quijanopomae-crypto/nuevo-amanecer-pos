@@ -51,6 +51,8 @@ export const LIMA_OFFSET_MS = 5 * 3600 * 1000;
 export function limaToday(nowMs = Date.now()) { return new Date(nowMs - LIMA_OFFSET_MS).toISOString().slice(0, 10); }
 export function addDays(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Lista con .total (cuántos hay en total) NO enumerable: las filas y su forma no cambian.
+const withTotal = (list, total) => Object.defineProperty(list, 'total', { value: Number.isInteger(total) ? total : null, enumerable: false });
 const normName = (s) => norm(s).replace(/\s+/g, ' ').trim();
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Entero o prefijo seguido de algo que no es letra ni número; la «s» final es opcional (RECARGA / RECARGAS).
@@ -69,7 +71,10 @@ const WORD_ALIASES = { hoy: 'hoy', oy: 'hoy', ayer: 'ayer', 'esta semana': 'esta
   antier: 'antier', anteayer: 'antier', 'ante ayer': 'antier', 'antes de ayer': 'antier', 'antes ayer': 'antier', 'antesdeayer': 'antier', 'era antier': 'antier', 'era anteayer': 'antier',
   'mismo dia semana pasada': 'mismo_dia_semana_pasada', 'mismo dia de la semana pasada': 'mismo_dia_semana_pasada', 'el mismo dia de la semana pasada': 'mismo_dia_semana_pasada',
   'mismo dia de la otra semana': 'mismo_dia_semana_pasada', 'el mismo dia de la otra semana': 'mismo_dia_semana_pasada', 'hoy hace una semana': 'mismo_dia_semana_pasada',
-  'hace una semana': 'mismo_dia_semana_pasada', 'hace 7 dias': 'mismo_dia_semana_pasada', 'hace siete dias': 'mismo_dia_semana_pasada' };
+  'hace una semana': 'mismo_dia_semana_pasada', 'hace 7 dias': 'mismo_dia_semana_pasada', 'hace siete dias': 'mismo_dia_semana_pasada',
+  // (auditoría VEN-028) «mañana» ya no se pierde (antes: null → hoy en silencio). NO está en DATE_WORDS (el esquema del modelo no cambia):
+  // la consulta ve que es una fecha futura y lo avisa.
+  manana: 'manana', 'pasado manana': 'pasado_manana' };
 export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').replace(/[¿?¡!.,]/g, '').trim(); return WORD_ALIASES[k] || null; }
 // Lunes = inicio de la semana (Lima). 0 = lunes … 6 = domingo.
 const weekdayIdx = (d) => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
@@ -84,6 +89,7 @@ export function dateWordRange(word, nowMs = Date.now()) {
   if (w === 'esta_semana') return { desde: mon, hasta: today };
   if (w === 'semana_pasada') return { desde: addDays(mon, -7), hasta: addDays(mon, -1) };
   if (w === 'este_mes') return { desde: today.slice(0, 8) + '01', hasta: today };
+  if (w === 'manana' || w === 'pasado_manana') { const y = addDays(today, w === 'manana' ? 1 : 2); return { desde: y, hasta: y }; }
   const last = addDays(today.slice(0, 8) + '01', -1); return { desde: last.slice(0, 8) + '01', hasta: last }; // mes_pasado
 }
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -101,12 +107,49 @@ export function limaCalendarLine(nowMs = Date.now()) {
 function dateArg(v, side, nowMs) { if (DATE.test(v || '')) return v; const r = dateWordRange(v, nowMs); return r ? r[side] : null; }
 // Período en fechas de Lima. Por defecto: hoy. «periodo» (palabra de fecha) manda sobre desde/hasta. Máximo 92 días.
 // «fecha» (AAAA-MM-DD): un solo día exacto de Lima; va después de «periodo» y antes de desde/hasta.
-export function period(args, nowMs) {
+// rawRange: el rango pedido ANTES del tope de 92 días (periodCheck lo usa para avisar del recorte y de fechas futuras).
+function rawRange(args, nowMs) {
   const today = limaToday(nowMs), f = DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null, w = dateWordRange(args?.periodo, nowMs) || f;
   let hasta = w ? w.hasta : dateArg(args?.hasta, 'hasta', nowMs) || today, desde = w ? w.desde : dateArg(args?.desde, 'desde', nowMs) || (dateWordRange(args?.hasta, nowMs)?.desde ?? hasta);
   if (desde > hasta) [desde, hasta] = [hasta, desde];
-  if (Date.parse(hasta) - Date.parse(desde) > QUERY_LIMITS.maxDays * 86400000) desde = addDays(hasta, -QUERY_LIMITS.maxDays);
-  return limaBounds(desde, hasta);
+  return { desde, hasta };
+}
+const capDesde = (desde, hasta) => (Date.parse(hasta) - Date.parse(desde) > QUERY_LIMITS.maxDays * 86400000 ? addDays(hasta, -QUERY_LIMITS.maxDays) : desde);
+export function period(args, nowMs) {
+  const { desde, hasta } = rawRange(args, nowMs);
+  return limaBounds(capDesde(desde, hasta), hasta);
+}
+// ---------- Avisos de fecha (auditoría de ventas 23-10: VEN-027, VEN-028, VEN-046) ----------
+// Fecha AAAA-MM-DD que existe en el calendario (2026-09-31 y 2026-02-29 no existen).
+export function isRealDate(d) { if (!DATE.test(d || '')) return false; const t = Date.parse(d + 'T00:00:00Z'); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === d; }
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+// «24 de octubre de 2026» (sin el año si se pide sin año).
+export function fechaLarga(d, conAnio = true) { const [y, m, dd] = d.split('-').map(Number); return dd + ' de ' + MESES[m - 1] + (conAnio ? ' de ' + y : ''); }
+function badDateText(d) {
+  const [y, m, dd] = d.split('-').map(Number);
+  if (m < 1 || m > 12 || dd < 1) return 'La fecha ' + d + ' no existe en el calendario. Dime otra fecha.';
+  const largo = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return 'El ' + dd + ' de ' + MESES[m - 1] + ' de ' + y + ' no existe (' + MESES[m - 1] + ' tiene ' + largo + ' días). Dime otra fecha.';
+}
+// Revisa las fechas de una consulta de ventas ANTES de leer la base:
+// - fecha que no existe → { aviso, fecha_invalida: true } (no se lee nada; antes salía «No hay ventas registradas 2026-09-31»)
+// - período entero en el futuro («mañana», 2026-10-24) → { aviso, fecha_futura: true } (antes «mañana» se volvía hoy en silencio)
+// - si no: { p, avisos, pedido } con p ya recortado: termina en el futuro → hasta hoy; más de 92 días → los 92 más recientes (con aviso).
+export function periodCheck(args, nowMs) {
+  const today = limaToday(nowMs), word = dateWordRange(args?.periodo, nowMs);
+  const used = word ? [] : DATE.test(args?.fecha || '') ? [args.fecha] : [args?.desde, args?.hasta].filter((v) => DATE.test(v || ''));
+  const bad = used.find((v) => !isRealDate(v));
+  if (bad) return { fecha_invalida: true, aviso: badDateText(bad) };
+  const raw = rawRange(args, nowMs), avisos = [];
+  if (raw.desde > today) {
+    const cual = raw.desde === raw.hasta ? 'El ' + fechaLarga(raw.desde) + ' es una fecha futura' : 'El período del ' + fechaLarga(raw.desde) + ' al ' + fechaLarga(raw.hasta) + ' es futuro';
+    return { fecha_futura: true, desde: raw.desde, hasta: raw.hasta, aviso: cual + ' (hoy es ' + fechaLarga(today) + ' en Lima): todavía no hay ventas.' };
+  }
+  let hasta = raw.hasta;
+  if (hasta > today) { avisos.push('El período pedido termina en una fecha futura (' + raw.hasta + '): conté hasta hoy (' + today + ').'); hasta = today; }
+  const desde = capDesde(raw.desde, hasta);
+  if (desde !== raw.desde) avisos.push('El período pedido (' + raw.desde + ' a ' + raw.hasta + ') pasa de ' + QUERY_LIMITS.maxDays + ' días: conté solo del ' + desde + ' al ' + hasta + '.');
+  return { p: limaBounds(desde, hasta), avisos, pedido: desde !== raw.desde ? { desde: raw.desde, hasta: raw.hasta } : null };
 }
 
 // ---------- Resúmenes del día y del mes (helpers) ----------
@@ -277,10 +320,11 @@ export function canonicalReader(db) {
     async topItems(p, n) {
       const lim = [Math.max(1, Math.min(100, Number(n) || 10))], gen = "substr(i.product_id,1,8)='GENERIC:'";
       const q = (withNames) => salesSql(p, `CASE WHEN ${gen} THEN NULL ELSE i.product_id END AS product_id,CASE WHEN ${gen} THEN ${withNames ? "COALESCE(UPPER(TRIM(g.name)),'')" : "''"} END AS gkey,`
-        + `${withNames ? `MIN(CASE WHEN ${gen} THEN TRIM(g.name) END)` : 'NULL'} AS generic_name,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c`,
+        + `${withNames ? `MIN(CASE WHEN ${gen} THEN TRIM(g.name) END)` : 'NULL'} AS generic_name,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c,COUNT(*) OVER () AS n_total`,
         { join: 'JOIN sale_items i ON i.sale_id=r.sale_id' + (withNames ? ' LEFT JOIN canonical_generic_sale_lines g ON g.generic_product_id=i.product_id' : ''), rest: 'GROUP BY 1,2 ORDER BY c DESC,1,2 LIMIT ?4' }, lim);
       let rows; try { rows = await q(true); } catch (e) { if (!/no such table: canonical_generic_sale_lines/i.test(String(e?.message || e))) throw e; rows = await q(false); }
-      return rows.map((r) => (r.product_id == null ? { product_id: null, generic: true, generic_name: r.generic_name || null, q: Number(r.q) || 0, c: Number(r.c) || 0 } : { product_id: r.product_id, q: Number(r.q) || 0, c: Number(r.c) || 0 }));
+      // (VEN-040) .total: cuántos productos distintos se vendieron en el período (COUNT(*) OVER () sobre los grupos, antes del LIMIT); no enumerable.
+      return withTotal(rows.map((r) => (r.product_id == null ? { product_id: null, generic: true, generic_name: r.generic_name || null, q: Number(r.q) || 0, c: Number(r.c) || 0 } : { product_id: r.product_id, q: Number(r.q) || 0, c: Number(r.c) || 0 })), rows.length ? Number(rows[0].n_total) : 0);
     },
     // Unidades vendidas por producto en el período (sugerencias de compra, #929), agrupado EN SQL con la misma lectura de ventas que
     // topItems (fecha por momento de Lima, anuladas fuera): ya no lee todas las ventas ni las líneas. Tope SOLD_QTY_MAX filas: si se
@@ -396,7 +440,7 @@ export function memoryReader(data) {
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const g = isGenericId(it.product_id), nm = g ? String(it.generic_name || '').trim() : '', k = g ? 'G|' + nm.toUpperCase() : 'P|' + it.product_id;
         const r = m.get(k) || (g ? { product_id: null, generic: true, generic_name: nm || null, q: 0, c: 0 } : { product_id: it.product_id, q: 0, c: 0 }); r.q += it.quantity; r.c += it.line_total_cents; m.set(k, r); }
-      return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
+      return withTotal([...m.values()].sort((a, b) => b.c - a.c).slice(0, n), m.size); },
     async productNamesById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), p.nombre); return out; },
     async soldQty(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)), m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const k = String(it.product_id); m.set(k, (m.get(k) || 0) + (Number(it.quantity) || 0)); } return m; },
@@ -535,7 +579,27 @@ function suggestPeriod(args, nowMs) {
 }
 // Devuelve { tipo, titulo, columnas, filas, texto, resumen } o { error }.
 // filas/columnas: para la pantalla del dueño. resumen: lo único que ve el modelo (chico, sin datos personales).
+// (auditoría de ventas 23-10) Consultas de ventas por período: las fechas se revisan ANTES de leer (periodCheck). Fecha que no existe o
+// período entero en el futuro: se contesta con el aviso, sin leer la base. Período recortado (más de 92 días o hasta una fecha futura):
+// se consulta el recortado y el aviso va al final del texto (respuesta directa) y en resumen.aviso (lo que lee el modelo).
+const DATE_CHECK_TYPES = Object.freeze(['ventas_periodo', 'top_productos', 'ganancia', 'ventas_por_hora', 'productos_sin_ventas']);
 export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
+  const tipo = QUERY_TYPES.includes(args?.tipo) ? args.tipo : null;
+  if (!tipo || !DATE_CHECK_TYPES.includes(tipo)) return runQuery(reader, args, nowMs, null);
+  const chk = periodCheck(args, nowMs);
+  if (chk.aviso) return { tipo, titulo: TITLES[tipo], columnas: [], filas: [], texto: chk.aviso,
+    resumen: { ...(chk.fecha_futura ? { desde: chk.desde, hasta: chk.hasta, fecha_futura: true } : { fecha_invalida: true }), aviso: chk.aviso } };
+  // Recortado: las demás consultas reciben las fechas ya recortadas (mismo período que dice el aviso).
+  const a = chk.avisos.length ? { ...args, periodo: undefined, fecha: undefined, desde: chk.p.desde, hasta: chk.p.hasta } : args;
+  const r = await runQuery(reader, a, nowMs, chk.p);
+  if (r && !r.error && chk.avisos.length) {
+    const aviso = chk.avisos.join(' ');
+    r.texto = (typeof r.texto === 'string' && r.texto ? r.texto + ' ' : '') + aviso;
+    r.resumen = { ...(r.resumen || {}), aviso: [r.resumen?.aviso, aviso].filter(Boolean).join(' '), ...(chk.pedido ? { periodo_pedido: chk.pedido } : {}) };
+  }
+  return r;
+}
+async function runQuery(reader, args, nowMs, checked) {
   const tipo = QUERY_TYPES.includes(args?.tipo) ? args.tipo : null;
   if (!tipo) return { error: 'bad_query' };
   const N = QUERY_LIMITS.topRows, M = QUERY_LIMITS.modelRows, base = { tipo, titulo: TITLES[tipo] };
@@ -568,7 +632,7 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       resumen: { total: sin.length, revisados: list.length, primeros: sin.slice(0, M).map((p) => p.nombre) } };
   }
   if (tipo === 'ventas_periodo' || tipo === 'top_productos') {
-    const p = period(args, nowMs), rango = p.desde === p.hasta ? p.desde : p.desde + ' a ' + p.hasta;
+    const p = checked || period(args, nowMs), rango = p.desde === p.hasta ? p.desde : p.desde + ' a ' + p.hasta;
     if (tipo === 'ventas_periodo') {
       const rows = await reader.salesTotals(p); let total = 0, n = 0; const byDay = new Map(), byM = new Map();
       for (const r of rows) { total += Number(r.c); n += Number(r.n); byDay.set(r.dia, (byDay.get(r.dia) || 0) + Number(r.c)); byM.set(r.metodo, (byM.get(r.metodo) || 0) + Number(r.c)); }
@@ -576,9 +640,17 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       const dias = [...byDay.entries()].map(([d, c]) => [d, cents(c)]);
       const filas = [...metodos.map((m) => ['Método: ' + m[0], m[1]]), ...(dias.length > 1 ? dias.slice(-31).map((d) => ['Día ' + d[0], d[1]]) : [])];
       const best = dias.slice().sort((a, b) => b[1] - a[1])[0];
+      // (VEN-048) peor día: solo en rangos de varios días, contando los días SIN ventas (S/ 0) de Lima; si hay empate, el primero.
+      // Hoy (aún abierto) no entra si el rango llega a hoy. Sin ventas en todo el rango: null (no hay «peor» que decir).
+      let worst = null, sinVentas = 0;
+      if (p.desde !== p.hasta && n) {
+        const today = limaToday(nowMs), last = p.hasta >= today ? addDays(today, -1) : p.hasta;
+        for (let d = p.desde; d <= last; d = addDays(d, 1)) { const c = byDay.get(d) || 0; if (!c) sinVentas++; if (!worst || c < worst.c) worst = { d, c }; }
+      }
       return { ...base, titulo: 'Ventas ' + rango, columnas: ['Detalle', 'S/'], filas, total: cents(total), ventas: n, desde: p.desde, hasta: p.hasta,
         texto: n ? 'Ventas ' + rango + ': S/ ' + cents(total).toFixed(2) + ' en ' + n + (n === 1 ? ' venta' : ' ventas') + '. Ticket promedio S/ ' + (cents(total) / n).toFixed(2) + '.' : 'No hay ventas registradas ' + rango + '.',
-        resumen: { desde: p.desde, hasta: p.hasta, total_soles: cents(total), ventas: n, por_metodo: Object.fromEntries(metodos), mejor_dia: best ? { dia: best[0], soles: best[1] } : null, dias: dias.length } };
+        resumen: { desde: p.desde, hasta: p.hasta, total_soles: cents(total), ventas: n, por_metodo: Object.fromEntries(metodos), mejor_dia: best ? { dia: best[0], soles: best[1] } : null, dias: dias.length,
+          peor_dia: worst ? { dia: worst.d, soles: cents(worst.c) } : null, ...(worst ? { dias_sin_ventas: sinVentas } : {}) } };
     }
     const raw = await reader.topItems(p, N), gen = (r) => !!r.generic || isGenericId(r.product_id);
     // Nombres vigentes SOLO de los N más vendidos (por id, con renombres); un lector sin esa búsqueda lee el catálogo como antes.
@@ -590,10 +662,15 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       const k = (gen(r) ? 'G|' + label.toUpperCase() : 'P|' + r.product_id), o = merged.get(k) || { label, q: 0, c: 0 }; o.q += Number(r.q) || 0; o.c += Number(r.c) || 0; merged.set(k, o); }
     const items = [...merged.values()].sort((a, b) => b.c - a.c).slice(0, N);
     const filas = items.map((r) => [r.label, r2(r.q), cents(r.c)]);
-    return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta,
-      texto: filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.',
+    // (VEN-040) cuántos productos se vendieron en total (lo cuenta el lector). Antes la lista se cortaba en N sin decirlo.
+    // Sin cuenta del lector: si vino menos de N, la lista está completa; si no, no se sabe (null).
+    const total = Number.isInteger(raw.total) ? Math.max(raw.total, filas.length) : raw.length < N ? filas.length : null, cut = total != null && total > filas.length;
+    const corte = cut ? 'Mostrando ' + filas.length + ' de ' + total + ' productos vendidos.' : null;
+    return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta, total,
+      texto: (filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.') + (corte ? ' ' + corte : ''),
       // filas_en_pantalla: la tarjeta puede tener más filas que «top» (al modelo van M): así no cuenta «otros siete» si hay 9.
-      resumen: { desde: p.desde, hasta: p.hasta, filas_en_pantalla: filas.length, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
+      resumen: { desde: p.desde, hasta: p.hasta, filas_en_pantalla: filas.length, productos_vendidos: total, lista_cortada: cut, ...(corte ? { aviso: corte } : {}),
+        top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
   }
   if (SUMMARY_TYPES.includes(tipo)) return summaryQuery(reader, tipo, args, nowMs, base);
   if (tipo === 'ganancia') return profitQuery(reader, args, nowMs, base);
