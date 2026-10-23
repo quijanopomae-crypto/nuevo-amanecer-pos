@@ -119,10 +119,11 @@ function creditPaymentsClient(proposals, text, role, hasList = false, onePayer =
 // cambia por «cliente #código» antes de la IA (a la IA va el código neutro) y en pantalla sale el nombre. Varios (o dos personas): se
 // pregunta cuál con los nombres completos. Ninguno: «No encontré a un cliente llamado …». Esas dos salen sin llamar a la IA. El nombre
 // nunca va a la IA: el mensaje, el historial y el resumen que van al modelo se pasan por scrub ([nombre oculto]). Sin lista: se pide el código.
-const PAYER_ASK_RE = /\b(pago|pagaron|abono|abonaron|cancelo|cancelaron|devolvio|devolvieron)\b/;
-const PAYER_VERBS = new Set(['pago', 'pagaron', 'abono', 'abonaron', 'cancelo', 'cancelaron', 'devolvio', 'devolvieron']);
+// (decisión del lead) también presente/futuro: paga, pagar, pagará, abona, abonar, abonará («va a pagar» = «a» + «pagar»).
+const PAYER_ASK_RE = /\b(pago|pagaron|abono|abonaron|cancelo|cancelaron|devolvio|devolvieron|paga|pagar|pagara|abona|abonar|abonara)\b/;
+const PAYER_VERBS = new Set(['pago', 'pagaron', 'abono', 'abonaron', 'cancelo', 'cancelaron', 'devolvio', 'devolvieron', 'paga', 'pagar', 'pagara', 'abona', 'abonar', 'abonara']);
 const PAYER_HON = new Set(['don', 'dona', 'sr', 'sra', 'srta', 'senor', 'senora', 'senorita']);
-const PAYER_GLUE = new Set(['me', 'le', 'nos', 'te', 'ya', 'ha', 'han', 'hoy', 'ayer']);
+const PAYER_GLUE = new Set(['me', 'le', 'nos', 'te', 'ya', 'ha', 'han', 'hoy', 'ayer', 'va', 'van']); // «va a pagar»
 const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'donde', 'quien', 'quienes', 'fue', 'fueron', 'ha', 'han', 'hoy', 'ayer', 'anteayer', 'antier',
   'semana', 'mes', 'ano', 'dia', 'dias', 'pasada', 'pasado', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'fiado', 'fiados', 'fiada', 'deuda',
   'deudas', 'credito', 'creditos', 'cuenta', 'saldo', 'total', 'nombre', 'oculto', 'algo', 'nada', 'cobre', 'cobro', 'cobros', 'pagos', 'abonos', 'yape', 'plin', 'efectivo',
