@@ -607,6 +607,19 @@ function nearWord(a, b) {
   return x.length > y.length ? x.slice(i + 1) === y.slice(i) : x.slice(i) === y.slice(i + 1);
 }
 export const PRODUCT_MATCH_ROWS = 8;
+// (seguimiento de #1001) «fideo marcos» listaba el ATÚN MARCO POLO: si la persona dijo el tipo de producto (la primera palabra del nombre
+// de algún producto: «fideo», «pan», «leche»), la búsqueda se queda con los productos de ese tipo (o de esos tipos: «aceite sal»). Si no
+// dijo ningún tipo que exista, se busca en todo el catálogo, igual que antes.
+export function byProductType(list, text) {
+  const all = Array.isArray(list) ? list : [];
+  const words = new Set(norm(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILLER.has(w)).map(stem));
+  if (!words.size) return all;
+  const head = (p) => stem(norm(p.nombre).split(/[^a-z0-9]+/).find(Boolean) || '');
+  const sub = all.filter((p) => words.has(head(p)));
+  if (!sub.length) return all;
+  if (all.truncated) sub.truncated = true;
+  return sub;
+}
 // (auditoría 500, INV-047 / INV-008) Marca que la tienda NO tiene: «fideo lavaggi», «cerveza pilsen». matchProducts encuentra los fideos o
 // las cervezas por la palabra genérica y antes se listaban en silencio, como si fueran la marca pedida. missingBrand dice (true/false) si
 // alguna palabra distintiva («Lavaggi») no aparece en NINGÚN nombre del catálogo (ni exacta, ni sonando igual, ni con una letra de
@@ -622,7 +635,10 @@ const BRAND_SKIP = new Set(('cuanto cuanta cuantos cuantas tanto tanta tantos ta
   + 'ayer dime dame muestra muestrame mira revisa busca buscame consulta cual cuales donde como cuando aqui tienda almacen inventario mucho mucha muchos muchas '
   + 'poco poca pocos pocas solo sola algo alguna alguno algunos ningun ninguna tambien bien favor porfa porfavor explica explicame sabes saber quiero queria '
   + 'necesito vender vendo vendi compre comprar compra llego llegaron falta faltan negativo menos mas hola buenas buenos dias tardes noches gracias '
-  + 'nombre oculto oculta cliente clientes codigo').split(' '));
+  + 'nombre oculto oculta cliente clientes codigo '
+  // (seguimiento de #1001) palabras que describen el producto, no la marca: «pan de molde», «leche deslactosada», «pan tajado».
+  + 'molde tajado tajada semidescremada semidescremado deslactosada deslactosado descremado regular simple doble triple dulce salado salada '
+  + 'picante suave mini jumbo economico economica granel').split(' '));
 // Más suelto que soundK (solo para decidir si FALTA la marca: suelto = menos avisos falsos): «cerbesa» = «cerveza», «yuca» = «lluca».
 const loose = (s) => soundK(String(s || '').replace(/c(?=[ei])/g, 's').replace(/z/g, 's').replace(/v/g, 'b').replace(/ll/g, 'y').replace(/h/g, ''));
 const HONORIFIC = new Set(['don', 'dona', 'senor', 'senora', 'senorita', 'sr', 'sra', 'srta', 'srita', 'sres']);
@@ -726,10 +742,11 @@ async function runQuery(reader, args, nowMs, checked) {
     if (tipo === 'stock_producto') {
       // (lote en vivo 22-10) nombre a medias («leche Gloria», «aceite»): se listan TODOS los parecidos (hasta 8) con precio y costo,
       // para que el asistente muestre opciones en vez de preguntar «¿cuál?». El costo solo queda para el Admin: employeeQueryResult lo quita.
-      const all = matchProducts(list, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
+      const pool = byProductType(list, args.producto || ''); // «fideo marcos»: solo fideos (seguimiento de #1001)
+      const all = matchProducts(pool, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
       if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };
       const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio, p.costo]);
-      const marca = missingBrand(list, args.producto || ''); // INV-047 / INV-008: «No tengo esa marca; lo más parecido es: …» (sin repetir la palabra)
+      const marca = missingBrand(pool, args.producto || ''); // INV-047 / INV-008: «No tengo esa marca; lo más parecido es: …» (sin repetir la palabra)
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/', 'Costo S/'], filas, total: all.length,
         texto: (marca ? BRAND_NOTICE_LEAD : '') + sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
         resumen: { encontrados: all.length, productos: hits.map((p) => ({ ...(p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) }), precio: p.precio, costo: p.costo })),
