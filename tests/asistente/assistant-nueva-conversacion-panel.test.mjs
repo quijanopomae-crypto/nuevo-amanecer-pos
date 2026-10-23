@@ -20,9 +20,11 @@ function panel() {
   const panelEl = mk('na-asst-panel'), msgsEl = mk('na-asst-msgs'), liveEl = mk('na-asst-live'), chips = mk('na-asst-chips');
   panelEl.appendChild(msgsEl); panelEl.appendChild(liveEl); panelEl.appendChild(chips);
   panelEl.querySelector = (s) => panelEl.byClass(s.replace(/^\./, ''))[0] || null;
-  const ctx = vm.createContext({ doc, panelEl, msgsEl, liveEl, newBtn: null, inputEl: null, busy: false, history: [], gate: {}, C: {}, setTimeout, clearTimeout, String,
+  const ctx = vm.createContext({ doc, panelEl, msgsEl, liveEl, liveT: 0, newBtn: null, inputEl: null, busy: false, history: [], gate: {}, C: {}, setTimeout, clearTimeout, String,
     el: (t, c) => { const n = doc.createElement(t); if (c) n.className = c; return n; } });
-  vm.runInContext(sliceFn(UI, '  var liveT = 0;', '  function addMsg(') + sliceFn(UI, '  function newChat() {', '  // Enter mientras responde'), ctx);
+  // Anclado en announce (existe en la base): sin el arreglo falla por el aviso que reaparece, no por no encontrar el código.
+  // liveT va en el contexto porque su «var» queda justo antes de announce.
+  vm.runInContext(sliceFn(UI, '  function announce(t)', '  function addMsg(') + sliceFn(UI, '  function newChat() {', '  // Enter mientras responde'), ctx);
   const a = doc.createElement('div'); a.className = 'na-asst-msg a'; a.textContent = OLD; msgsEl.appendChild(a);
   return { ctx, panelEl, liveEl };
 }
