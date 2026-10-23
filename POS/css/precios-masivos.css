@@ -1,0 +1,21 @@
+/* Edición masiva de precios (solo dueño). */
+#pageEdicionPrecios { --pm-bg:#f8fafc; --pm-surface:#fff; --pm-text:#0f172a; --pm-muted:#475569; --pm-border:#cbd5e1; padding:16px; color:var(--pm-text); background:var(--pm-bg); box-sizing:border-box; }
+body.dark #pageEdicionPrecios { --pm-bg:#0f172a; --pm-surface:#1e293b; --pm-text:#f8fafc; --pm-muted:#cbd5e1; --pm-border:#64748b; color-scheme:dark; }
+#pageEdicionPrecios * { box-sizing:border-box; }
+#pageEdicionPrecios h1 { margin:0 0 8px; font-size:22px; }
+#pageEdicionPrecios p { margin:0 0 12px; color:var(--pm-muted); overflow-wrap:anywhere; }
+#pageEdicionPrecios .pm-controls { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; margin:16px 0 12px; }
+#pageEdicionPrecios label { display:grid; gap:6px; min-width:0; font-weight:700; }
+#pageEdicionPrecios :is(input, select, button) { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--pm-border); border-radius:10px; font:inherit; color:var(--pm-text); background:var(--pm-surface); }
+#pageEdicionPrecios button { cursor:pointer; font-weight:700; background:#0f766e; color:#fff; border-color:#0f766e; }
+#pageEdicionPrecios button:disabled { cursor:default; opacity:.55; }
+#pageEdicionPrecios :is(input, select, button, .pm-table-wrap):focus-visible { outline:3px solid #0d9488; outline-offset:3px; }
+#pageEdicionPrecios .pm-table-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--pm-border); border-radius:12px; background:var(--pm-surface); }
+#pageEdicionPrecios .pm-table { width:100%; min-width:520px; border-collapse:collapse; color:var(--pm-text); }
+#pageEdicionPrecios .pm-table :is(th, td) { display:table-cell; padding:10px 8px; text-align:left; border-bottom:1px solid var(--pm-border); overflow-wrap:anywhere; color:var(--pm-text); background:transparent; }
+#pageEdicionPrecios .pm-table thead th { font-size:12px; color:var(--pm-muted); }
+#pageEdicionPrecios .pm-num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#pageEdicionPrecios .pm-new { font-weight:700; }
+@media (min-width:600px) { #pageEdicionPrecios { padding:24px; } #pageEdicionPrecios .pm-controls { grid-template-columns:repeat(4, minmax(0,1fr)); align-items:end; } }
+#pageEdicionPrecios .pm-hint{margin:4px 0 0;font-size:13px;opacity:.8}
+#pageEdicionPrecios .pm-hint[hidden]{display:none}

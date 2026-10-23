@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 187: publicar CANON commit fb0daf65173e6abcfe6fe066ffdecb650a3076d8 (PR #894: tarjeta Próximamente «Clientes que deben (cajero)» ya disponible; FEATURE_LOCKS en pos-permissions.js; prueba de rol tardío). Worker 65 publicado antes (run 39709142747). Solo estáticos web: sin migraciones, sin secretos. CI verde en dcd1e4f7. Rollback a Web 186 (c8dde976, run 39690293638).",
-  "retry_attempt": 187,
-  "retry_reason": "Aprobación del dueño 2026-10-21 ~20:53 Lima para publicar #894; equipo: los 5 asistentes sobre dcd1e4f7.",
-  "requested_at_utc": "2026-10-22T02:03:48Z",
-  "approved_base": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8"
+  "note": "Web 200: #1007 kárdex en cola, #1008 stock negativo (candado cerrado), #1010 kg/presentaciones (candado cerrado), merge 5d247f92. Solo web, sin cambio de Worker (Worker 77 sigue). Respaldo D1 run 40007559977. Rollback Web 199 (dc65a195).",
+  "retry_attempt": 200,
+  "retry_reason": "OK del dueño 2026-10-23: 'Publica las 5 mejoras y los 7 cambios del asistente, con respaldo antes'.",
+  "requested_at_utc": "2026-10-23T19:40:00Z",
+  "approved_base": "5d247f92446469c72e958fb38d1c4679a0111f26"
 }
