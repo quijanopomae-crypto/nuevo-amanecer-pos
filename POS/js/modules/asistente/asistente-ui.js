@@ -500,6 +500,12 @@
     return '<tr class="tot"><td><b>Total de la compra</b>' + (t.sinCosto ? '<div class="note" data-sincosto>' + (t.sinCosto === 1 ? '1 fila sin costo' : t.sinCosto + ' filas sin costo') + '</div>' : '') +
       '</td><td></td><td class="r"><b data-total>' + soles(t.total) + '</b></td></tr>';
   }
+  // (fix/asist-fila-mixta-tarjeta) fila sin cantidad (mixta «2 cajas y 3 sueltos»: «Falta cuántas trae la caja»): no hay «×» que mostrar
+  // ni se puede aceptar tal cual (Nueva compra y POST /auth/purchases la rechazan: invalid_line); solo se quita.
+  function noQty(l) { return !!l && (l.cantidad == null || l.cantidad === ''); }
+  // Su aviso (el mismo en la tarjeta y en el 422 de markRows): lo que dice «revisar» (p. ej. «Falta cuántas trae la caja») y qué hacer.
+  function noQtyNotice(l) { var why = l.revisar && l.revisar.length ? l.revisar.map(function (k) { return REVIEW_TEXT[k] || k; }).join(', ') : 'Falta la cantidad';
+    return 'Revisa este dato: ' + why + '. Quita la fila y regístrala en «Nueva compra» con la cantidad.'; }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +
@@ -523,9 +529,9 @@
       var flag = l.revisar && l.revisar.length;
       var why = flag ? l.revisar.map(function (k) { return REVIEW_TEXT[k] || k; }).join(', ') : '';
       var diff = l.costo_actual != null && l.costo_unitario != null && Math.abs(l.costo_unitario - l.costo_actual) > Math.max(0.01, l.costo_actual * 0.01);
-      return '<tr' + (flag ? ' class="flag" data-row="' + i + '"' : '') + '><td>' + E(l.cantidad) + ' × ' + E(lineName(l)) + (l.product_id ? '' : ' <b class="nr">(no registrado)</b>') +
+      return '<tr' + (flag ? ' class="flag" data-row="' + i + '"' : '') + '><td>' + (noQty(l) ? '<b class="nr">Falta la cantidad</b> · ' : E(l.cantidad) + ' × ') + E(lineName(l)) + (l.product_id ? '' : ' <b class="nr">(no registrado)</b>') +
         (l.limite && l.limite.length ? '<div class="flag-t">Fuera del límite: ' + E(why) + '. Corrige la factura o quita la fila.</div><div class="flag-a"><button type="button" data-drop="' + i + '">Quitar fila</button></div>'
-          : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
+          : flag ? '<div class="flag-t">' + E(noQty(l) ? noQtyNotice(l) : 'Revisa este dato: ' + why) + '</div><div class="flag-a">' + (noQty(l) ? '' : '<button type="button" data-accept="' + i + '">Está bien</button>') + '<button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
         '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') +
         (tot.filas[i] != null ? '<div class="lt" data-lt="' + i + '">Total ' + soles(tot.filas[i]) + '</div>' : '') + '</td></tr>'; }).join('') + totalRow(tot);
     // RUC tapado: sin valor en la tarjeta; se escribe en el campo de abajo (needFields)
@@ -617,9 +623,10 @@
         tr.classList.add('flag'); tr.dataset.row = String(i); tr.removeAttribute('data-decision'); delete decided[i];
         var td = tr.querySelector('td'); if (!td) return;
         var t = tr.querySelector('.flag-t'); if (!t) { t = el('div', 'flag-t'); td.appendChild(t); }
-        t.textContent = limit ? 'Fuera del límite: quita la fila o corrige la factura' : 'Revisa este dato';
+        var line = p.lineas && p.lineas[i], missing = noQty(line); // fila sin cantidad: conserva su propio aviso, no el «Revisa este dato» genérico
+        t.textContent = limit ? 'Fuera del límite: quita la fila o corrige la factura' : missing ? noQtyNotice(line) : 'Revisa este dato';
         var a = tr.querySelector('.flag-a'); if (!a) { a = el('div', 'flag-a'); td.appendChild(a); }
-        a.innerHTML = (limit ? '' : '<button type="button" data-accept="' + i + '">Está bien</button>') + '<button type="button" data-drop="' + i + '">Quitar fila</button>';
+        a.innerHTML = (limit || missing ? '' : '<button type="button" data-accept="' + i + '">Está bien</button>') + '<button type="button" data-drop="' + i + '">Quitar fila</button>';
       });
     }
     // «Pedir de nuevo»: deja esta tarjeta y pide una NUEVA (token y operation_id nuevos).
