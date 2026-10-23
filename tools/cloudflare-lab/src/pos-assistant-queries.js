@@ -607,6 +607,33 @@ function nearWord(a, b) {
   return x.length > y.length ? x.slice(i + 1) === y.slice(i) : x.slice(i) === y.slice(i + 1);
 }
 export const PRODUCT_MATCH_ROWS = 8;
+// (seguimiento de #1001, revisiones de #1005, decisión de alfa) El aviso «No tengo esa marca» sale SOLO si la marca no está en ningún nombre
+// del catálogo (missingBrand, igual que la base); si está, aunque sea con otro tipo, la lista es la de la base, completa y sin aviso: nunca
+// se dice que algo no está cuando sí está. El tipo dicho solo acota «lo más parecido» cuando hay aviso: «fideo pastalindo» sugiere fideos.
+// Tipo = la PRIMERA palabra con contenido de lo pedido. Un producto es de ese tipo si CUALQUIER palabra de su nombre es la palabra (o su
+// plural) o una abreviatura de 3+ letras que es su comienzo, con o sin punto («FID.», «DET», «JAB.BOLIVAR», «GLORIA LECHE CONDENSADA»).
+// SAL y PAN no valen como abreviatura (son productos: «salsa», «paneton»), y la ñ no se vuelve n («pañal» no es «pan»).
+const NOT_ABBR = new Set(['sal', 'pan']);
+const normT = (s) => String(s || '').toLowerCase().replace(/ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'ñ');
+const typeWords = (s) => normT(s).split(/[^a-z0-9ñ]+/).filter(Boolean);
+const isTypeWord = (t, w) => t === w || stem(t) === w || (t.length >= 3 && t.length < w.length && !NOT_ABBR.has(t) && !/\d/.test(t) && w.startsWith(t));
+export function productTypeOf(list, text) {
+  const all = Array.isArray(list) ? list : [];
+  const first = typeWords(text).find((w) => w.length >= 3 && !/\d/.test(w) && !FILLER.has(w) && !BRAND_SKIP.has(w) && !HONORIFIC.has(w));
+  if (!first) return null;
+  const w = stem(first), sub = all.filter((p) => typeWords(p.nombre).some((t) => isTypeWord(t, w)));
+  return sub.length ? { word: w, list: sub } : null;
+}
+export function productMatches(list, text) {
+  const all = Array.isArray(list) ? list : [];
+  const hits = matchProducts(all, text), marca = missingBrand(all, text);
+  if (!marca) return { hits, marca };
+  const tipo = productTypeOf(all, text);
+  if (!tipo) return { hits, marca };
+  const near = matchProducts(tipo.list, text), seen = new Set(near), sub = [...near, ...tipo.list.filter((p) => !seen.has(p))];
+  if (all.truncated) sub.truncated = true;
+  return { hits: sub, marca };
+}
 // (auditoría 500, INV-047 / INV-008) Marca que la tienda NO tiene: «fideo lavaggi», «cerveza pilsen». matchProducts encuentra los fideos o
 // las cervezas por la palabra genérica y antes se listaban en silencio, como si fueran la marca pedida. missingBrand dice (true/false) si
 // alguna palabra distintiva («Lavaggi») no aparece en NINGÚN nombre del catálogo (ni exacta, ni sonando igual, ni con una letra de
@@ -622,24 +649,33 @@ const BRAND_SKIP = new Set(('cuanto cuanta cuantos cuantas tanto tanta tantos ta
   + 'ayer dime dame muestra muestrame mira revisa busca buscame consulta cual cuales donde como cuando aqui tienda almacen inventario mucho mucha muchos muchas '
   + 'poco poca pocos pocas solo sola algo alguna alguno algunos ningun ninguna tambien bien favor porfa porfavor explica explicame sabes saber quiero queria '
   + 'necesito vender vendo vendi compre comprar compra llego llegaron falta faltan negativo menos mas hola buenas buenos dias tardes noches gracias '
-  + 'nombre oculto oculta cliente clientes codigo').split(' '));
+  + 'nombre oculto oculta cliente clientes codigo '
+  // (seguimiento de #1001) palabras que describen el producto, no la marca: «pan de molde», «leche deslactosada», «pan tajado».
+  + 'molde tajado tajada semidescremada semidescremado deslactosada deslactosado descremado regular simple doble triple dulce salado salada '
+  + 'picante suave mini jumbo economico economica granel').split(' '));
 // Más suelto que soundK (solo para decidir si FALTA la marca: suelto = menos avisos falsos): «cerbesa» = «cerveza», «yuca» = «lluca».
 const loose = (s) => soundK(String(s || '').replace(/c(?=[ei])/g, 's').replace(/z/g, 's').replace(/v/g, 'b').replace(/ll/g, 'y').replace(/h/g, ''));
 const HONORIFIC = new Set(['don', 'dona', 'senor', 'senora', 'senorita', 'sr', 'sra', 'srta', 'srita', 'sres']);
-export function missingBrand(list, text) {
-  const words = String(text || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean), names = (Array.isArray(list) ? list : []).map((p) => norm(p.nombre));
-  let tk = null; const toks = () => (tk ??= [...new Set(names.flatMap(nameTokens))]);
-  let afterHonorific = 0;
-  for (const tok of words) {
+// Palabras que podrían ser marca (mismas reglas de siempre: ni nombres de persona tras «don», «doña»…, ni tamaños, ni palabras de pregunta).
+function brandWordsOf(text) {
+  const out = []; let afterHonorific = 0;
+  for (const tok of String(text || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean)) {
     const w = norm(tok);
     if (HONORIFIC.has(w)) { afterHonorific = 3; continue; }
     if (afterHonorific > 0) { afterHonorific--; continue; }
     if (w.length < 4 || /\d/.test(w) || FILLER.has(w) || BRAND_SKIP.has(w) || BRAND_SKIP.has(stem(w))) continue;
-    const st = stem(w), k = loose(st);
-    if (names.some((n) => n.includes(st) || loose(n).includes(k)) || toks().some((t) => nearWord(st, t))) continue;
-    return true;
+    out.push(stem(w));
   }
-  return false;
+  return out;
+}
+// ¿La palabra (ya en raíz) está en algún nombre? Tal cual, sonando igual o con una letra de diferencia (5+ letras).
+function hasWord(names, st) {
+  const k = loose(st);
+  return names.some((n) => n.includes(st) || loose(n).includes(k)) || names.some((n) => nameTokens(n).some((t) => nearWord(st, t)));
+}
+export function missingBrand(list, text) {
+  const names = (Array.isArray(list) ? list : []).map((p) => norm(p.nombre));
+  return brandWordsOf(text).some((st) => !hasWord(names, st));
 }
 // (decisión de alfa, revisión de #1001) el aviso NUNCA repite la palabra escrita: podía ser un nombre de persona («arroz rosa», «fideo de
 // pedro», «arroz que fió juan quispe»). Texto fijo, sin nada de la persona: no llega al resumen, al aviso, al empleado ni al modelo.
@@ -726,10 +762,11 @@ async function runQuery(reader, args, nowMs, checked) {
     if (tipo === 'stock_producto') {
       // (lote en vivo 22-10) nombre a medias («leche Gloria», «aceite»): se listan TODOS los parecidos (hasta 8) con precio y costo,
       // para que el asistente muestre opciones en vez de preguntar «¿cuál?». El costo solo queda para el Admin: employeeQueryResult lo quita.
-      const all = matchProducts(list, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
+      // «fideo marcos»: si la marca no está, lo más parecido es del tipo dicho (seguimiento de #1001 y revisión de #1005)
+      const { hits: all, marca } = productMatches(list, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
       if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };
       const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio, p.costo]);
-      const marca = missingBrand(list, args.producto || ''); // INV-047 / INV-008: «No tengo esa marca; lo más parecido es: …» (sin repetir la palabra)
+      // marca: INV-047 / INV-008, «No tengo esa marca; lo más parecido es: …» (sin repetir la palabra)
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/', 'Costo S/'], filas, total: all.length,
         texto: (marca ? BRAND_NOTICE_LEAD : '') + sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
         resumen: { encontrados: all.length, productos: hits.map((p) => ({ ...(p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) }), precio: p.precio, costo: p.costo })),
