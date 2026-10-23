@@ -190,3 +190,63 @@ test('avisos: employeeQueryResult deja pasar «aviso» (solo fechas, sin datos d
   const r = employeeQueryResult(await q({ tipo: 'top_productos', desde: '2026-01-01', hasta: '2026-10-23' }));
   assert.match(r.resumen.aviso, /92 días/);
 });
+
+// ---------- Seguimiento (PR #984): las fechas futuras solo valen en consultas de ventas ----------
+// Sugerencias de compra «para mañana» = lo de siempre (ventas de los últimos 30 días), NO las ventas de mañana (que no existen).
+test('sugerencias_compra «para mañana»: sigue la ventana de 30 días de antes, no el día de mañana', async () => {
+  const def = await q({ tipo: 'sugerencias_compra' });
+  assert.equal(def.resumen.dias_analizados, 30);
+  for (const extra of [{ periodo: 'mañana' }, { periodo: 'manana' }, { periodo: 'pasado mañana' }, { desde: 'mañana' }, { hasta: 'mañana' }]) {
+    const r = await q({ tipo: 'sugerencias_compra', ...extra });
+    assert.equal(r.resumen.dias_analizados, 30, JSON.stringify(extra));
+    assert.deepEqual([r.texto, r.filas], [def.texto, def.filas], JSON.stringify(extra));
+    assert.doesNotMatch(r.texto, /futur/i);
+  }
+});
+
+test('chat «qué compro para mañana»: el modelo recibe las sugerencias con 30 días analizados', async () => {
+  const b = []; await chat('que compro para mañana, explicame', { fetch: seq([first(call('sugerencias_compra', { periodo: 'mañana' })), SECOND], b), reader: RD() });
+  assert.equal(b.length, 2);
+  assert.match(toolMsg(b), /"dias_analizados":30/);
+});
+
+test('ventas bajo costo con periodo «mañana»: los 30 días de siempre, no mañana', async () => {
+  const { belowCostPeriod } = await import('../../tools/cloudflare-lab/src/pos-assistant-below-cost.js');
+  const def = belowCostPeriod({}, NOW), r = belowCostPeriod({ periodo: 'mañana' }, NOW);
+  assert.deepEqual([r.desde, r.hasta], [def.desde, def.hasta]);
+  assert.equal(r.hasta, '2026-10-23');
+});
+
+// resumen_dia / resumen_mes con una fecha futura: el mismo aviso, no el resumen de hoy en silencio.
+test('resumen_dia con una fecha futura («mañana», 2026-10-24): avisa que es futura, sin los números de hoy', async () => {
+  for (const extra of [{ periodo: 'mañana' }, { fecha: '2026-10-24' }, { hasta: '2026-12-01' }]) {
+    const r = await q({ tipo: 'resumen_dia', ...extra });
+    assert.ok(!r.error, JSON.stringify(r));
+    assert.match(r.texto, /fecha futura/, JSON.stringify(extra) + ' → ' + r.texto);
+    assert.match(r.texto, /hoy es 23 de octubre de 2026/);
+    assert.doesNotMatch(r.texto, /24\.00/);
+    assert.equal(r.resumen.fecha_futura, true); assert.match(r.resumen.aviso, /fecha futura/);
+    assert.deepEqual(r.filas, []);
+  }
+  assert.match((await q({ tipo: 'resumen_dia', periodo: 'mañana' })).texto, /El 24 de octubre de 2026 es una fecha futura/);
+  // hoy y días pasados: igual que antes
+  assert.doesNotMatch((await q({ tipo: 'resumen_dia' })).texto, /futur/);
+  assert.doesNotMatch((await q({ tipo: 'resumen_dia', fecha: '2026-10-22' })).texto, /futur/);
+});
+
+test('resumen_mes de un mes futuro avisa; un día futuro del mes en curso sigue siendo «este mes»', async () => {
+  for (const extra of [{ hasta: '2026-11' }, { fecha: '2026-11-15' }]) {
+    const r = await q({ tipo: 'resumen_mes', ...extra });
+    assert.match(r.texto, /noviembre de 2026 es un mes futuro/i, JSON.stringify(extra) + ' → ' + r.texto);
+    assert.equal(r.resumen.fecha_futura, true); assert.deepEqual(r.filas, []);
+  }
+  const cur = await q({ tipo: 'resumen_mes', fecha: '2026-10-28' }), def = await q({ tipo: 'resumen_mes' });
+  assert.doesNotMatch(cur.texto, /futur/); assert.equal(cur.texto, def.texto);
+});
+
+test('resumen_dia «mañana» en el chat: el aviso llega a la respuesta directa y al modelo', async () => {
+  const b1 = []; const c1 = await chat('como me fue mañana', { fetch: seq([first(call('resumen_dia', { periodo: 'mañana' })), SECOND], b1), reader: RD() });
+  assert.match(c1.final.reply, /fecha futura/, c1.final.reply);
+  const b2 = []; await chat('explicame como me fue mañana', { fetch: seq([first(call('resumen_dia', { periodo: 'mañana' })), SECOND], b2), reader: RD() });
+  assert.match(toolMsg(b2), /fecha futura/);
+});
