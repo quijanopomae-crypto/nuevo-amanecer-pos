@@ -1,0 +1,85 @@
+{
+ "id": "UNI-068",
+ "pregunta": "cuanto pesa la caja de gloria 395",
+ "texto_usado": "cuanto pesa la caja de gloria 395",
+ "rol": "owner",
+ "nota": "turno previo: lista del proveedor pegada",
+ "historial_previo": [
+  {
+   "role": "user",
+   "content": "te paso la lista del proveedor (20-10-2026)\nPRODUCTO | SKU | PRECIO | PESO\nCOCA COLA PIRAÑITA X 300 ML X 6UND | PAQUETE | 50 pqt 8.00 / 30 pqt 8.30 / 10 pqt 8.50 / 1 pq 8.50 | 1.95 K\nPEPSI PIRAÑITAS 355ML X 15UND | PAQUETE | 13.90 | 5.60 K\nGUARANA PIRAÑITA 300ML X 15 UN | PAQUETE | 12.50 | 4.80 K\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 93.00 | 10.52 K\nAVENA 3 OSITOS BOLSA X 5KG | BOLSA | 22.80 | 5.030 K"
+  },
+  {
+   "role": "assistant",
+   "content": "Admin, la lista del proveedor del 20/10/2026 trae precios por paquete, caja y bolsa; en Coca Cola el precio depende de cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos."
+  }
+ ],
+ "turnos_previos": [
+  {
+   "status": 200,
+   "ms": 4283,
+   "reply": "Admin, la lista del proveedor del 20/10/2026 trae precios por paquete, caja y bolsa; en Coca Cola el precio depende de cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos.",
+   "proposals": [],
+   "tool_calls": [
+    []
+   ]
+  }
+ ],
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 2919,
+   "reply": "Admin, según la lista del proveedor, la caja de Leche Gloria de 24 latas de 395 g pesa **10,52 kg**.",
+   "error": null,
+   "proposals": [],
+   "texto_enviado": "cuanto pesa la caja de gloria 395",
+   "history_enviado": 2,
+   "productos_en_contexto": 21,
+   "tool_calls": [
+    []
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7647
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"u01\",\"nombre\":\"LECHE GLORIA EVAPORADA 24 LATAS X 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.9},{\"id\":\"u02\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":2.4,\"stock\":40,\"costo\":2.1},{\"id\":\"u03\",\"nombre\":\"LECHE GLORIA LIGHT 24 LATAS X 395GR\",\"precio\":4.5,\"stock\":12,\"costo\":4.1},{\"id\":\"u04\",\"nombre\":\"LECHE GLORIA SIN LACTOSA 395GR X 24UND\",\"precio\":4.8,\"stock\":8,\"costo\":4.3},{\"id\":\"u20\",\"nombre\":\"PANADOL ANTIGRIPAL CAJA X 100 TAB\",\"precio\":0.8,\"stock\":60,\"costo\":0.5},{\"id\":\"u34\",\"nombre\":\"MANTEQUILLA GLORIA 90GR\",\"precio\":4.8,\"stock\":7,\"costo\":3.9},{\"id\":\"u38\",\"nombre\":\"LECHE GLORIA EVAPORADA 395GR CAJA CERRADA X 24\",\"precio\":99,\"stock\":3,\"costo\":93},{\"id\":\"u05\",\"nombre\":\"WAFER NIK CHICO 12PQT X 6UND\",\"precio\":0.6,\"stock\":50,\"costo\":0.42},{\"id\":\"u06\",\"nombre\":\"CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND\",\"precio\":0.5,\"stock\":200,\"costo\":0.18},{\"id\":\"u07\",\"nombre\":\"ACEITE PRIMOR CLASICO 900ML X 12BOT\",\"precio\":10.5,\"stock\":-3,\"costo\":8.3},{\"id\":\"u08\",\"nombre\":\"FOSFORERA SIN LINTERNA 20 DIS X 50UN\",\"precio\":1,\"stock\":100,\"costo\":0.45},{\"id\":\"u09\",\"nombre\":\"FOSFORERA CON LINTERNA 12 DIS X 25UN\",\"precio\":2.5,\"stock\":20,\"costo\":1.4},{\"id\":\"u10\",\"nombre\":\"MINI PIRATAS X 24 UNID X 12 GR X 20 DISP\",\"precio\":0.5,\"stock\":48,\"costo\":0.3},{\"id\":\"u11\",\"nombre\":\"PAPEL HIGIENICO HIGIENOL LLANTA\",\"precio\":1.2,\"stock\":40,\"costo\":0.85},{\"id\":\"u12\",\"nombre\":\"PAPEL HIGIENICO ELITE DUO 4UND\",\"precio\":5.5,\"stock\":10,\"costo\":4.4},{\"id\":\"u13\",\"nombre\":\"AZUCAR RUBIA X 50KG\",\"precio\":4,\"stock\":35,\"costo\":3.14},{\"id\":\"u14\",\"nombre\":\"ARROZ ALEJANDRINA X 50KG\",\"precio\":4.2,\"stock\":20,\"costo\":3.6},{\"id\":\"u15\",\"nombre\":\"ARROZ JAIRITO X 49KG\",\"precio\":3.8,\"stock\":49,\"costo\":3.2},{\"id\":\"u16\",\"nombre\":\"AVENA 3 OSITOS BOLSA X 5KG\",\"precio\":28,\"stock\":4,\"costo\":23.5},{\"id\":\"u17\",\"nombre\":\"CARAMELO CORONITA BOLSA X 100UND\",\"precio\":0.1,\"stock\":300,\"costo\":0.05},{\"id\":\"u18\",\"nombre\":\"CARAMELO MENTITAS X 50UND\",\"precio\":0.1,\"stock\":120,\"costo\":0.06}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>te paso la lista del proveedor (20-10-2026)\nPRODUCTO | SKU | PRECIO | PESO\nCOCA COLA PIRAÑITA X 300 ML X 6UND | PAQUETE | 50 pqt 8.00 / 30 pqt 8.30 / 10 pqt 8.50 / 1 pq 8.50 | 1.95 K\nPEPSI PIRAÑITAS 355ML X 15UND | PAQUETE | 13.90 | 5.60 K\nGUARANA PIRAÑITA 300ML X 15 UN | PAQUETE | 12.50 | 4.80 K\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 93.00 | 10.52 K\nAVENA 3 OSITOS BOLSA X 5KG | BOLSA | 22.80 | 5.030 K</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, la lista del proveedor del 20/10/2026 trae precios por paquete, caja y bolsa; en Coca Cola el precio depende de cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>cuanto pesa la caja de gloria 395</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_02b1e6557cd5e7aa006adb93c123008197a0e909d4fcdc2a20\",\"object\":\"chat.completion\",\"created\":1792775107,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, según la lista del proveedor, la caja de Leche Gloria de 24 latas de 395 g pesa **10,52 kg**.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4591,\"completion_tokens\":35,\"total_tokens\":4626}}"
+     }
+    }
+   ]
+  }
+ ]
+}

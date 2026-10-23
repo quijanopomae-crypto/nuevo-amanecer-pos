@@ -1,0 +1,131 @@
+{
+ "id": "UNI-058",
+ "pregunta": "arregla todos los negativos",
+ "texto_usado": "arregla todos los negativos",
+ "rol": "owner",
+ "nota": null,
+ "historial_previo": [],
+ "turnos_previos": [],
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 4381,
+   "reply": "Hay 5 productos en o bajo el mínimo. Los más urgentes: FIDEO DON [nombre oculto] 500GR X 20 (Faltan 2), ACEITE PRIMOR CLASICO 900ML X 12BOT (Faltan 3), GALLETA SODA FIELD 6PQT X 6UND (Faltan 1).\nHay 3 productos con stock negativo. No existe un ajuste masivo: cada producto va con su propia tarjeta o se corrige en Inventario. Sin tarjeta: ACEITE PRIMOR CLASICO 900ML X 12BOT, FIDEO DON VITTORIO SPAGHETTI 500GR X 20, GALLETA SODA FIELD 6PQT X 6UND.",
+   "error": null,
+   "proposals": [
+    {
+     "type": "consulta",
+     "raw": {
+      "id": "32f3c4d7-184d-4a73-a8fa-f4a1697fb480",
+      "type": "consulta",
+      "needsConfirm": false,
+      "query": {
+       "tipo": "bajo_stock",
+       "producto": "",
+       "periodo": "hoy",
+       "fecha": null,
+       "desde": "",
+       "hasta": ""
+      },
+      "result": {
+       "titulo": "Productos por reponer",
+       "columnas": [
+        "Producto",
+        "Stock",
+        "Mínimo",
+        "Pedir"
+       ],
+       "filas": [
+        [
+         "FIDEO DON VITTORIO SPAGHETTI 500GR X 20",
+         -2,
+         10,
+         22
+        ],
+        [
+         "ACEITE PRIMOR CLASICO 900ML X 12BOT",
+         -3,
+         6,
+         15
+        ],
+        [
+         "GALLETA SODA FIELD 6PQT X 6UND",
+         -1,
+         6,
+         13
+        ],
+        [
+         "HUGGIES VERDE T= G X 50UND",
+         2,
+         2,
+         2
+        ],
+        [
+         "GUARANA PIRAÑITA 300ML X 15 UN",
+         15,
+         15,
+         15
+        ]
+       ],
+       "texto": "Hay 5 productos en o bajo el mínimo. Los más urgentes: FIDEO DON VITTORIO SPAGHETTI 500GR X 20 (Faltan 2), ACEITE PRIMOR CLASICO 900ML X 12BOT (Faltan 3), GALLETA SODA FIELD 6PQT X 6UND (Faltan 1).",
+       "total": 5
+      }
+     }
+    }
+   ],
+   "texto_enviado": "arregla todos los negativos",
+   "history_enviado": 0,
+   "productos_en_contexto": 21,
+   "tool_calls": [
+    [
+     {
+      "name": "consultar",
+      "arguments": {
+       "tipo": "bajo_stock",
+       "producto": "",
+       "periodo": "hoy",
+       "fecha": "",
+       "desde": "",
+       "hasta": "",
+       "cliente_id": ""
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7823
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"u01\",\"nombre\":\"LECHE GLORIA EVAPORADA 24 LATAS X 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.9},{\"id\":\"u02\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":2.4,\"stock\":40,\"costo\":2.1},{\"id\":\"u03\",\"nombre\":\"LECHE GLORIA LIGHT 24 LATAS X 395GR\",\"precio\":4.5,\"stock\":12,\"costo\":4.1},{\"id\":\"u04\",\"nombre\":\"LECHE GLORIA SIN LACTOSA 395GR X 24UND\",\"precio\":4.8,\"stock\":8,\"costo\":4.3},{\"id\":\"u05\",\"nombre\":\"WAFER NIK CHICO 12PQT X 6UND\",\"precio\":0.6,\"stock\":50,\"costo\":0.42},{\"id\":\"u06\",\"nombre\":\"CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND\",\"precio\":0.5,\"stock\":200,\"costo\":0.18},{\"id\":\"u07\",\"nombre\":\"ACEITE PRIMOR CLASICO 900ML X 12BOT\",\"precio\":10.5,\"stock\":-3,\"costo\":8.3},{\"id\":\"u08\",\"nombre\":\"FOSFORERA SIN LINTERNA 20 DIS X 50UN\",\"precio\":1,\"stock\":100,\"costo\":0.45},{\"id\":\"u09\",\"nombre\":\"FOSFORERA CON LINTERNA 12 DIS X 25UN\",\"precio\":2.5,\"stock\":20,\"costo\":1.4},{\"id\":\"u10\",\"nombre\":\"MINI PIRATAS X 24 UNID X 12 GR X 20 DISP\",\"precio\":0.5,\"stock\":48,\"costo\":0.3},{\"id\":\"u11\",\"nombre\":\"PAPEL HIGIENICO HIGIENOL LLANTA\",\"precio\":1.2,\"stock\":40,\"costo\":0.85},{\"id\":\"u12\",\"nombre\":\"PAPEL HIGIENICO ELITE DUO 4UND\",\"precio\":5.5,\"stock\":10,\"costo\":4.4},{\"id\":\"u13\",\"nombre\":\"AZUCAR RUBIA X 50KG\",\"precio\":4,\"stock\":35,\"costo\":3.14},{\"id\":\"u14\",\"nombre\":\"ARROZ ALEJANDRINA X 50KG\",\"precio\":4.2,\"stock\":20,\"costo\":3.6},{\"id\":\"u15\",\"nombre\":\"ARROZ JAIRITO X 49KG\",\"precio\":3.8,\"stock\":49,\"costo\":3.2},{\"id\":\"u16\",\"nombre\":\"AVENA 3 OSITOS BOLSA X 5KG\",\"precio\":28,\"stock\":4,\"costo\":23.5},{\"id\":\"u17\",\"nombre\":\"CARAMELO CORONITA BOLSA X 100UND\",\"precio\":0.1,\"stock\":300,\"costo\":0.05},{\"id\":\"u18\",\"nombre\":\"CARAMELO MENTITAS X 50UND\",\"precio\":0.1,\"stock\":120,\"costo\":0.06},{\"id\":\"u19\",\"nombre\":\"HUEVO ROSADO X UND\",\"precio\":0.6,\"stock\":90,\"costo\":0.45},{\"id\":\"u20\",\"nombre\":\"PANADOL ANTIGRIPAL CAJA X 100 TAB\",\"precio\":0.8,\"stock\":60,\"costo\":0.5},{\"id\":\"u21\",\"nombre\":\"HUGGIES VERDE T= M X 56UND\",\"precio\":44,\"stock\":3,\"costo\":38}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>arregla todos los negativos</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_082bad0eeda3a4ae006adb93b136f081939504f01da7e0a9b2\",\"object\":\"chat.completion\",\"created\":1792775091,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_doHuOSVjwd80PmTNntrSCo2q\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"bajo_stock\\\",\\\"producto\\\":\\\"\\\",\\\"periodo\\\":\\\"hoy\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4342,\"completion_tokens\":39,\"total_tokens\":4381}}"
+     }
+    }
+   ]
+  }
+ ]
+}

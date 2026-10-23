@@ -1,0 +1,164 @@
+{
+ "id": "UNI-053",
+ "pregunta": "cuanto tengo de coca piraña segun la lista",
+ "texto_usado": "cuanto tengo de coca piraña segun la lista",
+ "rol": "owner",
+ "nota": "turno previo: lista del proveedor pegada",
+ "historial_previo": [
+  {
+   "role": "user",
+   "content": "te paso la lista del proveedor (20-10-2026)\nPRODUCTO | SKU | PRECIO | PESO\nCOCA COLA PIRAÑITA X 300 ML X 6UND | PAQUETE | 50 pqt 8.00 / 30 pqt 8.30 / 10 pqt 8.50 / 1 pq 8.50 | 1.95 K\nPEPSI PIRAÑITAS 355ML X 15UND | PAQUETE | 13.90 | 5.60 K\nGUARANA PIRAÑITA 300ML X 15 UN | PAQUETE | 12.50 | 4.80 K\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 93.00 | 10.52 K\nAVENA 3 OSITOS BOLSA X 5KG | BOLSA | 22.80 | 5.030 K"
+  },
+  {
+   "role": "assistant",
+   "content": "Admin, esta lista del proveedor tiene precios por paquete, caja y bolsa; Coca Cola varía según cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos."
+  }
+ ],
+ "turnos_previos": [
+  {
+   "status": 200,
+   "ms": 6514,
+   "reply": "Admin, esta lista del proveedor tiene precios por paquete, caja y bolsa; Coca Cola varía según cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos.",
+   "proposals": [],
+   "tool_calls": [
+    []
+   ]
+  }
+ ],
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 3806,
+   "reply": "COCA COLA PIRAÑITA X 300 ML X 6UND (S/ 9.50): 10 unid. CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND (S/ 0.50): 200 unid. PEPSI PIRAÑITAS 355ML X 15UND (S/ 1.50): 30 unid. GUARANA PIRAÑITA 300ML X 15 UN (S/ 1.50): 15 unid. CHOCOLATE SUBLIME 30GR X 24UND (S/ 1.50): 30 unid.",
+   "error": null,
+   "proposals": [
+    {
+     "type": "consulta",
+     "raw": {
+      "id": "84c0cef2-4134-485e-8856-3e3c24739c9d",
+      "type": "consulta",
+      "needsConfirm": false,
+      "query": {
+       "tipo": "stock_producto",
+       "producto": "COCA COLA PIRAÑITA",
+       "periodo": "hoy",
+       "fecha": null,
+       "desde": "",
+       "hasta": ""
+      },
+      "result": {
+       "titulo": "Stock del producto",
+       "columnas": [
+        "Producto",
+        "Stock",
+        "Mínimo",
+        "Precio S/",
+        "Costo S/"
+       ],
+       "filas": [
+        [
+         "COCA COLA PIRAÑITA X 300 ML X 6UND",
+         10,
+         6,
+         9.5,
+         8.3
+        ],
+        [
+         "CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND",
+         200,
+         48,
+         0.5,
+         0.18
+        ],
+        [
+         "PEPSI PIRAÑITAS 355ML X 15UND",
+         30,
+         15,
+         1.5,
+         0.95
+        ],
+        [
+         "GUARANA PIRAÑITA 300ML X 15 UN",
+         15,
+         15,
+         1.5,
+         1
+        ],
+        [
+         "CHOCOLATE SUBLIME 30GR X 24UND",
+         30,
+         10,
+         1.5,
+         1.05
+        ]
+       ],
+       "texto": "COCA COLA PIRAÑITA X 300 ML X 6UND (S/ 9.50): 10 unid. CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND (S/ 0.50): 200 unid. PEPSI PIRAÑITAS 355ML X 15UND (S/ 1.50): 30 unid. GUARANA PIRAÑITA 300ML X 15 UN (S/ 1.50): 15 unid. CHOCOLATE SUBLIME 30GR X 24UND (S/ 1.50): 30 unid.",
+       "total": 5
+      }
+     }
+    }
+   ],
+   "texto_enviado": "cuanto tengo de coca piraña segun la lista",
+   "history_enviado": 2,
+   "productos_en_contexto": 21,
+   "tool_calls": [
+    [
+     {
+      "name": "consultar",
+      "arguments": {
+       "tipo": "stock_producto",
+       "producto": "COCA COLA PIRAÑITA",
+       "periodo": "hoy",
+       "fecha": "",
+       "desde": "",
+       "hasta": "",
+       "cliente_id": ""
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7647
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"u23\",\"nombre\":\"COCA COLA PIRAÑITA X 300 ML X 6UND\",\"precio\":9.5,\"stock\":10,\"costo\":8.3},{\"id\":\"u01\",\"nombre\":\"LECHE GLORIA EVAPORADA 24 LATAS X 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.9},{\"id\":\"u02\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":2.4,\"stock\":40,\"costo\":2.1},{\"id\":\"u03\",\"nombre\":\"LECHE GLORIA LIGHT 24 LATAS X 395GR\",\"precio\":4.5,\"stock\":12,\"costo\":4.1},{\"id\":\"u04\",\"nombre\":\"LECHE GLORIA SIN LACTOSA 395GR X 24UND\",\"precio\":4.8,\"stock\":8,\"costo\":4.3},{\"id\":\"u05\",\"nombre\":\"WAFER NIK CHICO 12PQT X 6UND\",\"precio\":0.6,\"stock\":50,\"costo\":0.42},{\"id\":\"u06\",\"nombre\":\"CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND\",\"precio\":0.5,\"stock\":200,\"costo\":0.18},{\"id\":\"u07\",\"nombre\":\"ACEITE PRIMOR CLASICO 900ML X 12BOT\",\"precio\":10.5,\"stock\":-3,\"costo\":8.3},{\"id\":\"u08\",\"nombre\":\"FOSFORERA SIN LINTERNA 20 DIS X 50UN\",\"precio\":1,\"stock\":100,\"costo\":0.45},{\"id\":\"u09\",\"nombre\":\"FOSFORERA CON LINTERNA 12 DIS X 25UN\",\"precio\":2.5,\"stock\":20,\"costo\":1.4},{\"id\":\"u10\",\"nombre\":\"MINI PIRATAS X 24 UNID X 12 GR X 20 DISP\",\"precio\":0.5,\"stock\":48,\"costo\":0.3},{\"id\":\"u11\",\"nombre\":\"PAPEL HIGIENICO HIGIENOL LLANTA\",\"precio\":1.2,\"stock\":40,\"costo\":0.85},{\"id\":\"u12\",\"nombre\":\"PAPEL HIGIENICO ELITE DUO 4UND\",\"precio\":5.5,\"stock\":10,\"costo\":4.4},{\"id\":\"u13\",\"nombre\":\"AZUCAR RUBIA X 50KG\",\"precio\":4,\"stock\":35,\"costo\":3.14},{\"id\":\"u14\",\"nombre\":\"ARROZ ALEJANDRINA X 50KG\",\"precio\":4.2,\"stock\":20,\"costo\":3.6},{\"id\":\"u15\",\"nombre\":\"ARROZ JAIRITO X 49KG\",\"precio\":3.8,\"stock\":49,\"costo\":3.2},{\"id\":\"u16\",\"nombre\":\"AVENA 3 OSITOS BOLSA X 5KG\",\"precio\":28,\"stock\":4,\"costo\":23.5},{\"id\":\"u17\",\"nombre\":\"CARAMELO CORONITA BOLSA X 100UND\",\"precio\":0.1,\"stock\":300,\"costo\":0.05},{\"id\":\"u18\",\"nombre\":\"CARAMELO MENTITAS X 50UND\",\"precio\":0.1,\"stock\":120,\"costo\":0.06},{\"id\":\"u19\",\"nombre\":\"HUEVO ROSADO X UND\",\"precio\":0.6,\"stock\":90,\"costo\":0.45},{\"id\":\"u20\",\"nombre\":\"PANADOL ANTIGRIPAL CAJA X 100 TAB\",\"precio\":0.8,\"stock\":60,\"costo\":0.5}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>te paso la lista del proveedor (20-10-2026)\nPRODUCTO | SKU | PRECIO | PESO\nCOCA COLA PIRAÑITA X 300 ML X 6UND | PAQUETE | 50 pqt 8.00 / 30 pqt 8.30 / 10 pqt 8.50 / 1 pq 8.50 | 1.95 K\nPEPSI PIRAÑITAS 355ML X 15UND | PAQUETE | 13.90 | 5.60 K\nGUARANA PIRAÑITA 300ML X 15 UN | PAQUETE | 12.50 | 4.80 K\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 93.00 | 10.52 K\nAVENA 3 OSITOS BOLSA X 5KG | BOLSA | 22.80 | 5.030 K</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, esta lista del proveedor tiene precios por paquete, caja y bolsa; Coca Cola varía según cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>cuanto tengo de coca piraña segun la lista</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0756c6eafebcb729006adb93b035748197bef2a19bfcff64f6\",\"object\":\"chat.completion\",\"created\":1792775091,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_m2mgck4iePbWumdfxk99n6TM\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"stock_producto\\\",\\\"producto\\\":\\\"COCA COLA PIRAÑITA\\\",\\\"periodo\\\":\\\"hoy\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4583,\"completion_tokens\":69,\"total_tokens\":4652}}"
+     }
+    }
+   ]
+  }
+ ]
+}

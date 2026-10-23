@@ -1,0 +1,85 @@
+{
+ "id": "UNI-069",
+ "pregunta": "la pirañita viene de 6 o de 15?",
+ "texto_usado": "la pirañita viene de 6 o de 15?",
+ "rol": "owner",
+ "nota": "turno previo: lista del proveedor pegada",
+ "historial_previo": [
+  {
+   "role": "user",
+   "content": "te paso la lista del proveedor (20-10-2026)\nPRODUCTO | SKU | PRECIO | PESO\nCOCA COLA PIRAÑITA X 300 ML X 6UND | PAQUETE | 50 pqt 8.00 / 30 pqt 8.30 / 10 pqt 8.50 / 1 pq 8.50 | 1.95 K\nPEPSI PIRAÑITAS 355ML X 15UND | PAQUETE | 13.90 | 5.60 K\nGUARANA PIRAÑITA 300ML X 15 UN | PAQUETE | 12.50 | 4.80 K\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 93.00 | 10.52 K\nAVENA 3 OSITOS BOLSA X 5KG | BOLSA | 22.80 | 5.030 K"
+  },
+  {
+   "role": "assistant",
+   "content": "Admin, esta lista del proveedor del 20/10/2026 tiene precios por paquete, caja y bolsa; la Coca Cola cambia de precio según cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos."
+  }
+ ],
+ "turnos_previos": [
+  {
+   "status": 200,
+   "ms": 4740,
+   "reply": "Admin, esta lista del proveedor del 20/10/2026 tiene precios por paquete, caja y bolsa; la Coca Cola cambia de precio según cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos.",
+   "proposals": [],
+   "tool_calls": [
+    []
+   ]
+  }
+ ],
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 3256,
+   "reply": "Admin, según la lista del proveedor, la Coca Cola pirañita viene en paquete de 6 unidades; la Pepsi y la Guaraná vienen en paquetes de 15 unidades.",
+   "error": null,
+   "proposals": [],
+   "texto_enviado": "la pirañita viene de 6 o de 15?",
+   "history_enviado": 2,
+   "productos_en_contexto": 21,
+   "tool_calls": [
+    []
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7647
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"u23\",\"nombre\":\"COCA COLA PIRAÑITA X 300 ML X 6UND\",\"precio\":9.5,\"stock\":10,\"costo\":8.3},{\"id\":\"u24\",\"nombre\":\"PEPSI PIRAÑITAS 355ML X 15UND\",\"precio\":1.5,\"stock\":30,\"costo\":0.95},{\"id\":\"u25\",\"nombre\":\"GUARANA PIRAÑITA 300ML X 15 UN\",\"precio\":1.5,\"stock\":15,\"costo\":1},{\"id\":\"u01\",\"nombre\":\"LECHE GLORIA EVAPORADA 24 LATAS X 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.9},{\"id\":\"u02\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":2.4,\"stock\":40,\"costo\":2.1},{\"id\":\"u03\",\"nombre\":\"LECHE GLORIA LIGHT 24 LATAS X 395GR\",\"precio\":4.5,\"stock\":12,\"costo\":4.1},{\"id\":\"u04\",\"nombre\":\"LECHE GLORIA SIN LACTOSA 395GR X 24UND\",\"precio\":4.8,\"stock\":8,\"costo\":4.3},{\"id\":\"u05\",\"nombre\":\"WAFER NIK CHICO 12PQT X 6UND\",\"precio\":0.6,\"stock\":50,\"costo\":0.42},{\"id\":\"u06\",\"nombre\":\"CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND\",\"precio\":0.5,\"stock\":200,\"costo\":0.18},{\"id\":\"u07\",\"nombre\":\"ACEITE PRIMOR CLASICO 900ML X 12BOT\",\"precio\":10.5,\"stock\":-3,\"costo\":8.3},{\"id\":\"u08\",\"nombre\":\"FOSFORERA SIN LINTERNA 20 DIS X 50UN\",\"precio\":1,\"stock\":100,\"costo\":0.45},{\"id\":\"u09\",\"nombre\":\"FOSFORERA CON LINTERNA 12 DIS X 25UN\",\"precio\":2.5,\"stock\":20,\"costo\":1.4},{\"id\":\"u10\",\"nombre\":\"MINI PIRATAS X 24 UNID X 12 GR X 20 DISP\",\"precio\":0.5,\"stock\":48,\"costo\":0.3},{\"id\":\"u11\",\"nombre\":\"PAPEL HIGIENICO HIGIENOL LLANTA\",\"precio\":1.2,\"stock\":40,\"costo\":0.85},{\"id\":\"u12\",\"nombre\":\"PAPEL HIGIENICO ELITE DUO 4UND\",\"precio\":5.5,\"stock\":10,\"costo\":4.4},{\"id\":\"u13\",\"nombre\":\"AZUCAR RUBIA X 50KG\",\"precio\":4,\"stock\":35,\"costo\":3.14},{\"id\":\"u14\",\"nombre\":\"ARROZ ALEJANDRINA X 50KG\",\"precio\":4.2,\"stock\":20,\"costo\":3.6},{\"id\":\"u15\",\"nombre\":\"ARROZ JAIRITO X 49KG\",\"precio\":3.8,\"stock\":49,\"costo\":3.2},{\"id\":\"u16\",\"nombre\":\"AVENA 3 OSITOS BOLSA X 5KG\",\"precio\":28,\"stock\":4,\"costo\":23.5},{\"id\":\"u17\",\"nombre\":\"CARAMELO CORONITA BOLSA X 100UND\",\"precio\":0.1,\"stock\":300,\"costo\":0.05},{\"id\":\"u18\",\"nombre\":\"CARAMELO MENTITAS X 50UND\",\"precio\":0.1,\"stock\":120,\"costo\":0.06}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>te paso la lista del proveedor (20-10-2026)\nPRODUCTO | SKU | PRECIO | PESO\nCOCA COLA PIRAÑITA X 300 ML X 6UND | PAQUETE | 50 pqt 8.00 / 30 pqt 8.30 / 10 pqt 8.50 / 1 pq 8.50 | 1.95 K\nPEPSI PIRAÑITAS 355ML X 15UND | PAQUETE | 13.90 | 5.60 K\nGUARANA PIRAÑITA 300ML X 15 UN | PAQUETE | 12.50 | 4.80 K\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 93.00 | 10.52 K\nAVENA 3 OSITOS BOLSA X 5KG | BOLSA | 22.80 | 5.030 K</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, esta lista del proveedor del 20/10/2026 tiene precios por paquete, caja y bolsa; la Coca Cola cambia de precio según cuántos paquetes compres. Es una cotización, así que no he registrado ninguna compra ni cambiado precios o costos."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>la pirañita viene de 6 o de 15?</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0dcc7edd832119e9006adb93c1bc5881969c26b9e0ac962e6f\",\"object\":\"chat.completion\",\"created\":1792775108,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, según la lista del proveedor, la Coca Cola pirañita viene en paquete de 6 unidades; la Pepsi y la Guaraná vienen en paquetes de 15 unidades.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4601,\"completion_tokens\":42,\"total_tokens\":4643}}"
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,91 @@
+{
+ "id": "UNI-019",
+ "pregunta": "no no, eran 2 displays nomas",
+ "texto_usado": "no no, eran 2 displays nomas",
+ "rol": "owner",
+ "nota": "sigue la conversación de UNI-017/018",
+ "historial_previo": [
+  {
+   "role": "user",
+   "content": "me llego encendedor x 50 UND, cantidad 2 cajas"
+  },
+  {
+   "role": "assistant",
+   "content": "Admin, ¿los encendedores los vendes por unidad o por caja de 50?"
+  },
+  {
+   "role": "user",
+   "content": "son 2 cajas grandes"
+  },
+  {
+   "role": "assistant",
+   "content": "Admin, ¿cada caja grande trae 50 encendedores o varios paquetes de 50?"
+  }
+ ],
+ "turnos_previos": [],
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 4871,
+   "reply": "Admin, son 2 displays, no cajas grandes; ¿cada display trae 50 encendedores?",
+   "error": null,
+   "proposals": [],
+   "texto_enviado": "no no, eran 2 displays nomas",
+   "history_enviado": 4,
+   "productos_en_contexto": 21,
+   "tool_calls": [
+    []
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7647
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"u01\",\"nombre\":\"LECHE GLORIA EVAPORADA 24 LATAS X 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.9},{\"id\":\"u02\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":2.4,\"stock\":40,\"costo\":2.1},{\"id\":\"u03\",\"nombre\":\"LECHE GLORIA LIGHT 24 LATAS X 395GR\",\"precio\":4.5,\"stock\":12,\"costo\":4.1},{\"id\":\"u04\",\"nombre\":\"LECHE GLORIA SIN LACTOSA 395GR X 24UND\",\"precio\":4.8,\"stock\":8,\"costo\":4.3},{\"id\":\"u05\",\"nombre\":\"WAFER NIK CHICO 12PQT X 6UND\",\"precio\":0.6,\"stock\":50,\"costo\":0.42},{\"id\":\"u06\",\"nombre\":\"CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND\",\"precio\":0.5,\"stock\":200,\"costo\":0.18},{\"id\":\"u07\",\"nombre\":\"ACEITE PRIMOR CLASICO 900ML X 12BOT\",\"precio\":10.5,\"stock\":-3,\"costo\":8.3},{\"id\":\"u08\",\"nombre\":\"FOSFORERA SIN LINTERNA 20 DIS X 50UN\",\"precio\":1,\"stock\":100,\"costo\":0.45},{\"id\":\"u09\",\"nombre\":\"FOSFORERA CON LINTERNA 12 DIS X 25UN\",\"precio\":2.5,\"stock\":20,\"costo\":1.4},{\"id\":\"u10\",\"nombre\":\"MINI PIRATAS X 24 UNID X 12 GR X 20 DISP\",\"precio\":0.5,\"stock\":48,\"costo\":0.3},{\"id\":\"u11\",\"nombre\":\"PAPEL HIGIENICO HIGIENOL LLANTA\",\"precio\":1.2,\"stock\":40,\"costo\":0.85},{\"id\":\"u12\",\"nombre\":\"PAPEL HIGIENICO ELITE DUO 4UND\",\"precio\":5.5,\"stock\":10,\"costo\":4.4},{\"id\":\"u13\",\"nombre\":\"AZUCAR RUBIA X 50KG\",\"precio\":4,\"stock\":35,\"costo\":3.14},{\"id\":\"u14\",\"nombre\":\"ARROZ ALEJANDRINA X 50KG\",\"precio\":4.2,\"stock\":20,\"costo\":3.6},{\"id\":\"u15\",\"nombre\":\"ARROZ JAIRITO X 49KG\",\"precio\":3.8,\"stock\":49,\"costo\":3.2},{\"id\":\"u16\",\"nombre\":\"AVENA 3 OSITOS BOLSA X 5KG\",\"precio\":28,\"stock\":4,\"costo\":23.5},{\"id\":\"u17\",\"nombre\":\"CARAMELO CORONITA BOLSA X 100UND\",\"precio\":0.1,\"stock\":300,\"costo\":0.05},{\"id\":\"u18\",\"nombre\":\"CARAMELO MENTITAS X 50UND\",\"precio\":0.1,\"stock\":120,\"costo\":0.06},{\"id\":\"u19\",\"nombre\":\"HUEVO ROSADO X UND\",\"precio\":0.6,\"stock\":90,\"costo\":0.45},{\"id\":\"u20\",\"nombre\":\"PANADOL ANTIGRIPAL CAJA X 100 TAB\",\"precio\":0.8,\"stock\":60,\"costo\":0.5},{\"id\":\"u21\",\"nombre\":\"HUGGIES VERDE T= M X 56UND\",\"precio\":44,\"stock\":3,\"costo\":38}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>me llego encendedor x 50 UND, cantidad 2 cajas</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, ¿los encendedores los vendes por unidad o por caja de 50?"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>son 2 cajas grandes</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, ¿cada caja grande trae 50 encendedores o varios paquetes de 50?"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>no no, eran 2 displays nomas</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0303981839cd4d5b006adb946d2b108197be6bc4aacc550176\",\"object\":\"chat.completion\",\"created\":1792775281,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, son 2 displays, no cajas grandes; ¿cada display trae 50 encendedores?\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4394,\"completion_tokens\":107,\"total_tokens\":4501}}"
+     }
+    }
+   ]
+  }
+ ]
+}
