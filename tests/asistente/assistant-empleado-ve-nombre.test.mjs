@@ -1,0 +1,166 @@
+// Decisión del dueño de la tienda (Admin), 2026-10-23: el EMPLEADO también ve el nombre real del cliente y sus datos en el asistente
+// (si alguien viene a pagar, «cliente #R7» no le dice quién es). Solo cambia la pantalla: hacia la IA el cliente sigue yendo como
+// «cliente #código» para todos. El empleado puede preguntar cuánto debe UN cliente (deuda_cliente con cliente_id = su código);
+// ganancia, totales de la tienda (deudas_clientes, caja, créditos atrasados, resúmenes) y costos siguen siendo solo del Admin.
+// Nombres inventados. Sin red.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { assistantChatRoute, createMemoryUsageStore, toolsForRole, systemPrompt } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { memoryReader } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { makeDoc } from './fake-dom.mjs';
+const require = createRequire(import.meta.url);
+const store = new Map();
+globalThis.localStorage = globalThis.localStorage || { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+globalThis.window = globalThis;
+const C = require('../../POS/js/modules/asistente/asistente-core.js');
+const UI = readFileSync('POS/js/modules/asistente/asistente-ui.js', 'utf8');
+const realFetch = globalThis.fetch;
+globalThis.fetch = async () => { throw new Error('red prohibida en las pruebas'); };
+test.after(() => { globalThis.fetch = realFetch; });
+
+const SECRET = 'secreto-de-prueba-0123456789abcdef';
+const NOW = Date.parse('2026-10-23T20:00:00.000Z');
+const NAME = 'Rosa Prueba', NAME_RE = /Rosa|Prueba/i;
+const LOCAL = [{ id: 'R7', nombre: NAME }, { id: 'R8', nombre: 'Tito Inventado' }];
+const DATA = {
+  products: [{ id: 'P1', nombre: 'Arroz 1 kg', precio: 4.5, costo: 3.1, stock: 2, min: 5, controla: true }],
+  customers: [{ id: 'R7', nombre: NAME, dni: '40998877', telefono: '911222333' }, { id: 'R8', nombre: 'Tito Inventado' }],
+  credits: [
+    { cliente: 'R7', saldo: 37.4, vence: '2026-11-05', fecha: '2026-10-05', nombre: NAME },
+    { cliente: 'R7', saldo: 12.6, vence: '2026-11-20', fecha: '2026-10-20' },
+    { cliente: 'R8', saldo: 999.99, vence: '2026-11-01', fecha: '2026-10-01' }
+  ],
+  sales: [{ sale_id: 'S1', created_at: '2026-10-23T15:00:00.000Z', metodo: 'efectivo', total_cents: 77777 }],
+  saleItems: [{ sale_id: 'S1', product_id: 'P1', quantity: 3, line_total_cents: 77777, unit_price_cents: 450 }],
+  cashMovements: [], payments: [], purchases: [],
+  cash: { ready: true, open: { opened_at: '2026-10-23T12:00:00.000Z', opening_cents: 55555, expected_cents: 66666 }, rows: [] }
+};
+const EMP = ['empleado:consultas', 'empleado:consultas_documentos', 'empleado:completo', 'empleado:completo+costos'];
+const json = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { 'content-type': 'application/json' } });
+const enc = new TextEncoder(), sse = (o) => 'data: ' + JSON.stringify(o) + '\n\n';
+const call = (args) => ({ id: 'call_q', type: 'function', function: { name: 'consultar', arguments: JSON.stringify(args) } });
+const REPLY = 'Cliente #R7 tiene su deuda en la tabla.';
+function scripted(args, cap, stream) {
+  let i = 0;
+  return async (_u, init) => { cap.push(String(init.body)); const first = i++ === 0;
+    if (!stream) return json({ choices: [{ message: first ? { role: 'assistant', content: '', tool_calls: [call(args)] } : { role: 'assistant', content: REPLY } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    const chunks = first
+      ? [sse({ choices: [{ delta: { tool_calls: [{ index: 0, ...call(args) }] } }] }), sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })]
+      : [sse({ choices: [{ delta: { content: REPLY } }] }), sse({ choices: [{ delta: {}, finish_reason: 'stop' }] })];
+    return new Response(new ReadableStream({ start(c) { for (const x of chunks) c.enqueue(enc.encode(x)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } }); };
+}
+async function chat(role, args, { text, stream = false, key = true } = {}) {
+  const cap = [], reads = [], base = memoryReader(DATA), rd = {};
+  for (const k of Object.keys(base)) rd[k] = async (...a) => { reads.push(k); return base[k](...a); };
+  const env = { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, ...(key ? { DEEPSEEK_API_KEY: 'k' } : { ASSISTANT_DEMO: '1' }) };
+  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: { products: DATA.products } }) }),
+    env, { principalId: 'session:x', posRole: role === 'owner' ? 'owner' : 'empleado' }, json,
+    { store: createMemoryUsageStore(), resolveRole: async () => role, fetch: scripted(args, cap, stream), reader: rd, audit: async () => {}, now: () => NOW });
+  let out;
+  if (stream && /event-stream/.test(r.headers.get('content-type') || '')) {
+    const ev = []; const p = C.createSseParser((e, d) => ev.push({ e, d }));
+    const rr = r.body.getReader(), dec = new TextDecoder(); for (;;) { const { value, done } = await rr.read(); if (done) break; p.feed(dec.decode(value, { stream: true })); }
+    out = JSON.stringify(ev);
+  } else out = await r.text();
+  return { status: r.status, out, toModel: cap, reads };
+}
+// Lo que dice el empleado en el aparato pasa por maskCustomers (igual que el Admin): el nombre se vuelve «cliente #código».
+const ask = (t) => C.maskCustomers(t, LOCAL, DATA.products, []).text;
+
+// ---------- pantalla: tabla y burbuja (líneas reales de asistente-ui.js) ----------
+function uiApi() {
+  const doc = makeDoc(), el = (t, c) => { const e = doc.createElement(t); if (c) e.className = c; return e; };
+  const s0 = UI.indexOf('  var CLI_RE = '), s1 = UI.indexOf('  // ---------- «Leer boleta con IA»');
+  assert.ok(s0 > 0 && s1 > s0, 'bloque de linkCustomers');
+  const api = new Function('root', 'doc', 'C', 'el', 'addMsg', 'deps', UI.slice(s0, s1) + '\nreturn { linkCustomers: linkCustomers };')({}, doc, C, el, () => {}, { clientes: () => LOCAL });
+  return { doc, linkCustomers: api.linkCustomers };
+}
+// Empleado con el asistente: isAdmin() (acceso al panel) = true, isOwnerAccess() (dueño) = false. Admin: ambos true.
+const ROLES = { empleado: { isAdmin: () => true, isOwnerAccess: () => false }, admin: { isAdmin: () => true, isOwnerAccess: () => true } };
+
+test('(a) tabla de la consulta: el EMPLEADO también ve el nombre real del cliente (de la lista de ESTE aparato); el Admin igual', () => {
+  const line = UI.split('\n').find((l) => l.includes("var qt = p.type === 'consulta'")); assert.ok(line, 'línea de la tabla en addCard');
+  const { doc, linkCustomers } = uiApi();
+  for (const [who, g] of Object.entries(ROLES)) {
+    const c = doc.createElement('div'), t = doc.createElement('table'); t.className = 'q';
+    const td = doc.createElement('td'); td.textContent = 'cliente #R7'; t.appendChild(td); c.appendChild(t);
+    c.querySelector = (sel) => (sel === 'table.q' ? t : null);
+    new Function('p', 'c', 'C', 'deps', 'linkCustomers', 'isOwnerAccess', 'isAdmin', line)({ type: 'consulta' }, c, C, { clientes: () => LOCAL }, linkCustomers, g.isOwnerAccess, g.isAdmin);
+    assert.ok(t.textContent.includes(NAME), who + ': nombre real en la tabla: ' + t.textContent);
+    assert.equal(t.byClass('na-asst-cli').length, 1, who + ': el mismo botón del cliente que en el chat');
+  }
+});
+
+test('(b) burbuja de la respuesta: el EMPLEADO también ve el nombre real del cliente; el Admin igual', () => {
+  const line = UI.split('\n').find((l) => l.includes('linkCustomers(bubble')); assert.ok(line, 'línea de la burbuja');
+  const { doc, linkCustomers } = uiApi();
+  for (const [who, g] of Object.entries(ROLES)) {
+    const bubble = doc.createElement('div'); bubble.textContent = 'El cliente #R7 debe S/ 50.00.';
+    new Function('C', 'd', 'deps', 'bubble', 'linkCustomers', 'isOwnerAccess', 'isAdmin', line)(C, { reply: bubble.textContent }, { clientes: () => LOCAL }, bubble, linkCustomers, g.isOwnerAccess, g.isAdmin);
+    assert.ok(bubble.textContent.includes(NAME), who + ': nombre real en la burbuja: ' + bubble.textContent);
+  }
+  assert.ok(!/isOwnerAccess\(\)/.test(line), 'la burbuja ya no depende de ser el dueño: ' + line);
+});
+
+test('(c) el nombre NUNCA llega a la IA en modo empleado (aparato -> «cliente #código»; servidor, con y sin partes)', async () => {
+  const text = ask('¿Cuánto debe Rosa Prueba?');
+  assert.ok(!NAME_RE.test(text), 'el aparato tapa el nombre: ' + text); assert.match(text, /cliente #R7/);
+  for (const role of EMP) for (const stream of [false, true]) {
+    const r = await chat(role, { tipo: 'deuda_cliente', cliente_id: 'R7' }, { text, stream });
+    assert.ok(r.toModel.length >= 1, role + ': hubo llamada al modelo');
+    for (const b of r.toModel) assert.ok(!NAME_RE.test(b) && !b.includes('40998877') && !b.includes('911222333'), role + (stream ? ' partes' : '') + ': nombre/DNI/teléfono hacia la IA: ' + b.slice(0, 300));
+  }
+});
+
+test('(d) empleado: deuda_cliente con cliente_id = código -> el monto en la tarjeta y hacia la IA, sin 403 (con y sin partes)', async () => {
+  for (const role of EMP) {
+    const c = toolsForRole(role).find((t) => t.function.name === 'consultar');
+    assert.ok(c, role + ': tiene consultar');
+    assert.ok(c.function.parameters.properties.tipo.enum.includes('deuda_cliente'), role + ': deuda_cliente en la lista');
+    assert.ok(c.function.parameters.properties.cliente_id, role + ': cliente_id para deuda_cliente');
+    assert.match(systemPrompt(role, '', ''), /deuda_cliente/, role + ': la instrucción de deuda_cliente también le llega');
+    for (const stream of [false, true]) {
+      const r = await chat(role, { tipo: 'deuda_cliente', cliente_id: 'R7' }, { text: ask('¿Cuánto me debe Rosa Prueba?'), stream });
+      const tag = role + (stream ? ' partes' : '');
+      assert.equal(r.status, 200, tag + ': ' + r.out.slice(0, 300));
+      assert.ok(!/admin_only|forbidden|solo para el Admin/i.test(r.out), tag + ': no bloquea: ' + r.out.slice(0, 400));
+      assert.ok(r.reads.includes('credits'), tag + ': leyó los créditos');
+      assert.match(r.out, /50\.00/, tag + ': el monto (37.40 + 12.60) llega a la pantalla: ' + r.out.slice(0, 600));
+      assert.match(r.out, /cliente #R7/, tag + ': la tarjeta va con «cliente #código» (el nombre lo pone el aparato)');
+      assert.ok(!NAME_RE.test(r.out) && !r.out.includes('999.99'), tag + ': sin nombre del servidor ni deuda de otro cliente');
+      assert.match(r.toModel.slice(1).join('\n'), /50(?:\.0+)?\b/, tag + ': la IA recibe el saldo para responder');
+    }
+  }
+});
+
+test('(d) modo demostración (sin clave): «¿cuánto debe el cliente #R7?» del empleado -> la deuda, sin 403', async () => {
+  for (const role of EMP) {
+    const r = await chat(role, {}, { text: '¿Cuánto debe el cliente #R7?', key: false });
+    assert.equal(r.status, 200, role + ': ' + r.out.slice(0, 300));
+    assert.match(r.out, /50\.00/, role + ': ' + r.out.slice(0, 500));
+  }
+});
+
+test('(e) empleado: ganancia, totales de la tienda y costos siguen bloqueados (403 o sin tarjeta, sin leer los datos)', async () => {
+  const BLOCKED_403 = ['ganancia', 'creditos_atrasados', 'caja_abierta', 'resumen_dia'];
+  for (const role of EMP) for (const stream of [false, true]) {
+    const tag = role + (stream ? ' partes' : '');
+    for (const tipo of BLOCKED_403) {
+      if (tipo === 'ganancia' && role === 'empleado:completo+costos') continue; // el permiso de costos del Admin
+      const r = await chat(role, { tipo, periodo: 'hoy' }, { text: 'dame el dato', stream });
+      const st = stream && r.status === 200 ? (JSON.parse(r.out).find((x) => x.e === 'error') || { d: {} }).d.status : r.status; // en partes: evento «error» con status
+      assert.equal(st, 403, tag + ' ' + tipo + ': ' + r.out.slice(0, 300));
+      assert.ok(!r.out.includes('777.77') && !r.out.includes('666.66'), tag + ' ' + tipo);
+    }
+    // deudas de TODA la tienda: no hay tarjeta ni se leen los créditos
+    const r = await chat(role, { tipo: 'deudas_clientes' }, { text: 'dame el dato', stream });
+    assert.ok(!r.reads.includes('credits'), tag + ' deudas_clientes leyó créditos');
+    assert.ok(!/999\.99|50\.00|1049\.99/.test(r.out), tag + ' deudas_clientes: ' + r.out.slice(0, 400));
+    // costos: el resultado de deuda_cliente no trae costos ni ganancia, y la herramienta no ofrece deudas_clientes
+    const c = toolsForRole(role).find((t) => t.function.name === 'consultar');
+    assert.ok(!c.function.parameters.properties.tipo.enum.includes('deudas_clientes'), role + ': deudas_clientes sigue fuera');
+    if (role !== 'empleado:completo+costos') assert.ok(!c.function.parameters.properties.tipo.enum.includes('ganancia'), role + ': ganancia sigue fuera');
+  }
+});
