@@ -190,7 +190,7 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) {
     const start = hon ? toks[i - 1].s : t.s;
     const { len, hits } = personAt(toks, i, ck);
     if (len) { ments.push({ s: start, e: toks[i + len - 1].e, hits }); i += len - 1; continue; }
-    const isPron = t.f === 'ella' || t.w.toLowerCase() === 'él';
+    const isPron = t.f === 'ella' || t.w.toLowerCase() === 'él' || (t.f === 'el' && !same(i + 1)); // «¿me pagó el?» (sin tilde, al final de la oración)
     if (!isPron && (payerStop(t.f) || PAYER_TIME.has(t.f) || PAYER_GAP.has(t.f) || PAYER_GLUE.has(t.f) || t.f.length < 2)) continue;
     // Sin tope: hacia atrás hasta el inicio de la oración (la coma no corta) saltando la lista fija, el tiempo y los artículos; hacia adelante
     // hasta el fin, saltando tiempo, artículos y «me/le/ya» (no la lista fija: «a ver cuánto me pagaron» no hace de «ver» un nombre).
