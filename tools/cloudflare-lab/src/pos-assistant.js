@@ -208,6 +208,8 @@ const capName = (x) => x.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.s
 //    todos («alguien», «cada uno», «¿quién…?») = el total.
 // strict: ya no cambia nada (se deja por compatibilidad de la llamada).
 // Oraciones con verbo de pago (sin «yo/he/hemos»); toMe: las que además son un pago A la tienda («me/le pagó», «fiado», «deuda»…).
+// Antes de «pago/abono» hace de él un sustantivo («un pago», «el pago», «cada pago»): no es un cliente que pagó.
+const PAYER_NOUN_DET = new Set(['un', 'una', 'el', 'del', 'al', 'cada', 'ese', 'este', 'esa', 'esta', 'otro', 'otra', 'primer', 'ultimo', 'ultima', 'mi', 'tu', 'su', 'nuestro']);
 export function payerSentences(toks, { toMe = false } = {}) {
   const by = new Map(); for (const t of toks) { if (!by.has(t.sent)) by.set(t.sent, []); by.get(t.sent).push(t); }
   return new Set([...by].filter(([, ts]) => ts.some((t) => PAYER_VERBS.has(t.f)) && !ts.some((t) => PAYER_FIRST.has(t.f)) && (!toMe || ts.some((t) => PAYER_TO_ME.has(t.f)))).map(([k]) => k));
@@ -228,10 +230,16 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) { vo
     for (let k = i; k < i + len; k++) used.add(k); i += len - 1;
   }
   const prevSent = new Set([...paySent].map((x) => x - 1).filter((x) => x >= 0 && !paySent.has(x)));
+  // «pago/abono» sin tilde también es el Admin («¿cuánto pago de flete?», «¿cómo pago con Yape?»): como un sustantivo, solo con mayúscula.
+  const strongSent = new Set(toks.filter((t, k) => verbSent.has(t.sent) && PAYER_VERBS.has(t.f) && !(t.f === t.w.toLowerCase() && (t.f === 'pago' || t.f === 'abono'))
+    && !(k > 0 && toks[k - 1].sent === t.sent && (PAYER_NOUN_DET.has(toks[k - 1].f) || toks[k - 1].f === 'se'))).map((t) => t.sent));
   const runs = []; let run = null; // (2) lo que sobra
   for (let i = 0; i < toks.length; i++) {
-    const t = toks[i], scope = paySent.has(t.sent) || (!ments.length && prevSent.has(t.sent))
-      || (verbSent.has(t.sent) && /^\p{Lu}\p{Ll}/u.test(t.w)); // sin «me»: solo un nombre con mayúscula («¿Gumercinda ya pagó?»; no «registro», «IGV»)
+    // (revisión en 3a21c3a2) oración con verbo de pago (sin «yo/he/hemos»): lo que sobra es un nombre, también en minúsculas y sin «me»
+    // («¿cuánto pagó rosa?», «rosa pagó?»). Si el «verbo» es un sustantivo («un pago», «el pago») o va con «se» impersonal («se paga de IGV»),
+    // solo cuenta un nombre con mayúscula, como antes («¿dónde registro un pago con tarjeta?» va a la IA).
+    const t = toks[i], scope = paySent.has(t.sent) || strongSent.has(t.sent) || (!ments.length && prevSent.has(t.sent))
+      || (verbSent.has(t.sent) && /^\p{Lu}\p{Ll}/u.test(t.w));
     if (!scope || used.has(i) || payerKnown(t)) { run = null; continue; }
     if (run && run.sent === t.sent && run.last === i - 1 && run.n < 3) { run.e = t.e; run.last = i; run.n++; continue; }
     run = { s: t.s, e: t.e, last: i, n: 1, sent: t.sent }; runs.push(run);
@@ -245,7 +253,9 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) { vo
   if (!ments.length && !paySent.size) return null;
   if (!ments.length) { // (3) sin nombre: singular = ¿de qué cliente?; plural o «alguien/cada uno/quién» = total
     const inPay = toks.filter((t) => paySent.has(t.sent));
-    const plural = inPay.some((t) => (PAYER_VERBS.has(t.f) && /n$/.test(t.f)) || ['han', 'van'].includes(t.f) || PAYER_ALL.has(t.f));
+    // (revisión en 3a21c3a2) «¿cuánto se pagó de fiados?»: el «se» impersonal junto al verbo no es una persona; es el total.
+    const impersonal = inPay.some((t, k) => t.f === 'se' && inPay[k + 1] && inPay[k + 1].sent === t.sent && PAYER_VERBS.has(inPay[k + 1].f));
+    const plural = impersonal || inPay.some((t) => (PAYER_VERBS.has(t.f) && /n$/.test(t.f)) || ['han', 'van'].includes(t.f) || PAYER_ALL.has(t.f));
     return plural ? null : { kind: 'quien', masked: s };
   }
   const masked = ments.reduceRight((x, m) => x.slice(0, m.s) + NAME_MASK + x.slice(m.e), s);
