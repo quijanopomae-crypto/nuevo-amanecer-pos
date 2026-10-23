@@ -1,0 +1,40 @@
+/* Dashboard de compras: estilos limitados a #pageDashboardCompras. */
+#pageDashboardCompras { --dc-bg: #f8fafc; --dc-surface: #fff; --dc-text: #0f172a; --dc-muted: #475569; --dc-border: #cbd5e1; --dc-accent: #0f766e; --dc-up: #991b1b; --dc-down: #166534; --dc-notice-bg: #fffbeb; --dc-notice-text: #92400e; min-width: 0; min-height: 0; color: var(--dc-text); background: var(--dc-bg); }
+body.dark #pageDashboardCompras { --dc-bg: #0f172a; --dc-surface: #1e293b; --dc-text: #f8fafc; --dc-muted: #cbd5e1; --dc-border: #475569; --dc-accent: #5eead4; --dc-up: #fca5a5; --dc-down: #86efac; --dc-notice-bg: #422006; --dc-notice-text: #fde68a; }
+#pageDashboardCompras *, #pageDashboardCompras *::before { box-sizing: border-box; }
+#pageDashboardCompras [hidden] { display: none !important; }
+#pageDashboardCompras .dc-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--dc-border); flex-shrink: 0; }
+#pageDashboardCompras .dc-heading { flex: 1 1 220px; min-width: 0; }
+#pageDashboardCompras h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; color: var(--dc-text); }
+#pageDashboardCompras h2 { margin: 0 0 8px; font-size: 17px; color: var(--dc-text); }
+#pageDashboardCompras .dc-header p { margin: 0; color: var(--dc-muted); line-height: 1.5; }
+#pageDashboardCompras button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--dc-accent); border-radius: 10px; font: inherit; font-weight: 700; color: var(--dc-accent); background: var(--dc-surface); cursor: pointer; }
+#pageDashboardCompras button:focus-visible { outline: 3px solid var(--dc-accent); outline-offset: 2px; }
+#pageDashboardCompras .dc-content { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); }
+#pageDashboardCompras .dc-status, #pageDashboardCompras .dc-note, #pageDashboardCompras .dc-empty { margin: 0 0 12px; line-height: 1.6; color: var(--dc-muted); overflow-wrap: anywhere; }
+#pageDashboardCompras .dc-summary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 16px; }
+#pageDashboardCompras .dc-card, #pageDashboardCompras .dc-section { min-width: 0; padding: 14px; border: 1px solid var(--dc-border); border-radius: 12px; background: var(--dc-surface); }
+#pageDashboardCompras .dc-section { margin-bottom: 16px; overflow-x: auto; }
+#pageDashboardCompras .dc-card > span { display: block; color: var(--dc-muted); font-size: 13px; line-height: 1.4; }
+#pageDashboardCompras .dc-card strong { display: block; margin-top: 8px; font-size: 22px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#pageDashboardCompras .dc-prev { margin: 6px 0 0; color: var(--dc-muted); font-size: 14px; overflow-wrap: anywhere; }
+#pageDashboardCompras .dc-change { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#pageDashboardCompras .dc-change[data-dc-trend="sube"] { color: var(--dc-up); }
+#pageDashboardCompras .dc-change[data-dc-trend="baja"] { color: var(--dc-down); }
+#pageDashboardCompras .dc-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#pageDashboardCompras .dc-table th, #pageDashboardCompras .dc-table td { padding: 8px; border-bottom: 1px solid var(--dc-border); text-align: right; overflow-wrap: anywhere; }
+#pageDashboardCompras .dc-table th:first-child, #pageDashboardCompras .dc-table td:first-child { text-align: left; }
+#pageDashboardCompras .dc-table th { color: var(--dc-muted); font-size: 13px; }
+#pageDashboardCompras .dc-notice { margin: 0 0 12px; padding: 12px; line-height: 1.5; border-radius: 8px; background: var(--dc-notice-bg); color: var(--dc-notice-text); overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  #pageDashboardCompras .dc-table thead { display: none; }
+  #pageDashboardCompras .dc-table tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--dc-border); }
+  #pageDashboardCompras .dc-table td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: right; }
+  #pageDashboardCompras .dc-table td::before { content: attr(data-label); color: var(--dc-muted); text-align: left; }
+  #pageDashboardCompras .dc-table td:first-child { font-weight: 700; }
+}
+@media (min-width: 768px) {
+  #pageDashboardCompras .dc-header { padding: 20px 24px; }
+  #pageDashboardCompras .dc-content { padding: 20px 24px 40px; }
+  #pageDashboardCompras .dc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
