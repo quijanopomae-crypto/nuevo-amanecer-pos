@@ -147,6 +147,8 @@ const PRECACHE_URLS = [
   './js/products/zip-reader.js',
   './css/codigos-duplicados.css',
   './js/inventory/codigos-duplicados.js',
+  './css/edicion-masiva-productos.css',
+  './js/modules/edicion-masiva-productos.js',
   './js/products/image-sync.js',
   './js/legacy-inline/inline-13.js',
   './js/modules/ticket/secure-print.js',
