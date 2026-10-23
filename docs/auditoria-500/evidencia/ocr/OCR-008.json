@@ -1,0 +1,16 @@
+{
+ "caso": "OCR-008",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {},
+ "aparato": {
+  "pdf:OCR-008": {
+   "ok": false,
+   "kind": "pdf",
+   "code": "pdf_password",
+   "mensaje_ui": "El PDF tiene contraseña. Suba una copia sin contraseña.",
+   "ms": 96
+  }
+ },
+ "log_servidor": []
+}

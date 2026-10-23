@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><base href="/"></head><body><div id="chat"></div>
+<script src="js/modules/asistente/asistente-pdf.js"></script>
+<script src="js/modules/asistente/asistente-boleta.js"></script>
+<script src="js/modules/asistente/asistente-producto-foto.js"></script>
+<script>
+window.__said = []; window.__filled = []; window.__newprod = []; window.__posts = [];
+window.__case = 'sin-caso';
+function host() {
+  var chat = document.getElementById('chat');
+  return { doc: document,
+    post: async function (path, body) { window.__posts.push({ path: path, hints: body.hints || null });
+      var r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-audit-case': window.__case, 'x-audit-role': window.__role || 'owner' }, body: JSON.stringify(body) });
+      var d = {}; try { d = await r.json(); } catch (_) {} if (!r.ok) { d.error = d.error || 'HTTP_' + r.status; d.status = r.status; } return d; },
+    productos: function () { return window.__productos || []; },
+    openPurchase: function () { return {}; }, fillPurchase: function (w, data) { window.__filled.push(data); },
+    openNewProduct: function (v) { window.__newprod.push(v); return true; },
+    card: function (cls) { var m = document.createElement('div'); m.className = 'na-asst-msg a ' + cls; chat.appendChild(m); return m; },
+    say: function (t) { window.__said.push(t); }, state: function () {}, busy: function () {} };
+}
+// igual que asistente-ui.js compress(): lado mayor 1600, JPEG 0.72
+function compress(blob) { return createImageBitmap(blob).then(function (bm) { var s = Math.min(1, 1600 / Math.max(bm.width, bm.height)), c = document.createElement('canvas');
+  c.width = Math.round(bm.width * s); c.height = Math.round(bm.height * s); c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.72); }); }
+</script></body></html>

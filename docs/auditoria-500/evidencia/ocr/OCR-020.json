@@ -1,0 +1,91 @@
+{
+ "caso": "OCR-020",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {
+  "OCR-020": {
+   "chat": {
+    "status": 403,
+    "ms": 14,
+    "d": {
+     "error": "admin_only",
+     "message": "El asistente es solo para el Admin."
+    }
+   },
+   "boleta": {
+    "status": 403,
+    "ms": 6,
+    "d": {
+     "error": "boleta_admin_only",
+     "message": "Leer boletas con IA es solo para el Admin."
+    }
+   }
+  }
+ },
+ "aparato": {
+  "boleta:OCR-020": {
+   "posts": 1,
+   "hints_enviados": [
+    []
+   ],
+   "dijo": [
+    "Leer boletas con IA es solo para el Admin."
+   ],
+   "ms": 40
+  }
+ },
+ "log_servidor": [
+  {
+   "caso": "OCR-020-chat",
+   "ruta": "/auth/assistant/chat",
+   "rol": "employee",
+   "sesion": "OCR-020-chat",
+   "status": 403,
+   "ms": 0,
+   "pedido": {
+    "image": "[imagen 96543 chars]",
+    "history": [],
+    "text": "Lee esta factura de compra",
+    "context": "[contexto 994 chars]"
+   },
+   "respuesta": {
+    "error": "admin_only",
+    "message": "El asistente es solo para el Admin."
+   },
+   "model_calls": []
+  },
+  {
+   "caso": "OCR-020-boleta-directo",
+   "ruta": "/auth/assistant/boleta",
+   "rol": "employee",
+   "sesion": "OCR-020-boleta-directo",
+   "status": 403,
+   "ms": 1,
+   "pedido": {
+    "image": "[imagen 96543 chars]"
+   },
+   "respuesta": {
+    "error": "boleta_admin_only",
+    "message": "Leer boletas con IA es solo para el Admin."
+   },
+   "model_calls": []
+  },
+  {
+   "caso": "OCR-020-boleta",
+   "ruta": "/auth/assistant/boleta",
+   "rol": "employee",
+   "sesion": "OCR-020-boleta",
+   "status": 403,
+   "ms": 0,
+   "pedido": {
+    "image": "[imagen 94911 chars]",
+    "hints": []
+   },
+   "respuesta": {
+    "error": "boleta_admin_only",
+    "message": "Leer boletas con IA es solo para el Admin."
+   },
+   "model_calls": []
+  }
+ ]
+}

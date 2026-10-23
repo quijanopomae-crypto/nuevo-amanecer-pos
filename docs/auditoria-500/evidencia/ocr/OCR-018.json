@@ -1,0 +1,372 @@
+{
+ "caso": "OCR-018",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {
+  "OCR-018": {
+   "status": 200,
+   "ms": 5717,
+   "reply": "Admin, la lectura guardada de la fila 3 dice 12 paquetes de GLOBOPOP y tú indicas 24, ¿lo cambio a 24 paquetes?",
+   "proposals": [],
+   "dropped": [],
+   "invoice_memory": true
+  }
+ },
+ "aparato": {
+  "dup:OCR-018": {
+   "posts": 1,
+   "hints_enviados": [
+    []
+   ],
+   "dijo": [],
+   "cabecera": [
+    "F001-004530",
+    "2026-10-20",
+    "322.4"
+   ],
+   "filas": [
+    [
+     "2",
+     "CJ",
+     "LG395",
+     "LECHE GLORIA 24 LATAS X 395GR",
+     "91",
+     "182"
+    ],
+    [
+     "3",
+     "UND",
+     "CHK16",
+     "GALLETA CHOKO 16X6X32G",
+     "28.8",
+     "86.4"
+    ],
+    [
+     "12",
+     "UND",
+     "GP3024",
+     "GLOBOPOP 30 BLS X 24 UN",
+     "4.5",
+     "54"
+    ]
+   ],
+   "aviso": "",
+   "marcas_historial": 0,
+   "nota": "Nada se guarda todavía. «Confirmar» abre «Nueva compra» llena; el stock sube solo cuando pulse «Registrar compra».",
+   "editado": {
+    "de": "12",
+    "a": "24"
+   },
+   "tras_confirmar": {
+    "boton": "Confirmar y abrir Nueva compra",
+    "aviso": "",
+    "dijo": [
+     "Abrí «Nueva compra» con 3 líneas. Revise y pulse «Registrar compra»."
+    ],
+    "compra_prellenada": [
+     {
+      "type": "compra",
+      "proveedor": "",
+      "documento": "F001-004530",
+      "lineas": [
+       {
+        "product_id": null,
+        "nombre": "LECHE GLORIA 24 LATAS X 395GR",
+        "cantidad": 2,
+        "costo_unitario": 91
+       },
+       {
+        "product_id": null,
+        "nombre": "GALLETA CHOKO 16X6X32G",
+        "cantidad": 3,
+        "costo_unitario": 28.8
+       },
+       {
+        "product_id": null,
+        "nombre": "GLOBOPOP 30 BLS X 24 UN",
+        "cantidad": 24,
+        "costo_unitario": 4.5
+       }
+      ]
+     }
+    ]
+   },
+   "localStorage": [
+    "na_asst_boletas"
+   ],
+   "ms": 8059
+  }
+ },
+ "log_servidor": [
+  {
+   "caso": "OCR-018",
+   "ruta": "/auth/assistant/chat",
+   "rol": "owner",
+   "sesion": "cadena-014",
+   "status": 200,
+   "ms": 5706,
+   "pedido": {
+    "history": [
+     {
+      "role": "user",
+      "content": "la segunda fila son 16x6x32g, cuantos paquetes son",
+      "firmado": true
+     },
+     {
+      "role": "assistant",
+      "content": "Admin, «16×6×32 g» parece indicar 16 paquetes de 6 piezas de 32 g por caja; si son 3 cajas, serían **48 paquetes**. ¿Las 3 unidades de esa fila son cajas?",
+      "firmado": true
+     },
+     {
+      "role": "user",
+      "content": "UND en esa boleta es paquete",
+      "firmado": true
+     },
+     {
+      "role": "assistant",
+      "content": "Admin, la segunda fila dice 3 UND y aclaraste que UND significa paquete: son **3 paquetes, no 48**. Mi cálculo anterior suponía que eran cajas.",
+      "firmado": true
+     },
+     {
+      "role": "user",
+      "content": "cuanto cuesta cada pieza de esa fila",
+      "firmado": true
+     },
+     {
+      "role": "assistant",
+      "content": "Admin, según la boleta y tu aclaración, cada paquete cuesta **S/ 28.80**. ¿Ese paquete trae 6 piezas o 16 grupos de 6 piezas?",
+      "firmado": true
+     },
+     {
+      "role": "user",
+      "content": "registrala",
+      "firmado": true
+     },
+     {
+      "role": "assistant",
+      "content": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+      "firmado": true
+     }
+    ],
+    "invoice_memory": "[token 2462 chars]",
+    "text": "la fila 3 dice 12 pero son 24, corrigelo",
+    "context": "[contexto 994 chars]"
+   },
+   "respuesta": {
+    "ok": true,
+    "mode": "ohmyagent",
+    "role": "owner",
+    "server_now": 1792770988132,
+    "reply": "Admin, la lectura guardada de la fila 3 dice 12 paquetes de GLOBOPOP y tú indicas 24, ¿lo cambio a 24 paquetes?",
+    "cut": false,
+    "turns": [
+     {
+      "role": "user",
+      "content": "la fila 3 dice 12 pero son 24, corrigelo"
+     },
+     {
+      "role": "assistant",
+      "content": "Admin, la lectura guardada de la fila 3 dice 12 paquetes de GLOBOPOP y tú indicas 24, ¿lo cambio a 24 paquetes?"
+     }
+    ],
+    "invoice_memory": "[token 2771 chars]",
+    "proposals": [],
+    "denied": [],
+    "dropped": [],
+    "left": {
+     "hoy": 144,
+     "fotosHoy": 29
+    },
+    "memoria": {
+     "max_turnos": 40,
+     "max_bytes": 48000,
+     "recortados": 0,
+     "resumen_necesario": false,
+     "resumen_usado": false
+    },
+    "payload_bytes": [
+     19304
+    ],
+    "timings": {
+     "ms_gates": 3,
+     "ms_model1": 5693,
+     "ms_db": 0,
+     "ms_total": 5697,
+     "provider": "ohmyagent",
+     "model": "gpt-6.1-sol",
+     "attempts": 1,
+     "fallback": false,
+     "db_stmts": 0
+    },
+    "usage": {
+     "prompt_tokens": 4558,
+     "completion_tokens": 39
+    }
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7429
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"p1\",\"nombre\":\"LECHE GLORIA EVAPORADA 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.79},{\"id\":\"p2\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":110,\"stock\":2,\"costo\":98.5},{\"id\":\"p3\",\"nombre\":\"WAFER NIK 6 UND\",\"precio\":0.7,\"stock\":20,\"costo\":0.53},{\"id\":\"p4\",\"nombre\":\"GLOBOPOP\",\"precio\":0.3,\"stock\":60,\"costo\":0.19},{\"id\":\"p5\",\"nombre\":\"ENCENDEDOR CLIPPER\",\"precio\":2,\"stock\":20,\"costo\":1.1},{\"id\":\"p6\",\"nombre\":\"GALLETA CHOKO 6 X 32G\",\"precio\":1,\"stock\":18,\"costo\":0.3},{\"id\":\"p7\",\"nombre\":\"Arroz Costeño 1 kg\",\"precio\":4,\"stock\":40,\"costo\":3.4},{\"id\":\"p8\",\"nombre\":\"Azúcar Rubia 1 kg\",\"precio\":4,\"stock\":20,\"costo\":3.4},{\"id\":\"p9\",\"nombre\":\"Aceite Primor 1 L\",\"precio\":11.5,\"stock\":8,\"costo\":9.8},{\"id\":\"p10\",\"nombre\":\"Fideo Don Vittorio Spaghetti 500 g\",\"precio\":3.2,\"stock\":20,\"costo\":2.6},{\"id\":\"p11\",\"nombre\":\"Inca Kola 500 ml\",\"precio\":2.5,\"stock\":36,\"costo\":1.6},{\"id\":\"p12\",\"nombre\":\"Coca-Cola 500 ml\",\"precio\":2.5,\"stock\":48,\"costo\":1.75}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>la segunda fila son 16x6x32g, cuantos paquetes son</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, «16×6×32 g» parece indicar 16 paquetes de 6 piezas de 32 g por caja; si son 3 cajas, serían **48 paquetes**. ¿Las 3 unidades de esa fila son cajas?"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>UND en esa boleta es paquete</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, la segunda fila dice 3 UND y aclaraste que UND significa paquete: son **3 paquetes, no 48**. Mi cálculo anterior suponía que eran cajas."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>cuanto cuesta cada pieza de esa fila</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, según la boleta y tu aclaración, cada paquete cuesta **S/ 28.80**. ¿Ese paquete trae 6 piezas o 16 grupos de 6 piezas?"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>registrala</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra."
+      },
+      {
+       "role": "user",
+       "content": "<boleta_recordada>\n{\"facturas\":[{\"proveedor\":\"DISTRIBUIDORA LOS ANDES S.A.C.\",\"documento\":\"F001-004530\",\"fecha\":\"\",\"lineas\":[{\"nombre\":\"LECHE GLORIA 24 LATAS X 395GR\",\"cantidad\":2,\"costo_unitario\":91},{\"nombre\":\"GALLETA CHOKO 16X6X32G\",\"cantidad\":3,\"costo_unitario\":28.8},{\"nombre\":\"GLOBOPOP 30 BLS X 24 UN\",\"cantidad\":12,\"costo_unitario\":4.5}]}],\"lectura\":\"Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.\",\"aclaraciones_del_usuario\":[{\"usuario\":\"la segunda fila son 16x6x32g, cuantos paquetes son\",\"pregunta_previa\":\"Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.\"},{\"usuario\":\"UND en esa boleta es paquete\",\"pregunta_previa\":\"Admin, «16×6×32 g» parece indicar 16 paquetes de 6 piezas de 32 g por caja; si son 3 cajas, serían **48 paquetes**. ¿Las 3 unidades de esa fila son cajas?\"},{\"usuario\":\"registrala\",\"pregunta_previa\":\"Admin, según la boleta y tu aclaración, cada paquete cuesta **S/ 28.80**. ¿Ese paquete trae 6 piezas o 16 grupos de 6 piezas?\"}]}\n</boleta_recordada>"
+      },
+      {
+       "role": "user",
+       "content": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"la segunda fila son 16x6x32g, cuantos paquetes son\"]}\n</ensenado_por_usuario>"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>la fila 3 dice 12 pero son 24, corrigelo</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_082309266e9c0019006adb83aef8588195bbfa44eae70114f5\",\"object\":\"chat.completion\",\"created\":1792770993,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, la lectura guardada de la fila 3 dice 12 paquetes de GLOBOPOP y tú indicas 24, ¿lo cambio a 24 paquetes?\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4558,\"completion_tokens\":39,\"total_tokens\":4597}}"
+     }
+    }
+   ]
+  },
+  {
+   "caso": "OCR-018-boleta",
+   "ruta": "/auth/assistant/boleta",
+   "rol": "owner",
+   "sesion": "OCR-018-boleta",
+   "status": 200,
+   "ms": 8006,
+   "pedido": {
+    "image": "[imagen 94911 chars]",
+    "hints": []
+   },
+   "respuesta": {
+    "ok": true,
+    "boleta": {
+     "numero": "F001-004530",
+     "fecha": "2026-10-20",
+     "items": [
+      {
+       "cant": 2,
+       "um": "CJ",
+       "cod": "LG395",
+       "descripcion": "LECHE GLORIA 24 LATAS X 395GR",
+       "precio_unit": 91,
+       "importe": 182
+      },
+      {
+       "cant": 3,
+       "um": "UND",
+       "cod": "CHK16",
+       "descripcion": "GALLETA CHOKO 16X6X32G",
+       "precio_unit": 28.8,
+       "importe": 86.4
+      },
+      {
+       "cant": 12,
+       "um": "UND",
+       "cod": "GP3024",
+       "descripcion": "GLOBOPOP 30 BLS X 24 UN",
+       "precio_unit": 4.5,
+       "importe": 54
+      }
+     ],
+     "total": 322.4,
+     "rotacion": 0
+    },
+    "checks": {
+     "nulls": 0,
+     "cells": 21,
+     "null_ratio": 0,
+     "sum": 322.4,
+     "total_mismatch": false,
+     "mostly_null": false,
+     "rotated": false
+    },
+    "nota": "[Foto leída] boleta de proveedor: 3 productos, 17 unidades, total S/ 322.40, comprobante F001-004530, fecha 2026-10-20.",
+    "ms": 8004,
+    "model": "gpt-6.1-sol"
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": null,
+     "messages": [
+      {
+       "role": "system",
+       "chars": 72
+      },
+      {
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "Lee esta boleta o factura de un proveedor (Perú). Responde SOLO con un objeto JSON, sin texto antes ni después, sin markdown, con esta forma exacta: {\"numero\": string|null, \"fecha\": \"AAAA-MM-DD\"|null, \"items\": [{\"cant\": number|null, \"um\": string|null, \"cod\": string|null, \"descripcion\": string|null, \"precio_unit\": number|null, \"importe\": number|null}], \"total\": number|null, \"rotacion\": 0|90|180|270}. Usa null para todo lo que no se lea con seguridad; no inventes. Montos en soles como número con punto decimal, sin «S/». Una fila por producto. \"rotacion\" = grados que hay que girar la foto en el sentido del reloj para que el texto quede derecho (0 si ya está derecho)."
+        },
+        {
+         "type": "image_url",
+         "image_url": "[imagen 94911 chars]"
+        }
+       ]
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_056f1f704ad8018c006adb8483ff148190bfe54428dbcec910\",\"object\":\"chat.completion\",\"created\":1792771207,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"numero\\\":\\\"F001-004530\\\",\\\"fecha\\\":\\\"2026-10-20\\\",\\\"items\\\":[{\\\"cant\\\":2,\\\"um\\\":\\\"CJ\\\",\\\"cod\\\":\\\"LG395\\\",\\\"descripcion\\\":\\\"LECHE GLORIA 24 LATAS X 395GR\\\",\\\"precio_unit\\\":91.00,\\\"importe\\\":182.00},{\\\"cant\\\":3,\\\"um\\\":\\\"UND\\\",\\\"cod\\\":\\\"CHK16\\\",\\\"descripcion\\\":\\\"GALLETA CHOKO 16X6X32G\\\",\\\"precio_unit\\\":28.80,\\\"importe\\\":86.40},{\\\"cant\\\":12,\\\"um\\\":\\\"UND\\\",\\\"cod\\\":\\\"GP3024\\\",\\\"descripcion\\\":\\\"GLOBOPOP 30 BLS X 24 UN\\\",\\\"precio_unit\\\":4.50,\\\"importe\\\":54.00}],\\\"total\\\":322.40,\\\"rotacion\\\":0}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1473,\"completion_tokens\":162,\"total_tokens\":1635}}"
+     }
+    }
+   ]
+  }
+ ]
+}

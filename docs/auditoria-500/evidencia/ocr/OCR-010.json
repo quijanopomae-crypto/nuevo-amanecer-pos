@@ -1,0 +1,207 @@
+{
+ "caso": "OCR-010",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {
+  "OCR-010": {
+   "status": 200,
+   "ms": 8940,
+   "d": {
+    "ok": true,
+    "producto": {
+     "nombre": "Leche evaporada entera",
+     "marca": "Gloria",
+     "presentacion": null,
+     "contenido": "395 g",
+     "unidad": "g",
+     "codigo_barras": "7751270001343",
+     "codigo_leido": "7751270001343",
+     "precio_etiqueta": null,
+     "categoria": "Lácteos",
+     "rotacion": 0,
+     "nombre_sugerido": "Leche evaporada entera Gloria 395 g"
+    },
+    "checks": {
+     "nulls": 1,
+     "sin_nombre": false,
+     "barcode_invalid": false,
+     "mostly_null": false,
+     "rotated": false
+    },
+    "ms": 8927,
+    "model": "gpt-6.1-sol"
+   }
+  }
+ },
+ "aparato": {
+  "prod:OCR-010": {
+   "texto_tarjeta": "Esto leí de la etiqueta. Revíselo antes de abrir «Nuevo producto»:Marca: Gloria · Contenido: 395 gNombreCódigo de barrasPrecio de venta S/Costo S/ (opcional)Categoría sugerida: Lácteos (se elige en el formulario si ya existe).Abrir «Nuevo producto»",
+   "campos": [
+    {
+     "valor": "Leche evaporada entera Gloria 395 g",
+     "placeholder": ""
+    },
+    {
+     "valor": "7751270001343",
+     "placeholder": ""
+    },
+    {
+     "valor": "",
+     "placeholder": ""
+    },
+    {
+     "valor": "",
+     "placeholder": ""
+    }
+   ],
+   "nuevo_producto_prellenado": [
+    {
+     "nombre": "Leche evaporada entera Gloria 395 g",
+     "codigo_barras": "7751270001343",
+     "precio": null,
+     "costo": null,
+     "unidad": "g",
+     "categoria": "Lácteos"
+    }
+   ],
+   "dijo": [
+    "Listo: dejé los datos en «Nuevo producto». Revise y pulse Guardar para crearlo."
+   ],
+   "ms": 8207
+  }
+ },
+ "log_servidor": [
+  {
+   "caso": "OCR-010-ruta",
+   "ruta": "/auth/assistant/producto-foto",
+   "rol": "owner",
+   "sesion": "OCR-010-ruta",
+   "status": 200,
+   "ms": 8934,
+   "pedido": {
+    "image": "[imagen 104683 chars]"
+   },
+   "respuesta": {
+    "ok": true,
+    "producto": {
+     "nombre": "Leche evaporada entera",
+     "marca": "Gloria",
+     "presentacion": null,
+     "contenido": "395 g",
+     "unidad": "g",
+     "codigo_barras": "7751270001343",
+     "codigo_leido": "7751270001343",
+     "precio_etiqueta": null,
+     "categoria": "Lácteos",
+     "rotacion": 0,
+     "nombre_sugerido": "Leche evaporada entera Gloria 395 g"
+    },
+    "checks": {
+     "nulls": 1,
+     "sin_nombre": false,
+     "barcode_invalid": false,
+     "mostly_null": false,
+     "rotated": false
+    },
+    "ms": 8927,
+    "model": "gpt-6.1-sol"
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": null,
+     "messages": [
+      {
+       "role": "system",
+       "chars": 87
+      },
+      {
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "Lee la etiqueta o el empaque de este producto de una bodega o botica (Perú). Responde SOLO con un objeto JSON, sin texto antes ni después, sin markdown, con esta forma exacta: {\"nombre\": string|null, \"marca\": string|null, \"presentacion\": string|null, \"contenido\": string|null, \"unidad\": string|null, \"codigo_barras\": string|null, \"precio_etiqueta\": number|null, \"categoria\": string|null, \"rotacion\": 0|90|180|270}. \"nombre\" = nombre comercial del producto (sin la marca si ya va aparte). \"presentacion\" = forma (tableta, jarabe, caja, botella, sobre…). \"contenido\" = cantidad y medida (500 mg, 120 ml, 1 kg, x 100 tabletas). \"codigo_barras\" = SOLO los dígitos impresos bajo el código de barras. \"precio_etiqueta\" = precio impreso en soles, si hay. Usa null para todo lo que no se lea con seguridad; no inventes. No transcribas lote, registro sanitario, RUC, teléfonos ni direcciones. \"rotacion\" = grados que hay que girar la foto en el sentido del reloj para que el texto quede derecho (0 si ya está derecho)."
+        },
+        {
+         "type": "image_url",
+         "image_url": "[imagen 104683 chars]"
+        }
+       ]
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0ead4ed78cd0f735006adb8387af00819798cf24699f85799a\",\"object\":\"chat.completion\",\"created\":1792770954,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"nombre\\\":\\\"Leche evaporada entera\\\",\\\"marca\\\":\\\"Gloria\\\",\\\"presentacion\\\":null,\\\"contenido\\\":\\\"395 g\\\",\\\"unidad\\\":\\\"g\\\",\\\"codigo_barras\\\":\\\"7751270001343\\\",\\\"precio_etiqueta\\\":null,\\\"categoria\\\":\\\"Lácteos\\\",\\\"rotacion\\\":0}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1875,\"completion_tokens\":62,\"total_tokens\":1937}}"
+     }
+    }
+   ]
+  },
+  {
+   "caso": "OCR-010",
+   "ruta": "/auth/assistant/producto-foto",
+   "rol": "owner",
+   "sesion": "OCR-010",
+   "status": 200,
+   "ms": 8182,
+   "pedido": {
+    "image": "[imagen 104683 chars]"
+   },
+   "respuesta": {
+    "ok": true,
+    "producto": {
+     "nombre": "Leche evaporada entera",
+     "marca": "Gloria",
+     "presentacion": null,
+     "contenido": "395 g",
+     "unidad": "g",
+     "codigo_barras": "7751270001343",
+     "codigo_leido": "7751270001343",
+     "precio_etiqueta": null,
+     "categoria": "Lácteos",
+     "rotacion": 0,
+     "nombre_sugerido": "Leche evaporada entera Gloria 395 g"
+    },
+    "checks": {
+     "nulls": 1,
+     "sin_nombre": false,
+     "barcode_invalid": false,
+     "mostly_null": false,
+     "rotated": false
+    },
+    "ms": 8180,
+    "model": "gpt-6.1-sol"
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": null,
+     "messages": [
+      {
+       "role": "system",
+       "chars": 87
+      },
+      {
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "Lee la etiqueta o el empaque de este producto de una bodega o botica (Perú). Responde SOLO con un objeto JSON, sin texto antes ni después, sin markdown, con esta forma exacta: {\"nombre\": string|null, \"marca\": string|null, \"presentacion\": string|null, \"contenido\": string|null, \"unidad\": string|null, \"codigo_barras\": string|null, \"precio_etiqueta\": number|null, \"categoria\": string|null, \"rotacion\": 0|90|180|270}. \"nombre\" = nombre comercial del producto (sin la marca si ya va aparte). \"presentacion\" = forma (tableta, jarabe, caja, botella, sobre…). \"contenido\" = cantidad y medida (500 mg, 120 ml, 1 kg, x 100 tabletas). \"codigo_barras\" = SOLO los dígitos impresos bajo el código de barras. \"precio_etiqueta\" = precio impreso en soles, si hay. Usa null para todo lo que no se lea con seguridad; no inventes. No transcribas lote, registro sanitario, RUC, teléfonos ni direcciones. \"rotacion\" = grados que hay que girar la foto en el sentido del reloj para que el texto quede derecho (0 si ya está derecho)."
+        },
+        {
+         "type": "image_url",
+         "image_url": "[imagen 104683 chars]"
+        }
+       ]
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_08b9453e12d1916d006adb8457f03c8196ba5324a69f807b93\",\"object\":\"chat.completion\",\"created\":1792771164,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"nombre\\\":\\\"Leche evaporada entera\\\",\\\"marca\\\":\\\"Gloria\\\",\\\"presentacion\\\":null,\\\"contenido\\\":\\\"395 g\\\",\\\"unidad\\\":\\\"g\\\",\\\"codigo_barras\\\":\\\"7751270001343\\\",\\\"precio_etiqueta\\\":null,\\\"categoria\\\":\\\"Lácteos\\\",\\\"rotacion\\\":0}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1875,\"completion_tokens\":62,\"total_tokens\":1937}}"
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "caso": "OCR-009",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {},
+ "aparato": {
+  "pdf:OCR-009": {
+   "kind_pdf_module": "doc"
+  }
+ },
+ "log_servidor": []
+}

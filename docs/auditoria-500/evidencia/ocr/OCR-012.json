@@ -1,0 +1,320 @@
+{
+ "caso": "OCR-012",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {},
+ "aparato": {
+  "dup:OCR-012": {
+   "primera": {
+    "posts": 1,
+    "hints_enviados": [
+     []
+    ],
+    "dijo": [],
+    "cabecera": [
+     "F001-004530",
+     "2026-10-20",
+     "322.4"
+    ],
+    "filas": [
+     [
+      "2",
+      "CJ",
+      "LG395",
+      "LECHE GLORIA 24 LATAS X 395GR",
+      "91",
+      "182"
+     ],
+     [
+      "3",
+      "UND",
+      "CHK16",
+      "GALLETA CHOKO 16X6X32G",
+      "28.8",
+      "86.4"
+     ],
+     [
+      "12",
+      "UND",
+      "GP3024",
+      "GLOBOPOP 30 BLS X 24 UN",
+      "4.5",
+      "54"
+     ]
+    ],
+    "aviso": "",
+    "marcas_historial": 0,
+    "nota": "Nada se guarda todavía. «Confirmar» abre «Nueva compra» llena; el stock sube solo cuando pulse «Registrar compra».",
+    "tras_confirmar": {
+     "boton": "Confirmar y abrir Nueva compra",
+     "aviso": "",
+     "dijo": [
+      "Abrí «Nueva compra» con 3 líneas. Revise y pulse «Registrar compra»."
+     ],
+     "compra_prellenada": [
+      {
+       "type": "compra",
+       "proveedor": "",
+       "documento": "F001-004530",
+       "lineas": [
+        {
+         "product_id": null,
+         "nombre": "LECHE GLORIA 24 LATAS X 395GR",
+         "cantidad": 2,
+         "costo_unitario": 91
+        },
+        {
+         "product_id": null,
+         "nombre": "GALLETA CHOKO 16X6X32G",
+         "cantidad": 3,
+         "costo_unitario": 28.8
+        },
+        {
+         "product_id": null,
+         "nombre": "GLOBOPOP 30 BLS X 24 UN",
+         "cantidad": 12,
+         "costo_unitario": 4.5
+        }
+       ]
+      }
+     ]
+    },
+    "localStorage": [
+     "na_asst_boletas"
+    ],
+    "ms": 8391
+   },
+   "segunda": {
+    "posts": 1,
+    "hints_enviados": [
+     []
+    ],
+    "dijo": [],
+    "cabecera": [
+     "F001-004530",
+     "2026-10-20",
+     "322.4"
+    ],
+    "filas": [
+     [
+      "2",
+      "CJ",
+      "LG395",
+      "LECHE GLORIA 24 LATAS X 395GR",
+      "91",
+      "182"
+     ],
+     [
+      "3",
+      "UND",
+      "CHK16",
+      "GALLETA CHOKO 16X6X32G",
+      "28.8",
+      "86.4"
+     ],
+     [
+      "12",
+      "UND",
+      "GP3024",
+      "GLOBOPOP 30 BLS X 24 UN",
+      "4.5",
+      "54"
+     ]
+    ],
+    "aviso": "",
+    "marcas_historial": 0,
+    "nota": "Nada se guarda todavía. «Confirmar» abre «Nueva compra» llena; el stock sube solo cuando pulse «Registrar compra».",
+    "tras_confirmar": {
+     "boton": "Sí, es otra compra",
+     "aviso": "Esta boleta ya se confirmó en este aparato el 2026-10-23. Si es otra compra, pulse «Sí, es otra compra».",
+     "dijo": [],
+     "compra_prellenada": []
+    },
+    "localStorage": [
+     "na_asst_boletas"
+    ],
+    "ms": 9979
+   }
+  }
+ },
+ "log_servidor": [
+  {
+   "caso": "OCR-012-a",
+   "ruta": "/auth/assistant/boleta",
+   "rol": "owner",
+   "sesion": "OCR-012-a",
+   "status": 200,
+   "ms": 8336,
+   "pedido": {
+    "image": "[imagen 94911 chars]",
+    "hints": []
+   },
+   "respuesta": {
+    "ok": true,
+    "boleta": {
+     "numero": "F001-004530",
+     "fecha": "2026-10-20",
+     "items": [
+      {
+       "cant": 2,
+       "um": "CJ",
+       "cod": "LG395",
+       "descripcion": "LECHE GLORIA 24 LATAS X 395GR",
+       "precio_unit": 91,
+       "importe": 182
+      },
+      {
+       "cant": 3,
+       "um": "UND",
+       "cod": "CHK16",
+       "descripcion": "GALLETA CHOKO 16X6X32G",
+       "precio_unit": 28.8,
+       "importe": 86.4
+      },
+      {
+       "cant": 12,
+       "um": "UND",
+       "cod": "GP3024",
+       "descripcion": "GLOBOPOP 30 BLS X 24 UN",
+       "precio_unit": 4.5,
+       "importe": 54
+      }
+     ],
+     "total": 322.4,
+     "rotacion": 0
+    },
+    "checks": {
+     "nulls": 0,
+     "cells": 21,
+     "null_ratio": 0,
+     "sum": 322.4,
+     "total_mismatch": false,
+     "mostly_null": false,
+     "rotated": false
+    },
+    "nota": "[Foto leída] boleta de proveedor: 3 productos, 17 unidades, total S/ 322.40, comprobante F001-004530, fecha 2026-10-20.",
+    "ms": 8335,
+    "model": "gpt-6.1-sol"
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": null,
+     "messages": [
+      {
+       "role": "system",
+       "chars": 72
+      },
+      {
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "Lee esta boleta o factura de un proveedor (Perú). Responde SOLO con un objeto JSON, sin texto antes ni después, sin markdown, con esta forma exacta: {\"numero\": string|null, \"fecha\": \"AAAA-MM-DD\"|null, \"items\": [{\"cant\": number|null, \"um\": string|null, \"cod\": string|null, \"descripcion\": string|null, \"precio_unit\": number|null, \"importe\": number|null}], \"total\": number|null, \"rotacion\": 0|90|180|270}. Usa null para todo lo que no se lea con seguridad; no inventes. Montos en soles como número con punto decimal, sin «S/». Una fila por producto. \"rotacion\" = grados que hay que girar la foto en el sentido del reloj para que el texto quede derecho (0 si ya está derecho)."
+        },
+        {
+         "type": "image_url",
+         "image_url": "[imagen 94911 chars]"
+        }
+       ]
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_05ce5a4c969751e2006adb84590d80819497a7a15d3fb2d51c\",\"object\":\"chat.completion\",\"created\":1792771165,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"numero\\\":\\\"F001-004530\\\",\\\"fecha\\\":\\\"2026-10-20\\\",\\\"items\\\":[{\\\"cant\\\":2,\\\"um\\\":\\\"CJ\\\",\\\"cod\\\":\\\"LG395\\\",\\\"descripcion\\\":\\\"LECHE GLORIA 24 LATAS X 395GR\\\",\\\"precio_unit\\\":91.00,\\\"importe\\\":182.00},{\\\"cant\\\":3,\\\"um\\\":\\\"UND\\\",\\\"cod\\\":\\\"CHK16\\\",\\\"descripcion\\\":\\\"GALLETA CHOKO 16X6X32G\\\",\\\"precio_unit\\\":28.80,\\\"importe\\\":86.40},{\\\"cant\\\":12,\\\"um\\\":\\\"UND\\\",\\\"cod\\\":\\\"GP3024\\\",\\\"descripcion\\\":\\\"GLOBOPOP 30 BLS X 24 UN\\\",\\\"precio_unit\\\":4.50,\\\"importe\\\":54.00}],\\\"total\\\":322.40,\\\"rotacion\\\":0}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1473,\"completion_tokens\":162,\"total_tokens\":1635}}"
+     }
+    }
+   ]
+  },
+  {
+   "caso": "OCR-012-b",
+   "ruta": "/auth/assistant/boleta",
+   "rol": "owner",
+   "sesion": "OCR-012-b",
+   "status": 200,
+   "ms": 9898,
+   "pedido": {
+    "image": "[imagen 94911 chars]",
+    "hints": []
+   },
+   "respuesta": {
+    "ok": true,
+    "boleta": {
+     "numero": "F001-004530",
+     "fecha": "2026-10-20",
+     "items": [
+      {
+       "cant": 2,
+       "um": "CJ",
+       "cod": "LG395",
+       "descripcion": "LECHE GLORIA 24 LATAS X 395GR",
+       "precio_unit": 91,
+       "importe": 182
+      },
+      {
+       "cant": 3,
+       "um": "UND",
+       "cod": "CHK16",
+       "descripcion": "GALLETA CHOKO 16X6X32G",
+       "precio_unit": 28.8,
+       "importe": 86.4
+      },
+      {
+       "cant": 12,
+       "um": "UND",
+       "cod": "GP3024",
+       "descripcion": "GLOBOPOP 30 BLS X 24 UN",
+       "precio_unit": 4.5,
+       "importe": 54
+      }
+     ],
+     "total": 322.4,
+     "rotacion": 0
+    },
+    "checks": {
+     "nulls": 0,
+     "cells": 21,
+     "null_ratio": 0,
+     "sum": 322.4,
+     "total_mismatch": false,
+     "mostly_null": false,
+     "rotated": false
+    },
+    "nota": "[Foto leída] boleta de proveedor: 3 productos, 17 unidades, total S/ 322.40, comprobante F001-004530, fecha 2026-10-20.",
+    "ms": 9896,
+    "model": "gpt-6.1-sol"
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": null,
+     "messages": [
+      {
+       "role": "system",
+       "chars": 72
+      },
+      {
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "Lee esta boleta o factura de un proveedor (Perú). Responde SOLO con un objeto JSON, sin texto antes ni después, sin markdown, con esta forma exacta: {\"numero\": string|null, \"fecha\": \"AAAA-MM-DD\"|null, \"items\": [{\"cant\": number|null, \"um\": string|null, \"cod\": string|null, \"descripcion\": string|null, \"precio_unit\": number|null, \"importe\": number|null}], \"total\": number|null, \"rotacion\": 0|90|180|270}. Usa null para todo lo que no se lea con seguridad; no inventes. Montos en soles como número con punto decimal, sin «S/». Una fila por producto. \"rotacion\" = grados que hay que girar la foto en el sentido del reloj para que el texto quede derecho (0 si ya está derecho)."
+        },
+        {
+         "type": "image_url",
+         "image_url": "[imagen 94911 chars]"
+        }
+       ]
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_07647ad6a2b54283006adb8460d4608194ae32f81f6918e1ef\",\"object\":\"chat.completion\",\"created\":1792771175,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"numero\\\":\\\"F001-004530\\\",\\\"fecha\\\":\\\"2026-10-20\\\",\\\"items\\\":[{\\\"cant\\\":2,\\\"um\\\":\\\"CJ\\\",\\\"cod\\\":\\\"LG395\\\",\\\"descripcion\\\":\\\"LECHE GLORIA 24 LATAS X 395GR\\\",\\\"precio_unit\\\":91.00,\\\"importe\\\":182.00},{\\\"cant\\\":3,\\\"um\\\":\\\"UND\\\",\\\"cod\\\":\\\"CHK16\\\",\\\"descripcion\\\":\\\"GALLETA CHOKO 16X6X32G\\\",\\\"precio_unit\\\":28.80,\\\"importe\\\":86.40},{\\\"cant\\\":12,\\\"um\\\":\\\"UND\\\",\\\"cod\\\":\\\"GP3024\\\",\\\"descripcion\\\":\\\"GLOBOPOP 30 BLS X 24 UN\\\",\\\"precio_unit\\\":4.50,\\\"importe\\\":54.00}],\\\"total\\\":322.40,\\\"rotacion\\\":0}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1473,\"completion_tokens\":162,\"total_tokens\":1635}}"
+     }
+    }
+   ]
+  }
+ ]
+}
