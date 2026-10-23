@@ -367,3 +367,11 @@ test('#995 «registra un pago de deuda de cliente #5» es una acción: sin regla
     assert.ok(!(m.calls || []).some((c) => /cobros_creditos/.test(c.function?.arguments ?? c.arguments ?? JSON.stringify(c))), 'mock ' + text);
   }
 });
+
+test('#995 + #998: con el mensaje tapado para el modelo («doña [nombre oculto]»), la detección de cobros sigue sobre el texto original', async () => {
+  const { r, cap } = await route('ya vino doña Rosa. ¿cuánto cobré de fiados esta semana?', [{ content: '', tool_calls: [call('consultar', { tipo: 'ventas_periodo', periodo: 'esta_semana' })] }]);
+  assert.equal(r.status, 200); const d = await r.json();
+  assert.equal(d.reply.trim(), 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 44.00 en 3 cobros.');
+  assert.match(JSON.parse(cap[0]).messages[0].content, /COBROS DE FIADOS/);
+  noNames(cap);
+});
