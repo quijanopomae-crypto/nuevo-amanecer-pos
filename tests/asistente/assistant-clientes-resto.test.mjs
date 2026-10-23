@@ -11,7 +11,9 @@
 // Nunca van nombres de clientes a la IA (solo C-000N). DeepSeek siempre simulado.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantChatRoute, createMemoryUsageStore, systemPrompt, employeeQueryDenied } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { readFileSync, readdirSync } from 'node:fs';
+import { mockAssistantReply } from '../../tools/cloudflare-lab/src/pos-assistant-mock.js';
+import { assistantChatRoute, createMemoryUsageStore, systemPrompt, employeeQueryDenied, clientAlternatives } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { memoryReader, runAssistantQuery } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 
 const SECRET = 'secreto-de-prueba-0123456789abcdef';
@@ -124,7 +126,7 @@ test('CLI-025 si la IA consulta solo uno de los dos: no elige; pregunta cuál co
     const b = stream ? sseEvents(text).find((e) => e.e === 'final').d : JSON.parse(text);
     assert.match(b.reply, /cliente #1\b/); assert.match(b.reply, /cliente #13\b/); assert.match(b.reply, /¿/);
     assert.ok(!/debe S\/|120/.test(b.reply), 'eligió uno: ' + b.reply);
-    assert.match(b.reply, /Clientes > /); assert.match(b.reply, /Abonar/);
+    assert.match(b.reply, /Clientes > /); assert.match(b.reply, /Registrar pago/); assert.ok(!/Abonar/.test(b.reply), 'botón que no existe: ' + b.reply);
     assert.ok(!(b.proposals || []).some((p) => p.type === 'consulta'), JSON.stringify(b.proposals));
     noNames(cap);
   }
@@ -134,8 +136,54 @@ test('CLI-025 si la IA ya pregunta cuál: se agregan los pasos a mano para el pa
   const { r, cap } = await route(ROSA, (i, body) => { const [a, c] = neutralCodes(body); return ({ content: '¿El pago es de cliente #' + a + ' o de cliente #' + c + '?' }); });
   const b = await r.json(); assert.equal(r.status, 200);
   assert.match(b.reply, /cliente #1 o de cliente #13/);
-  assert.match(b.reply, /Clientes > ficha/); assert.match(b.reply, /Abonar/); assert.match(b.reply, /no cambia deudas/);
+  assert.match(b.reply, /Clientes > toque al cliente \(Ficha financiera\) > HISTORIAL DE PAGOS/); assert.match(b.reply, /Registrar pago/);
+  assert.match(b.reply, /CUENTAS Y CRÉDITOS/); assert.ok(!/Abonar/.test(b.reply), 'botón que no existe: ' + b.reply); assert.match(b.reply, /no cambia deudas/);
   noNames(cap);
+});
+
+// (revisión #1006) «Abonar» no existe en la app: en la ficha del cliente («Ficha financiera») el botón es «Registrar pago» (en CUENTAS Y
+// CRÉDITOS) y los abonos están en HISTORIAL DE PAGOS (GESTIÓN DEL CLIENTE). Mismo nombre en el teléfono y en la PC (misma app web).
+test('revisión #1006: ningún paso ni botón del asistente dice «Abonar» (no existe); «Anular abono» y «abono/abonos» siguen bien', () => {
+  const dir = new URL('../../tools/cloudflare-lab/src/', import.meta.url);
+  // Solo el texto visible: literales de cadena fuera de comentarios. Las regex (p. ej. DEBT_VERB con «abona/abonaba») no cuentan.
+  const strings = (src) => [...src.replace(/^\s*\/\/.*$/gm, '').matchAll(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g)].map((m) => m[0]);
+  const BUTTON = /(?<![\p{L}])Abonar(?![\p{L}])|«\s*abonar\s*»/iu;
+  for (const f of readdirSync(dir).filter((n) => /^pos-assistant.*\.js$/.test(n))) {
+    const bad = strings(readFileSync(new URL(f, dir), 'utf8')).filter((x) => BUTTON.test(x));
+    assert.deepEqual(bad.map((x) => x.slice(0, 120)), [], f + ' nombra «Abonar»');
+  }
+  for (const role of ['owner', 'empleado:consultas']) for (const t of ['hola', ROSA, '¿cómo registro un abono?'])
+    assert.ok(!BUTTON.test(systemPrompt(role, {}, t)), role + ': ' + t);
+  assert.match(systemPrompt('owner', {}, 'hola'), /Abono = Clientes > cliente > CUENTAS Y CRÉDITOS > Registrar pago/);
+  const pasos = JSON.stringify(mockAssistantReply({ role: 'owner', ctx: {}, text: 'como registro un abono' }));
+  assert.match(pasos, /Registrar pago/); assert.match(pasos, /Ficha financiera/); assert.match(pasos, /CUENTAS Y CRÉDITOS/); assert.ok(!BUTTON.test(pasos), pasos);
+  assert.ok(!BUTTON.test('Anular abono') && !BUTTON.test('sus abonos') && !BUTTON.test('el cliente abona'), 'el filtro no toca «abono»');
+});
+
+// (revisión #1006) La regla VARIOS CLIENTES (con los pasos a mano) es solo del Admin: el empleado no consulta deudas de clientes.
+test('revisión #1006: VARIOS CLIENTES y sus pasos a mano solo van en el prompt del Admin', () => {
+  const owner = systemPrompt('owner', {}, ROSA);
+  assert.match(owner, /VARIOS CLIENTES/); assert.match(owner, /HISTORIAL DE PAGOS/); assert.match(owner, /Registrar pago/);
+  for (const role of ['empleado:consultas', 'empleado', 'empleado:costos']) {
+    const p = systemPrompt(role, {}, ROSA);
+    assert.ok(!/VARIOS CLIENTES|HISTORIAL DE PAGOS|pasos a mano/.test(p), role);
+  }
+});
+
+// (revisión #1006) El aparato junta los clientes con el mismo nombre solo con « o »; una lista con comas son clientes distintos.
+test('revisión #1006: la regla de «mismo nombre» sale solo con « o », no con una lista separada por comas', async () => {
+  for (const t of ['cuánto deben cliente #1, cliente #2', 'cliente #1, cliente #2 y cliente #3 me pagaron', 'cliente #1 y cliente #2 pagaron']) {
+    assert.ok(clientAlternatives(t).length <= 1, t + ' → ' + clientAlternatives(t));
+    assert.ok(!/VARIOS CLIENTES/.test(systemPrompt('owner', {}, t)), t);
+  }
+  assert.deepEqual(clientAlternatives('cliente #1 o cliente #13'), ['1', '13']);
+  assert.deepEqual(clientAlternatives('¿es cliente #1 o cliente #13 o cliente #20?'), ['1', '13', '20']);
+  // Con comas y la IA consulta solo a uno: se responde normal, sin «¿es cliente #1 o …?» ni pasos a mano.
+  const { r } = await route('cuánto me pagaron cliente #1, cliente #13', (i, body) => i === 0
+    ? ({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: neutralCodes(body)[0] })] })
+    : ({ content: 'Listo.' }));
+  const b = await r.json(); assert.equal(r.status, 200);
+  assert.ok(!/más de un cliente posible|HISTORIAL DE PAGOS/.test(b.reply), b.reply);
 });
 
 test('CLI-025 consultar los dos está bien (no se borra nada)', async () => {
