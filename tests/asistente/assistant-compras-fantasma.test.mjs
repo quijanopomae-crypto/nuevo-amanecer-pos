@@ -149,3 +149,25 @@ test('1) tamaños distintos no se tapan: si el modelo solo puso la Coca-Cola 1.5
   assert.deepEqual(r[0], ['p14', 'Coca-Cola 1.5 L', 12, 5.4]);
   assert.equal(r[1][2], 24); assert.equal(r[1][3], 1.85); assert.match(r[1][1], /coca.cola 500/i);
 });
+
+// ---------- 3b) revisión de alfa: el empleado no puede ajustar stock, así que no se le ofrece el movimiento ----------
+async function chatAs(role, text, message) {
+  const res = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text, context: { products: PRODUCTS } }) }), env,
+    role === 'owner' ? auth : { principalId: 'session:emp', posRole: 'empleado' }, (d, s = 200) => new Response(JSON.stringify(d), { status: s }), {
+      store: createMemoryUsageStore(), now: () => 200000, resolveRole: async () => role, audit: async () => {}, reader: READER,
+      fetch: async () => new Response(JSON.stringify({ choices: [{ message }] })) });
+  return res.json();
+}
+test('3) CP-027 empleado: «borra la compra» sin ofrecerle el movimiento (no puede ajustar stock): «pídeselo al Admin»; el Admin sigue con la oferta', async () => {
+  const invented = { content: 'Borrar una compra se hace a mano en Inventario > Compras.' };
+  for (const role of ['empleado:completo', 'empleado:consultas']) {
+    const body = await chatAs(role, 'borra la compra que hice hoy', invented);
+    assert.match(body.reply, /no se puede borrar ni anular/, role);
+    assert.match(body.reply, /pídeselo al Admin\.$/, role);
+    assert.doesNotMatch(body.reply, /te preparo|Movimiento|dueño/, role);
+    assert.doesNotMatch(systemPrompt(role, {}, 'borra la compra que hice hoy'), /COMPRA REGISTRADA[^\n]*proponer_ajuste_stock/, 'al empleado no se le pide ofrecer el ajuste');
+  }
+  const admin = await chatAs('owner', 'borra la compra que hice hoy', invented);
+  assert.equal(admin.reply, A.PURCHASE_VOID_TEXT);
+  assert.match(admin.reply, /te preparo el movimiento\.$/); assert.doesNotMatch(admin.reply, /pídeselo/);
+});

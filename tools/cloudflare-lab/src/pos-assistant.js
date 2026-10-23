@@ -1612,7 +1612,7 @@ export function systemPrompt(role, ctx, text = '') {
     'No tienes herramientas para anular ventas, borrar, descuentos, importar, respaldos, cajeros ni PIN: si te lo piden, explica que se hace a mano en su pantalla.',
     // (auditoría 500, CP-027) mandaba a borrar la compra «a mano en Inventario > Compras», opción que no existe
     'Nunca inventes menús, botones ni pantallas: nombra solo las de PANTALLAS REALES y la Guía; si no sabes dónde se hace, dilo.',
-    ...(PURCHASE_VOID_RE.test(String(text || '')) ? [PURCHASE_VOID_RULE] : []),
+    ...(PURCHASE_VOID_RE.test(String(text || '')) ? [role === 'owner' ? PURCHASE_VOID_RULE : PURCHASE_VOID_RULE_EMPLOYEE] : []),
     // (auditoría 500, CP-012) «a quién le compro el arroz» nombraba al proveedor de la última compra
     ...(SUPPLIER_OF_PRODUCT_RE.test(String(text || '')) ? [SUPPLIER_OF_PRODUCT_RULE] : []),
     screensPromptLine(),
@@ -3263,7 +3263,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (RUC_ASK_RE.test(parsed.text) && REFUSE_SHARE_RE.test(reply)) reply = RUC_MISSING_TEXT;
   // (auditoría 500) CP-012: proveedor de un producto sin dato de líneas; CP-027: borrar una compra por un camino que no existe.
   if (role === 'owner' && SUPPLIER_OF_PRODUCT_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm)) reply = SUPPLIER_OF_PRODUCT_TEXT;
-  if (PURCHASE_VOID_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm) && (VOID_PATH_RE.test(reply) || !proposals.length)) reply = PURCHASE_VOID_TEXT;
+  if (PURCHASE_VOID_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm) && (VOID_PATH_RE.test(reply) || !proposals.length)) reply = role === 'owner' ? PURCHASE_VOID_TEXT : PURCHASE_VOID_EMPLOYEE_TEXT;
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
   // (lote en vivo 22-10) borrar todo o reiniciar: el asistente nunca lo ofrece ni lo hace; sin tarjetas.
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
@@ -3331,6 +3331,9 @@ const SUPPLIER_OF_PRODUCT_RULE = 'PROVEEDOR DE UN PRODUCTO: no sabes qué produc
 // (auditoría 500, CP-027) borrar o anular una compra registrada: no existe en el POS (Historial solo lista; las incompletas se terminan o se cierran como parcial).
 export const PURCHASE_VOID_RE = /\b(?:borr|elimin|anul|quit|deshac|revert)\w*\s+(?:(?:la|las|esa|esta|mi|mis|una|esas|estas)\s+)?compras?\b/i;
 export const PURCHASE_VOID_TEXT = 'Una compra registrada no se puede borrar ni anular: esa opción no existe en el sistema ni en el asistente. Si se registró por error, saca la mercadería con una salida de stock (Inventario > producto > Movimiento); si me dices el producto y la cantidad, te preparo el movimiento.';
+// El empleado no puede ajustar stock: sin oferta de movimiento, se lo pide al Admin (revisión de alfa, #985).
+export const PURCHASE_VOID_EMPLOYEE_TEXT = 'Una compra registrada no se puede borrar ni anular: esa opción no existe en el sistema ni en el asistente. Si se registró por error, pídeselo al Admin.';
+const PURCHASE_VOID_RULE_EMPLOYEE = 'COMPRA REGISTRADA: no se puede borrar ni anular, ni aquí ni en ninguna pantalla. Si se registró por error, di que se lo pida al Admin; no ofrezcas ajustes de stock ni inventes otro camino.';
 const PURCHASE_VOID_RULE = 'COMPRA REGISTRADA: no se puede borrar ni anular, ni aquí ni en ninguna pantalla (Inventario > Compras > Historial solo las lista; una incompleta se termina o se cierra como parcial). Si se registró por error, ofrece una salida de stock con proponer_ajuste_stock o Inventario > producto > Movimiento. No inventes otro camino.';
 // Respuesta que manda a borrar/anular una compra en alguna pantalla (o «a mano»): ese camino no existe.
 const VOID_PATH_RE = /\b(?:borr|elimin|anul)\w*[^.]*\b(?:a\s+mano|inventario|compras\s*>|historial|pantalla|men[uú]|bot[oó]n)/i;
