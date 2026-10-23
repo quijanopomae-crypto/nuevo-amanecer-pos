@@ -250,3 +250,38 @@ test('resumen_dia «mañana» en el chat: el aviso llega a la respuesta directa 
   const b2 = []; await chat('explicame como me fue mañana', { fetch: seq([first(call('resumen_dia', { periodo: 'mañana' })), SECOND], b2), reader: RD() });
   assert.match(toolMsg(b2), /fecha futura/);
 });
+
+// ---------- Revisión de alfa (PR #984): al empleado solo le llegan avisos de fechas y conteos, nunca plata ----------
+// El «aviso» del resumen puede venir de cualquier consulta (ganancia, bajo costo, caja…) y traer montos. El empleado solo recibe los avisos
+// que arma periodCheck (fecha que no existe, fecha futura, período recortado) o el de lista cortada («Mostrando N de M»), y se rearman
+// desde sus campos (fechas y números enteros), no se copia el texto.
+test('empleado: un «aviso» con montos (ganancia/bajo costo/caja) NO le llega; los de fecha y lista cortada sí', async () => {
+  const money = ['Ganancia S/ 120.50 sobre costo S/ 80.00.', 'Vendiste 3 productos bajo costo: perdiste S/ 12.40.', 'Caja: faltan S/ 35.00.'];
+  for (const m of money) {
+    const e = employeeQueryResult({ tipo: 'ganancia', titulo: 'x', columnas: [], filas: [], texto: '', resumen: { aviso: m, desde: '2026-10-01' } });
+    assert.equal(e.resumen.aviso, undefined, m);
+    assert.doesNotMatch(JSON.stringify(e.resumen), /S\/|120|12\.40|35\.00/);
+  }
+  // Mezclado: un aviso con plata + recorte de 92 días + lista cortada → al empleado solo lo de fechas y conteos.
+  const r = await q({ tipo: 'top_productos', desde: '2026-01-01', hasta: '2026-10-23' }, memoryReader(MANY));
+  assert.match(r.resumen.aviso, /Mostrando 10 de 12/); assert.match(r.resumen.aviso, /92 días/);
+  r.resumen.aviso = 'Caja: faltan S/ 35.00. ' + r.resumen.aviso;
+  const e = employeeQueryResult(r);
+  assert.match(e.resumen.aviso, /Mostrando 10 de 12 productos vendidos\./);
+  assert.match(e.resumen.aviso, /pasa de 92 días: conté solo del 2026-07-23 al 2026-10-23\./);
+  assert.doesNotMatch(e.resumen.aviso, /S\/|Caja|35/);
+});
+
+test('empleado: recibe igual los avisos de fecha que no existe, fecha/mes futuro y período que termina en el futuro', async () => {
+  for (const args of [{ tipo: 'ventas_periodo', fecha: '2026-09-31' }, { tipo: 'ventas_periodo', periodo: 'mañana' }, { tipo: 'top_productos', desde: '2026-10-24', hasta: '2026-10-30' },
+    { tipo: 'ventas_periodo', desde: '2026-10-20', hasta: '2026-10-30' }, { tipo: 'resumen_dia', fecha: '2026-10-24' }, { tipo: 'resumen_mes', hasta: '2026-11' }]) {
+    const r = await q(args);
+    assert.ok(r.resumen.aviso, JSON.stringify(args));
+    assert.equal(employeeQueryResult(r).resumen.aviso, r.resumen.aviso, JSON.stringify(args));
+  }
+  // Un aviso «estructurado» falso o de otro tipo tampoco pasa: los campos tienen que ser fechas y enteros.
+  const fake = employeeQueryResult({ tipo: 'ganancia', resumen: { avisos: [{ tipo: 'lista_cortada', mostrados: 'S/ 50.00', total: 12 }, { tipo: 'ganancia', texto: 'S/ 9.00' },
+    { tipo: 'hasta_futuro', hasta: 'S/ 9.00', hoy: '2026-10-23' }] } });
+  assert.equal(fake.resumen.aviso, undefined);
+  assert.doesNotMatch(JSON.stringify(fake), /S\//);
+});
