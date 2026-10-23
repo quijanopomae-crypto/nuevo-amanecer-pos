@@ -1,0 +1,32 @@
+{
+  "id": "M-025",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:30 Lima",
+      "pregunta": "a cuanto vendo el atun si quiero ganar 20%",
+      "imagen": false,
+      "status": 200,
+      "ms": 5922,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 5918,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": "<precios_del_sistema>{\"productos\":[{\"nombre\":\"Atun Florida 170 g\",\"precio\":6,\"costo\":4.9}]}</precios_del_sistema>",
+      "boleta_recordada": null,
+      "respuesta": "Admin, para ganar **20% sobre el costo de S/ 4.90**, sale S/ 5.88; con tu redondeo hacia arriba, véndelo a **S/ 5.90**. Actualmente lo vendes a **S/ 6.00**.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

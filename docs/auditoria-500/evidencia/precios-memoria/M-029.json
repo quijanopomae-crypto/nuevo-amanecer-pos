@@ -1,0 +1,32 @@
+{
+  "id": "M-029",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:34 Lima",
+      "pregunta": "de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte",
+      "imagen": false,
+      "status": 200,
+      "ms": 3210,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3205,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, recordaré que tu proveedor de gaseosas ahora es **Comercial Lima Norte**, en lugar de Distribuidora El Sol. Esto no cambia las compras ya registradas.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

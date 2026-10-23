@@ -1,0 +1,70 @@
+{
+  "id": "M-009",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:06 Lima",
+      "pregunta": "el paquete de fideos trae 6",
+      "imagen": false,
+      "status": 200,
+      "ms": 4048,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 4035,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"fideo\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Fideo Don Vittorio Spaghetti 500 g (S/ 2.60): sin control de stock. Fideo Don Vittorio Tallarin 500 g (S/ 2.60): sin control de stock. Fideo paquete 250 g (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:07 Lima",
+      "pregunta": "en realidad cada paquete de fideos trae cinco, no seis",
+      "imagen": false,
+      "status": 200,
+      "ms": 5034,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 5029,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"fideo\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Fideo Don Vittorio Spaghetti 500 g (S/ 2.60): sin control de stock. Fideo Don Vittorio Tallarin 500 g (S/ 2.60): sin control de stock. Fideo paquete 250 g (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

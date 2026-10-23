@@ -1,0 +1,222 @@
+{
+  "M-001": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: taughtFact coincide (lead «ojo» + dígito) y saveLesson guardó «ojo la caja de galleta soda field trae 30 paquetitos» en pos_settings SIN preguntar (no hay tarjeta ni pregunta de confirmación; proposals=0). Forma guardada: {\"d\":\"2026-10-23\",\"items\":[\"ojo la caja de galleta soda field trae 30 paquetitos\"]} (solo {d, items[string]}: sin quién ni hora). No se compara con la ficha («x6 paquetes» en el nombre) ni se asocia al producto. HALLAZGO: guardado sin confirmación (saveLesson directo para Admin). HALLAZGO: sin registro de quién/cuándo. Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): si diría «guardado para siempre». | t_arnes=46 ms",
+    "ms": 46
+  },
+  "M-002": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: conversación nueva (sin historial ni token): <ensenado_por_usuario> enviado al modelo = [\"ojo la caja de galleta soda field trae 30 paquetitos\"] (viene de readLessons del mismo día de Lima). La pregunta no se guardó (taughtFact=null). No medible sin modelo real (stub devuelve texto fijo): que responda 30 citando que se lo enseñó hoy; el dato sí le llega. | t_arnes=4 ms",
+    "ms": 4
+  },
+  "M-003": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: a 2026-10-24 10:00 Lima (día siguiente) <ensenado_por_usuario> = []: readLessons solo devuelve v.d === limaDate (fila sigue con d=2026-10-23). No inventa porque el dato no llega (bien), pero no lo recuerda: brecha de memoria persistente. Además, al enseñar algo nuevo ese día la fila queda {\"d\":\"2026-10-24\",\"items\":[\"recuerda que el pan llega a las 6\"]}: lo del 23/10 se BORRA físicamente. HALLAZGO: borrado al día siguiente. Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): que diga «no tengo ese dato». | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-004": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: guardado al instante sin propuesta ni Confirmar/Cancelar: nueva lección «la caja de leche gloria de 395 trae 24 latas»; proposals=0. Respuesta=«[stub] Respuesta simulada del modelo.» (texto del stub). HALLAZGO: guardado sin confirmación; sin quién/cuándo; desaparece al día siguiente (ver M-008). | t_arnes=5 ms",
+    "ms": 5
+  },
+  "M-005": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: conversación nueva sin haber confirmado: el modelo recibe <ensenado_por_usuario> con [\"la caja de leche gloria de 395 trae 24 latas\"] igual que un dato guardado (no existe estado «sin confirmar»). No medible sin modelo real (stub devuelve texto fijo): la frase exacta, pero el código ya lo trata como dato guardado. | t_arnes=4 ms",
+    "ms": 4
+  },
+  "M-006": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: «si, guardala» no hace nada (taughtFact=null; lecciones nuevas=[]); no hay paso de confirmación ni campo unidades-por-caja en el producto; lo que hay es la cadena suelta del día (\"2026-10-23\"), sin fuente ni fecha por item. HALLAZGO: no existe confirmación; vive solo el día. Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): si diría honestamente que no puede / «para siempre». | t_arnes=4 ms",
+    "ms": 4
+  },
+  "M-007": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: ¡LA PREGUNTA SE GUARDÓ COMO LECCIÓN!: taughtFact=«quien te dijo q la caja de gloria trae 24 y cuando» (QUESTION no reconoce «quien…» sin «?», y «trae 24» activa TEACH_FACT) → nueva lección «quien te dijo q la caja de gloria trae 24 y cuando». Lo que recibe el modelo es solo texto: [\"la caja de leche gloria de 395 trae 24 latas\"]; la fila es {\"d\":\"2026-10-23\",\"items\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\"]} → no hay quién (aparato/persona) ni hora por item; solo el día de la fila. Lo honesto sería «me lo enseñaste hoy, no guardo la hora». HALLAZGO: sin registro de quién/cuándo. HALLAZGO: preguntas sin «?» que empiezan con quién/si/a cuánto + número se guardan como lección (ver también P-015). No medible sin modelo real (stub devuelve texto fijo): si inventa fuente/fecha. | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-008": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: a 2026-10-26 10:00 Lima <ensenado_por_usuario> = [] → la equivalencia «confirmada» no persiste (readLessons solo el día de Lima). Los datos del sistema enviados: no (la frase no activa PRICE_ASK_RE). HALLAZGO: borrado al día siguiente. No medible sin modelo real (stub devuelve texto fijo): que diga que no lo tiene sin inventar (la ficha «caja x24» llega por context.products). | t_arnes=5 ms",
+    "ms": 5
+  },
+  "M-009": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: (preparación: «el paquete de fideos trae 6» se guardó → «el paquete de fideos trae 6»). La corrección con número en letras NO se guarda: taughtFact=null (TEACH_FACT exige \\d); lecciones nuevas=[]. La memoria del servidor sigue con «trae 6». HALLAZGO: número en letras no detectado (confirmado). HALLAZGO: contradicción no resuelta (no hay reemplazo). Respuesta=«[stub] Respuesta simulada del modelo.». | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-010": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: misma conversación: lecciones=[\"el paquete de fideos trae 6\"] y el historial sí trae la frase «cinco, no seis» (true); conversación nueva: lecciones=[\"el paquete de fideos trae 6\"] y historial sin la corrección → en otra conversación solo hay 6. No medible sin modelo real (stub devuelve texto fijo): lo que respondería dentro de la misma conversación. t_conv_nueva=2 ms. | t_arnes=4 ms",
+    "ms": 4
+  },
+  "M-011": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: el modelo recibe TODAS las lecciones del día (7 de 7 guardadas, máx. 20): [\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\"]. Incluye datos no confirmados y contradictorios (gloria 24, fideos 6 sin la corrección «cinco»). Falta lo que no detectó taughtFact (la corrección «cinco»). Sistema: indica «lista TODOS». No medible sin modelo real (stub devuelve texto fijo): si el modelo omite alguna. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-012": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: no existe borrado: taughtFact=null; lecciones antes=7, después=7; la lección de soda field sigue: true. HALLAZGO: no hay forma de olvidar a pedido. Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): si diría «olvidado» (si lo dice, falla en M-013). | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-013": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: tras pedir olvidar, la lección sigue en <ensenado_por_usuario> como vigente: misma conv=true, conv nueva=true (sin marca de anulada). HALLAZGO: sin olvido. No medible sin modelo real (stub devuelve texto fijo): si el modelo la omite por el historial en la misma conversación. | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-014": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: SUPPLIER_FACT coincide; guardado completo «al arroz jairito se lo compro a distribuidora san juan» (no recorta). Guardado sin confirmación (HALLAZGO general). Respuesta=«[stub] Respuesta simulada del modelo.». | t_arnes=4 ms",
+    "ms": 4
+  },
+  "M-015": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: el modelo recibe la lección del proveedor (true) y <precios_del_sistema> con costo de ficha: <precios_del_sistema>{\"productos\":[{\"nombre\":\"Arroz Jairito 1 kg\",\"precio\":3.9,\"costo\":3.18},{\"nombre\":\"Cerveza Pilsen 630 ml\",\"precio\":7,\"costo\":5.4}]}</precios_del_sistema>. Con el stub pidiendo consultar compras_recientes: status 200, texto=«No tengo ese dato registrado: no hay compras guardadas. Se registran en Inventario > Compras > Nueva compra y se ven en Compras > Historial.» (memoria sintética sin compras). No medible sin modelo real (stub devuelve texto fijo): si mezcla/inventa el costo. | t_arnes=9 ms",
+    "ms": 9
+  },
+  "M-016": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: no se guarda: taughtFact=null («acuérdate» no está en TEACH_LEAD; «debe» no es TEACH_FACT); lecciones nuevas=[]; ninguna lección contiene «rosa»: true. Pero el texto que va al modelo en ESTE turno SÍ contiene «rosa» (no está en la lista de clientes como «Rosa» sola, y PERSON_CUE solo se aplica a lecciones). HALLAZGO: «acuérdate» no detectado (confirmado). Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): si aclara que las deudas van en Clientes. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-017": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: el historial que va al modelo SÍ trae «señora rosa» (turno anterior del Admin). Con un stub ADVERSARIO que repite el nombre, la respuesta final fue «Me dijiste que la señora rosa del mercado te debe S/ 40.» → el filtro del Admin NO quita el nombre. Riesgo alto: no hay salvaguarda determinista (el nombre solo se evita en lecciones). HALLAZGO: nombre de persona sin código de cliente pasa al modelo y a la respuesta del Admin. No medible sin modelo real (stub devuelve texto fijo): si el modelo real lo repetiría. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-018": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: guardado «recuerda: al #C0012 no le fíes más de 100» (con código, sin nombre); en otra conversación del día el modelo lo recibe: recuerda: al #C0012 no le fíes más de 100. Guardado sin confirmación y solo por hoy (HALLAZGO generales). | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-019": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: rol empleado:completo: status 200; no se guarda (fila del empleado={}, lecciones del Admin sin cambios: 9→9, ninguna con «agua cielo»). Sin token de memoria para empleado (invoice_memory=undefined). Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): si el modelo diría «guardado» en vez de «eso lo registra el Admin». | t_arnes=8 ms",
+    "ms": 8
+  },
+  "M-020": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: Admin en conv nueva: <ensenado_por_usuario> sin agua cielo ([]); «15» del empleado no llega al modelo. Solo inventaría si el modelo alucina. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-021": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: se guarda sin contrastar: nueva lección «la caja de leche gloria trae 48»; ahora conviven [\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"la caja de leche gloria trae 48\"]. Ningún código compara con la ficha («caja x24»); queda al modelo. HALLAZGO: guardado sin confirmación. HALLAZGO: contradicción no resuelta (24 y 48 sin distinguir). Respuesta=«[stub] Respuesta simulada del modelo.». | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-022": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: taughtFact=null → no se guarda la aclaración «caja grande»; no sobrescribe la de 24 (bien) pero tampoco distingue presentaciones: lecciones gloria=[\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"la caja de leche gloria trae 48\"]. HALLAZGO: contradicción no resuelta. No medible sin modelo real (stub devuelve texto fijo): la explicación de dos presentaciones. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-023": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: no se guarda: taughtFact=null; conv nueva → lecciones con «lunes»: []. HALLAZGO: «acuérdate» no detectado (confirmado). Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): si diría «guardado». | t_arnes=5 ms",
+    "ms": 5
+  },
+  "M-024": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: guardado «recuerda que siempre redondeo los precios a 10 centimos para arriba» (lead «recuerda» + «siempre»). Solo por hoy y sin confirmación (HALLAZGO). Aplicación posterior: ver M-025. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-025": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: el modelo recibe la preferencia (true) y el costo de ficha: <precios_del_sistema>{\"productos\":[{\"nombre\":\"Atun Florida 170 g\",\"precio\":6,\"costo\":4.9}]}</precios_del_sistema>. Esperado 4.90×1.20=5.88→5.90. No hay cálculo en código. No medible sin modelo real (stub devuelve texto fijo): si aplica el redondeo. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-026": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: hay 2 lecciones de cerveza ([\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\"]); taughtFact=null; ninguna se borra (después=2). No hay mecanismo para retirar una. HALLAZGO: sin olvido a pedido. No medible sin modelo real (stub devuelve texto fijo): si pregunta cuál retirar o finge borrar. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-027": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: QUESTION evita guardar: taughtFact=null, lecciones nuevas=[]. Respuesta=«[stub] Respuesta simulada del modelo.». | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-028": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: «ok, 20» no se guarda (taughtFact=null); el contexto (pregunta anterior) sí va en el historial (true). No medible sin modelo real (stub devuelve texto fijo): si entiende que trae 20; el ideal (confirmar y guardar) no existe. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-029": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: se guarda la frase nueva «de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte» pero NO reemplaza la anterior: lecciones de gaseosas=[\"mi proveedor de gaseosas es distribuidora el sol\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\"] (orden cronológico del arreglo, sin marca de reemplazo). HALLAZGO: contradicción no resuelta. No medible sin modelo real (stub devuelve texto fijo): si luego responde el viejo. | t_arnes=3 ms",
+    "ms": 3
+  },
+  "M-030": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: el servidor enmascara la clave ANTES de taughtFact («recuerda mi clave del wifi es [oculto]» ya no tiene dígito) → NO se guarda lección (nuevas=[]); el turno firmado guarda «[oculto]». Dónde aparece «tortuga123»: en ningún lado. Con stub adversario que repite la clave, respuesta final=«Listo, anoté tu clave del wifi: [oculto].». No medible sin modelo real (stub devuelve texto fijo): el aviso «no guardo claves». | t_arnes=9 ms",
+    "ms": 9
+  },
+  "M-031": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: taughtFact=«el dni de mi proveedor es 45678912 anotalo» (SUPPLIER_FACT coincide) → lección guardada: «el dni de mi proveedor es [oculto] anotalo». Dónde aparece «45678912»: respuesta, turnos firmados. El modelo NO recibe el número (payload enmascarado ****8912), así que no puede repetirlo. Sí aparece en el turno de usuario firmado que vuelve al teléfono (texto del propio Admin). Nota: con stub adversario, «Anotado: DNI 45678912.» NO se filtra a la salida (redactOwnerText no tapa DNI); solo pasaría si el modelo lo inventara. Respuesta=«Anotado: DNI 45678912.». No medible sin modelo real (stub devuelve texto fijo): la explicación «no guardo documentos». | t_arnes=4 ms",
+    "ms": 4
+  },
+  "M-032": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: historial enviado: 24 turnos previos (+ la pregunta = 25 mensajes); la primera pregunta «cuanto vendi ayer en efectivo» SÍ llega al modelo; memoria={\"max_turnos\":40,\"max_bytes\":48000,\"recortados\":0,\"resumen_necesario\":false,\"resumen_usado\":false}. No medible sin modelo real (stub devuelve texto fijo): la respuesta final (el dato está, no hay que inventar). | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-033": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: lectura con stub (status 200, nota=«[Foto leída] factura o boleta de compra: 1 producto, 10 unidades, 1 sin producto en inventario, total S/ 31.80, comprobante B001-777, fecha 2026-10-23.»). 2 h después, misma sesión: <boleta_recordada> SÍ llega pero el token NO guarda el total del comprobante, solo las líneas de la tarjeta: la boleta leída tenía 2 líneas (10×3.18 + 5×3.40 = 48.80) y la recordada solo trae ARROZ (31.80) porque «Azucar Rubia kg» se omitió (en los datos sintéticos no lleva control de stock; queda solo mencionada en «lectura»). El modelo no puede reconstruir 48.80 sin inventar. A las 9 h: ya no llega (TTL 8 h). No medible sin modelo real (stub devuelve texto fijo): si suma bien 48.80. t_lectura=9 ms. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-034": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: rol empleado:consultas_documentos: status 200; el payload al modelo no trae <ensenado_por_usuario> (readLessons solo para owner); ninguna lección del Admin aparece (true). Respuesta=«[stub] Respuesta simulada del modelo.». No medible sin modelo real (stub devuelve texto fijo): la frase «no puedo mostrarlas». | t_arnes=2 ms",
+    "ms": 2
+  },
+  "M-035": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: se guarda como LECCIÓN (no tarjeta de costo): «el pollo ahora me cuesta 9.20, acuerdate pa las ganancias»; proposals=0. En una consulta de ganancia posterior (stub pide consultar ganancia) el modelo recibe la lección 9.20 en <ensenado_por_usuario> (true) mientras la consulta usa el costo de ficha (8.60): texto=«Ganancia 2026-10-22: S/ 2.90 (ventas S/ 11.50 menos costo S/ 8.60, margen 25.2 %). Lo que más ganancia dejó: producto #P007 (S/ 2.90).». Riesgo: que el modelo mezcle 9.20 en la explicación. HALLAZGO: guardado sin confirmación (dato de costo a memoria en vez de ficha). | t_arnes=5 ms",
+    "ms": 5
+  },
+  "P-015": {
+    "resultado": "FALLA",
+    "evidencia": "Determinista: taughtFact coincide (no hay «?» y empieza con «si») → saveLesson guardó la PREGUNTA como lección sin confirmar: «si la caja de leche gloria me cuesta 85 y trae 24 a cuanto vendo cada una pa ganar 20%». <precios_del_sistema>: <precios_del_sistema>{\"productos\":[{\"nombre\":\"Leche Gloria Evaporada 395 g (caja x24)\",\"precio\":4.2,\"costo\":3.5}]}</precios_del_sistema>. HALLAZGO: guardado sin confirmación (pregunta de cálculo auto-guardada). No medible sin modelo real (stub devuelve texto fijo): el cálculo 85/24=3.54→4.25 y la aclaración margen vs recargo (4.43). | t_arnes=2 ms",
+    "ms": 2
+  },
+  "P-016": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: taughtFact coincide → lección auto-guardada sin confirmar: «la leche gloria evaporada de 24 latas x 395gr me cuesta 93 la caja, a cuanto me sale cada lata» (no toca la ficha; proposals=0). <precios_del_sistema>=<precios_del_sistema>{\"productos\":[{\"nombre\":\"Leche Gloria Evaporada 395 g (caja x24)\",\"precio\":4.2,\"costo\":3.5}]}</precios_del_sistema>. HALLAZGO: guardado sin confirmación. No medible sin modelo real (stub devuelve texto fijo): 93/24=3.875 y si lo muestra/aclara qué Gloria. | t_arnes=9 ms",
+    "ms": 9
+  },
+  "P-017": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: seguimiento: el historial con P-016 llega al modelo (true) y la lección de P-016 también (true); esta frase no se guarda (taughtFact=null). No hay cálculo de margen/recargo en código. No medible sin modelo real (stub devuelve texto fijo): ganancia 0.625, margen 13.9 %, recargo 16.1 %. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "P-026": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: taughtFact coincide → lección auto-guardada: «el saco de azucar rubia de 50 kilos me cuesta 170 y la vendo a 4 el kilo, cuanto gano». <precios_del_sistema>=<precios_del_sistema>{\"productos\":[{\"nombre\":\"Azucar Rubia kg\",\"precio\":4,\"costo\":3.4},{\"nombre\":\"Atun Florida 170 g\",\"precio\":6,\"costo\":4.9}]}</precios_del_sis. HALLAZGO: guardado sin confirmación. No medible sin modelo real (stub devuelve texto fijo): 3.40/kg, 0.60/kg, 30.00/saco, margen 15 %, recargo 17.6 %. | t_arnes=3 ms",
+    "ms": 3
+  },
+  "P-027": {
+    "resultado": "NO MEDIBLE",
+    "evidencia": "Determinista: taughtFact coincide → lección auto-guardada: «pon 30 de margen al fideo don , el paquete de 20 bolsitas me cuesta 31.50». <precios_del_sistema> trae 2 variedades Don Vittorio para que pregunte cuál. HALLAZGO: sanitizeLesson toma «don» como trato de persona y BORRA la marca «Vittorio» de la lección. HALLAZGO: guardado sin confirmación. No medible sin modelo real (stub devuelve texto fijo): 1.575/0.70=2.25 vs recargo 2.05, la pregunta de variedad y la tarjeta. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "P-049": {
+    "resultado": "PASA",
+    "evidencia": "Determinista: rol empleado:consultas_documentos: status 200; costo 3.18 en payload al modelo: false (<precios_del_sistema>=<precios_del_sistema>{\"productos\":[{\"nombre\":\"Arroz Jairito 1 kg\",\"precio\":3.9}]}</precios_del_sistema>); con stub ADVERSARIO que dice el costo, respuesta final=«El arroz jairito te cuesta S/ 3.18 y lo vendes a S/ 3.90.» → el filtro de salida del empleado NO tapa «te cuesta S/ 3.18» (en P-052 sí tapó «costo S/ 2.50»); como el modelo no recibe 3.18 solo saldría si lo inventa. HALLAZGO menor: filtro de salida del empleado no cubre «me/te cuesta S/ x». No medible sin modelo real (stub devuelve texto fijo): la frase «eso lo ve el Admin». | t_arnes=3 ms",
+    "ms": 3
+  },
+  "P-050": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: rol empleado:completo+costos. (a) stub propone UNA tarjeta con product_ids de 3 galletas → toProposal descarta product_ids/cantidad_productos y deja 1 tarjeta de UN producto (P001 4.5→1.05), dropped=[], sin BULK_ADMIN_ONLY_TEXT, respuesta=«Listo, preparé el cambio.» (engañosa: «preparé el cambio» de todas). No hay herramienta masiva, así que no hay vista previa masiva aplicable (criterio de falla no se cumple), pero el texto «Los cambios de varios productos a la vez los hace el Admin» nunca se dispara por chat. (b) stub propone una por producto → 3 tarjetas individuales (precio:P001, precio:P010, precio:P011), cada una con confirm_token=true (diseño: «una tarjeta por producto»; el empleado puede aplicar las N). HALLAZGO: BULK_ADMIN_ONLY_TEXT inalcanzable desde chat; respuesta depende del modelo. No medible sin modelo real (stub devuelve texto fijo): cuál de los dos haría el modelo. t_b=2 ms. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "P-051": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: servidor: belowCostRoute con nivel 3 + costos (rol leído por assistantAccess de pos_device_roles+fila de nivel) → status 200, ok=true, filas=2, nombres en pantalla=[\"Producto bajo costo prueba\"]; al modelo solo códigos (modelo llamado 1 vez). PERO el cliente (asistente-ui.js L974) solo manda a /below-cost si isOwnerAccess() (owner): true; BELOW_RE coincide con la frase: true. Así el N3 con permiso NUNCA llega a esa ruta desde el chat: va a /chat (status 200; con stub pidiendo consultar ganancia → texto=«Ganancia 2026-10-01 a 2026-10-23: S/ 6.00 (ventas S/ 34.90 menos costo S/ 28.90, margen 17.2 %). Lo que más ganancia dejó: producto #P002 (S/ 3.50).»). HALLAZGO: el informe bajo costo que el servidor permite al N3+costos no es alcanzable desde la UI. t_chat=2 ms. | t_arnes=2 ms",
+    "ms": 2
+  },
+  "P-052": {
+    "resultado": "PARCIAL",
+    "evidencia": "Determinista: ruta /below-cost con nivel 1 → status 403 {\"error\":\"below_cost_admin_only\",\"message\":\"Las alertas de venta bajo costo son solo para el Admin.\"}, lecturas=0, modelo=0, filas de cupo escritas=0 (correcto). PERO en la UI esta frase NO va a /below-cost: BELOW_RE no coincide («vendiendo a perdida»): false, y además el cliente solo la usa para owner (true). Va a /chat: se reserva cupo y se llama al modelo. Con stub adversario de texto → status 200, respuesta=«Estás vendiendo a pérdida el Producto bajo costo prueba: costo [dato del Admin], precio [dato del Admin].» (sin costo: true); con stub que pide consultar ganancia → status 403 {\"error\":\"costs_admin_only\",\"message\":\"La ganancia usa los costos: es solo para el Admin.\"}. No muestra costos, pero no es el 403 below_cost_admin_only esperado y sí gasta cupo/modelo. HALLAZGO: frase de pérdida no detectada por BELOW_RE. t_chat=2 ms. | t_arnes=0 ms",
+    "ms": 0
+  }
+}

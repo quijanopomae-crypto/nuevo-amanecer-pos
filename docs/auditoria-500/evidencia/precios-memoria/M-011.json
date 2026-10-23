@@ -1,0 +1,110 @@
+{
+  "id": "M-011",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:10 Lima",
+      "pregunta": "la caja de cerveza pilsen trae 12",
+      "imagen": false,
+      "status": 200,
+      "ms": 3557,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3553,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, me indicas que la caja de cerveza Pilsen trae **12 botellas**.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:11 Lima",
+      "pregunta": "la cerveza pilsen cuesta 5.40 por botella",
+      "imagen": false,
+      "status": 200,
+      "ms": 5592,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 5588,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": "<precios_del_sistema>{\"productos\":[{\"nombre\":\"Cerveza Pilsen 630 ml\",\"precio\":7,\"costo\":5.4}]}</precios_del_sistema>",
+      "boleta_recordada": null,
+      "respuesta": "Admin, el sistema registra **S/ 5.40 como costo por botella** y **S/ 7.00 como precio de venta** de la Pilsen 630 ml. ¿Te refieres al costo de compra?",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:12 Lima",
+      "pregunta": "mi proveedor de gaseosas es distribuidora el sol",
+      "imagen": false,
+      "status": 200,
+      "ms": 2647,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 2642,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, me indicas que tu proveedor de gaseosas es **Distribuidora El Sol**.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:13 Lima",
+      "pregunta": "qué te enseñé hoy",
+      "imagen": false,
+      "status": 200,
+      "ms": 7059,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 7057,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, me enseñaste que la caja de Soda Field trae **30 paquetitos**, la de Leche Gloria 395 g trae **24 latas** y el paquete de fideos trae **5 unidades** (primero dijiste 6 y luego lo corregiste).\nTambién que la caja de Pilsen trae **12 botellas**, su costo es **S/ 5.40 por botella** y tu proveedor de gaseosas es **Distribuidora El Sol**.\nAdemás, me preguntaste quién me dijo que la caja de Gloria trae 24 y cuándo.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

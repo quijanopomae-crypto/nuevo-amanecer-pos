@@ -1,0 +1,32 @@
+{
+  "id": "P-016",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:01 Lima",
+      "pregunta": "la leche gloria evaporada de 24 latas x 395gr me cuesta 93 la caja, a cuanto me sale cada lata",
+      "imagen": false,
+      "status": 200,
+      "ms": 4434,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 4427,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"si la caja de leche gloria me cuesta 85 y trae 24 a cuanto vendo cada una pa ganar 20%\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": "<precios_del_sistema>{\"productos\":[{\"nombre\":\"Leche Gloria Evaporada 395 g (caja x24)\",\"precio\":4.2,\"costo\":3.5}]}</precios_del_sistema>",
+      "boleta_recordada": null,
+      "respuesta": "Admin, S/ 93 ÷ 24 latas = S/ 3.875 por lata, aproximadamente **S/ 3.88 cada una**.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

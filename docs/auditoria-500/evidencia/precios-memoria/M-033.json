@@ -1,0 +1,83 @@
+{
+  "id": "M-033",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:50 Lima",
+      "pregunta": "lee esta boleta",
+      "imagen": true,
+      "status": 502,
+      "ms": 2091,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 2088,
+          "status": 400,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": null,
+      "error": "upstream_error",
+      "proposals": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 12:51 Lima",
+      "pregunta": "y lo de la boleta de hace rato cuanto sumaba?",
+      "imagen": false,
+      "status": 200,
+      "ms": 3312,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3308,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, no tengo ese dato registrado en este chat. Si registraste la compra, puedes ver el total en Inventario > Compras.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 19:52 Lima",
+      "pregunta": "y lo de la boleta cuanto sumaba?",
+      "imagen": false,
+      "status": 200,
+      "ms": 3325,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3322,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, no tengo ese dato registrado: aquí no aparece el total de la boleta. Si registraste la compra, lo ves en Inventario > Compras.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

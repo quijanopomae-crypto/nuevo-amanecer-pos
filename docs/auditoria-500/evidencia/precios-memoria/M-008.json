@@ -1,0 +1,32 @@
+{
+  "id": "M-008",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-26 10:00 Lima",
+      "pregunta": "la caja de gloria de 395 cuantas trae",
+      "imagen": false,
+      "status": 200,
+      "ms": 2956,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 2952,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": null,
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, según el nombre registrado en el sistema, la caja de Leche Gloria de 395 g trae 24 unidades.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

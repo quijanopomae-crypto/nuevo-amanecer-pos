@@ -1,0 +1,84 @@
+{
+  "id": "P-051",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "ruta": "/auth/assistant/below-cost",
+      "quien": "dev-n3c",
+      "llamada_modelo_ms": 4366,
+      "status_modelo": 200
+    },
+    {
+      "ruta": "/auth/assistant/below-cost",
+      "quien": "dev-n3c",
+      "status": 200,
+      "respuesta_json": {
+        "ok": true,
+        "report": "Informe de ventas bajo costo del 2026-09-24 al 2026-10-23.\nLa pérdida estimada fue de S/ 0.50 en 1 producto.\n• Producto bajo costo prueba concentra toda la pérdida: 1 venta, 1 unidad, precio S/ 2.00 y costo S/ 2.50.\nSu precio actual de S/ 2.00 sigue por debajo del costo de S/ 2.50.\n• Revise el costo registrado de Producto bajo costo prueba y confirme que S/ 2.50 sea correcto.\n• Si ese costo es correcto, ajuste el precio de Producto bajo costo prueba al menos a S/ 2.50 para evitar nuevas ventas bajo costo.\n• Verifique si el costo subió después de la venta: la pérdida estimada se calculó con el costo de hoy.",
+        "source": "modelo",
+        "desde": "2026-09-24",
+        "hasta": "2026-10-23",
+        "perdida_total": 0.5,
+        "lineas_revisadas": 1,
+        "sin_costo": 0,
+        "sin_precio": 0,
+        "codigos_raros": 0,
+        "truncado": false,
+        "ventas": [
+          {
+            "id": "P099",
+            "nombre": "Producto bajo costo prueba",
+            "costo": 2.5,
+            "ventas": 1,
+            "unidades": 1,
+            "perdida": 0.5,
+            "precio_min": 2
+          }
+        ],
+        "catalogo": [
+          {
+            "id": "P099",
+            "nombre": "Producto bajo costo prueba",
+            "costo": 2.5,
+            "precio": 2,
+            "diferencia": 0.5
+          }
+        ],
+        "server_now": 1792767600000
+      },
+      "ms": 4372
+    },
+    {
+      "quien": "n3c",
+      "rol": "empleado:completo+costos",
+      "hora_simulada": "2026-10-23 10:08 Lima",
+      "pregunta": "qué vendo bajo el costo",
+      "imagen": false,
+      "status": 200,
+      "ms": 2790,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 2786,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"sin_costo\",\"producto\":\"\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": null,
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Todos los productos tienen costo.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}
