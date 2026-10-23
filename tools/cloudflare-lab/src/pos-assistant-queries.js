@@ -1059,6 +1059,19 @@ async function idleProductsQuery(reader, args, nowMs, base) {
     refIds: idle.slice(0, Math.max(M, 3)).map((x) => String(x.id)) };
 }
 
+// (auditoría 500, CLI-016) «No encontré deudas de cliente #9999» no decía si el cliente no debe o si ese código no existe. Sin créditos
+// del código: si la lista de Clientes se pudo leer completa y el código no está, se dice que NO EXISTE; si no se pudo leer (falla, sin
+// lector o lista cortada) se dice que no hay ese dato. Nunca «no debe» sin saber que el cliente existe, nunca un monto. null = existe.
+async function customerNotFound(reader, code, ref) {
+  const sinDato = { encontrado: null, texto: 'No tengo ese dato: no encontré créditos de ' + ref + ' y no pude revisar la lista de Clientes para saber si ese código existe. Revise el código en Clientes (aparece como «cliente #código»).' };
+  if (typeof reader.customers !== 'function') return sinDato;
+  let cs; try { cs = await reader.customers(); } catch { return sinDato; }
+  if (!Array.isArray(cs)) return sinDato;
+  if (cs.some((c) => String(c?.id) === code || String(c?.id).toLowerCase() === code.toLowerCase())) return null;
+  if (cs.truncated) return sinDato;
+  return { encontrado: false, texto: 'No existe ' + ref + ' en Clientes: ese código no está registrado. Revise el código (aparece como «cliente #código» en Clientes).' };
+}
+
 // Deuda de UN cliente por su código («cliente #código»). Al modelo y a la tabla: solo el código, el saldo total, cuántos créditos abiertos
 // y cuál vence primero. Usa la misma lectura canónica de créditos que deudas_clientes (reader.credits, sin SQL aparte). Nunca nombre, DNI ni teléfono (el aparato del Admin pone el nombre de SU lista con el código).
 async function customerDebtQuery(reader, args, base) {
@@ -1068,6 +1081,7 @@ async function customerDebtQuery(reader, args, base) {
   const ref = 'cliente #' + code, credits = await reader.credits();
   let mine = credits.filter((c) => String(c.cliente) === code);
   if (!mine.length) mine = credits.filter((c) => String(c.cliente).toLowerCase() === code.toLowerCase());
+  if (!mine.length) { const miss = await customerNotFound(reader, code, ref); if (miss) return { ...base, titulo: 'Deuda de ' + ref, columnas: [], filas: [], texto: miss.texto, resumen: { cliente: ref, cliente_encontrado: miss.encontrado } }; }
   const open = mine.filter((c) => Number(c.saldo) > 0).sort((a, b) => String(a.vence || '9999').localeCompare(String(b.vence || '9999')));
   const total = r2(open.reduce((s, c) => s + Number(c.saldo), 0)), first = open.find((c) => c.vence)?.vence || null;
   let known = mine.length > 0;
