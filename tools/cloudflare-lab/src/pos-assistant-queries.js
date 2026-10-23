@@ -487,12 +487,45 @@ const isGenericId = (id) => String(id ?? '').startsWith('GENERIC:');
 export const GENERIC_LABEL = 'Producto genérico';
 const METODO = { efectivo: 'Efectivo', yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', credito: 'Crédito', mixto: 'Mixto' };
 // (lote en vivo 22-10) «aceites», «cervezas»: el plural también encuentra el producto en singular. Palabras de relleno fuera.
-const FILLER = new Set(['del', 'las', 'los', 'una', 'uno', 'que', 'con', 'para', 'por', 'caja', 'cajas']);
-const stem = (w) => (w.length >= 5 && w.endsWith('es') && !/[aeiou]es$/.test(w) ? w.slice(0, -2) : w.length >= 4 && w.endsWith('s') ? w.slice(0, -1) : w);
+// Keep identity terms conjunctive; discard conversational words before matching a full question.
+const FILLER = new Set('de del la el las los un una uno que para por caja cajas cuanto cuanta cuantos cuantas queda quedan hay tengo tienes tiene tienen me mi este esta estos estas ese esa esos esas en al a lo le se es son y o hoy ayer producto productos botella botellas bolsita bolsitas kilo kilos precio precios cuesta cuestan vale valen como vendo venden compro comprar vender busca buscame dame mostrar muestra ver stock existencia existencias'.split(' '));
+const stem = (w) => w.length >= 4 && w.endsWith('s') ? w.slice(0, -1) : w;
+function productTerms(text) {
+  const sizes = [];
+  const rest = norm(text).replace(/\b(?:un|una)\s+(?=(?:kilo|kilogramo|litro|gramo)\b)/g, '1 ').replace(/(\d+(?:[.,]\d+)?)\s*(kilogramos?|kilos?|kg|gramos?|gr|g|mililitros?|ml|litros?|lt|l)\b/g, (_, q, u) => {
+    const volume = /^(?:mililitro|ml|litro|lt|l$)/.test(u), big = /^(?:kilo|kg|litro|lt|l$)/.test(u);
+    sizes.push((volume ? 'vol:' : 'mass:') + Math.round(Number(q.replace(',', '.')) * (big ? 1000 : 1) * 1000) / 1000);
+    return ' ';
+  });
+  const words = rest.split(/[^a-z0-9]+/).filter((w) => w && !FILLER.has(w) && (w.length >= 3 || /^\d+$/.test(w)));
+  return [...new Set([...words, ...sizes])];
+}
 export function matchProducts(list, text) {
-  const words = norm(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILLER.has(w)).map(stem);
+  const words = productTerms(text);
   if (!words.length) return [];
-  return list.map((p) => ({ p, s: words.filter((w) => norm(p.nombre).includes(w)).length })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.p);
+  return list.filter((p) => {
+    // Singular candidates come only from an actual plural suffix, never by appending letters.
+    const forms = (w) => [w, ...(w.length >= 4 && w.endsWith('s') ? [w.slice(0, -1)] : []), ...(w.length >= 5 && w.endsWith('es') ? [w.slice(0, -2)] : [])];
+    const terms = new Set(productTerms(p.nombre).flatMap(forms));
+    return words.every((w) => forms(w).some((f) => terms.has(f)));
+  });
+}
+// The user's explicit stock constraints survive omitted model arguments. No writes or historical reconstruction.
+export function stockQueryArgs(query, text, nowMs = Date.now()) {
+  if (!['stock_producto', 'bajo_stock'].includes(query?.tipo)) return query;
+  const q = { ...query }, t = norm(text);
+  if (/\b(?:stock|existencias?)\s+negativ[oa]s?\b/.test(t)) q.estado_stock = 'negativo';
+  else if (/\b(?:en|stock|existencias?)\s+(?:cero|0)\b/.test(t)) q.estado_stock = 'cero';
+  if (q.estado_stock && !q.producto && !q.categoria) q.tipo = 'bajo_stock';
+  const category = t.match(/\bcategoria\s+([a-z0-9][a-z0-9 ]{0,60})/);
+  if (category && !q.categoria) {
+    q.categoria = category[1].replace(/\s+(?:con|sin)\s+(?:el\s+)?(?:stock|existencias?)\b.*$/, '').trim();
+    q.producto = null;
+  }
+  if (q.categoria) q.tipo = 'stock_producto';
+  const date = t.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (/\b(?:ayer|anteayer|antier|anterior|pasad[oa]|historico)\b/.test(t) || (date && date[0] !== limaToday(nowMs))) q.historico = true;
+  return q;
 }
 export const PRODUCT_MATCH_ROWS = 8;
 // Cálculo puro de las sugerencias (se prueba aparte). products: forma del lector; sold: Map product_id -> unidades vendidas en `dias` días.
@@ -542,24 +575,32 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   // truncado: la lectura se cortó (lista larga). Lo usa el chat para NO contestar directo con texto (va la segunda llamada al modelo).
   if (tipo === 'caja_abierta') return cajaAbierta(reader, base);
   if (['stock_producto', 'bajo_stock', 'sin_costo'].includes(tipo)) {
+    const today = limaToday(nowMs);
+    const historic = tipo !== 'sin_costo' && (args.historico || (args.periodo && args.periodo !== 'hoy') || [args.fecha, args.desde, args.hasta].some((d) => d && d !== today));
+    if (historic) return { ...base, columnas: [], filas: [], texto: 'No tengo una consulta de stock histórico para esa fecha. El stock consultado aquí es el actual; revisa los movimientos en Inventario > Kardex.', resumen: { stock_historico_no_disponible: true, estado: 'Stock histórico no disponible: consulta actual únicamente; revisa Inventario > Kardex.' } };
     const list = await reader.products(), note = list.truncated ? ' (lista larga: se revisaron los primeros ' + list.length + ')' : '';
     if (list.truncated) base.truncado = true;
     if (tipo === 'stock_producto') {
       // (lote en vivo 22-10) nombre a medias («leche Gloria», «aceite»): se listan TODOS los parecidos (hasta 8) con precio y costo,
       // para que el asistente muestre opciones en vez de preguntar «¿cuál?». El costo solo queda para el Admin: employeeQueryResult lo quita.
-      const all = matchProducts(list, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
-      if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };
+      const state = (p) => !args.estado_stock || (p.controla && !isServiceProduct(p) && Number.isFinite(p.stock) && (args.estado_stock === 'cero' ? p.stock === 0 : args.estado_stock === 'negativo' ? p.stock < 0 : p.stock <= p.min));
+      const category = (x) => normName(x).split(' ').map(stem).join(' ');
+      const selected = args.categoria ? list.filter((p) => category(p.categoria) === category(args.categoria)) : matchProducts(list, args.producto || '');
+      const all = selected.filter(state), hits = all.slice(0, PRODUCT_MATCH_ROWS);
+      const coverage = (all.length > hits.length ? 'Mostrando ' + hits.length + ' de ' + all.length + ' coincidencias. Revisa la lista completa en Inventario. ' : '') + (note ? note.trim() + '. ' : '');
+      if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto' + note + '.', resumen: { encontrados: 0, ...(note ? { estado: note.trim() } : {}) } };
       const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio, p.costo]);
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/', 'Costo S/'], filas, total: all.length,
-        texto: sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
-        resumen: { encontrados: all.length, productos: hits.map((p) => ({ ...(p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) }), precio: p.precio, costo: p.costo })) } };
+        texto: coverage + sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
+        resumen: { encontrados: all.length, mostrados: hits.length, ...(coverage ? { estado: coverage } : {}), productos: hits.map((p) => ({ ...(p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) }), precio: p.precio, costo: p.costo })) } };
     }
     if (tipo === 'bajo_stock') {
       // Servicios fuera (no llevan stock), igual que la pestaña «Crítico» de Inventario.
-      const low = list.filter((p) => p.controla && !isServiceProduct(p) && Number.isFinite(p.stock) && (p.stock <= 0 || p.stock <= p.min)).sort((a, b) => (a.stock - a.min) - (b.stock - b.min));
+      const low = list.filter((p) => p.controla && !isServiceProduct(p) && Number.isFinite(p.stock) && (args.estado_stock === 'cero' ? p.stock === 0 : args.estado_stock === 'negativo' ? p.stock < 0 : (p.stock <= 0 || p.stock <= p.min))).sort((a, b) => (a.stock - a.min) - (b.stock - b.min));
+      const label = args.estado_stock === 'cero' ? 'con stock en cero' : args.estado_stock === 'negativo' ? 'con unidades faltantes' : 'en o bajo el mínimo';
       const filas = low.slice(0, N).map((p) => [p.nombre, r2(p.stock), r2(p.min), Math.max(1, Math.ceil(p.min * 2 - p.stock))]);
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir'], filas, total: low.length,
-        texto: low.length ? (low.length === 1 ? 'Hay 1 producto en o bajo el mínimo' : 'Hay ' + low.length + ' productos en o bajo el mínimo') + note + '. Los más urgentes: ' + low.slice(0, 3).map((p) => p.nombre + ' (' + (p.stock <= 0 ? stockLabel(p.stock) : r2(p.stock)) + ')').join(', ') + '.' : 'Ningún producto está bajo el mínimo' + note + '.',
+        texto: low.length ? (low.length === 1 ? 'Hay 1 producto ' + label : 'Hay ' + low.length + ' productos ' + label) + note + '. Los más urgentes: ' + low.slice(0, 3).map((p) => p.nombre + ' (' + (p.stock <= 0 ? stockLabel(p.stock) : r2(p.stock)) + ')').join(', ') + '.' : 'Ningún producto ' + label + note + '.',
         resumen: { total: low.length, revisados: list.length, primeros: low.slice(0, M).map(stockForModel) } };
     }
     const sin = list.filter((p) => !(p.costo > 0));
