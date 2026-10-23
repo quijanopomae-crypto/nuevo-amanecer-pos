@@ -107,3 +107,35 @@ test('3b) un token firmado antes del arreglo (frase cruda) también sale limpio 
   assert.ok(!/Rosa/i.test(sent), 'llegó a la IA');
   assert.ok(!/Rosa/.test(JSON.stringify((await readInvoiceMemory(d.invoice_memory, SECRET, OWNER, NOW)).taught)), 'el token nuevo sale limpio');
 });
+
+// (alfa) En la ventana del verbo de deuda o pago de isBrandDon, la puntuación no cuenta como palabra (ni los pronombres átonos «me», «lo»…):
+// «el arroz don Pedro, que siempre me lo debe» es una persona aunque vaya después de «arroz».
+test('4) la puntuación no cuenta en la ventana del verbo de deuda: «arroz don Pedro, que siempre me lo debe» tapa «Pedro»; las marcas siguen', async () => {
+  const PHRASE = 'recuerda que el arroz don Pedro, que siempre me lo debe, llega el 5';
+  const { isBrandDon, sanitizeLesson } = A;
+  const at = PHRASE.indexOf('don Pedro');
+  assert.equal(isBrandDon(PHRASE, at, at + 'don Pedro'.length, DATA.products), false);
+  assert.equal(isBrandDon('el arroz don Pedro ; que me lo debe', 9, 18, []), false);
+  assert.equal(isBrandDon('el arroz don Pedro. Me lo debe', 9, 18, []), false);
+  const clean = sanitizeLesson(PHRASE, DATA.customers, DATA.products);
+  assert.ok(!/Pedro/i.test(clean) && /llega el 5/.test(clean) && /me lo debe/.test(clean), clean);
+  // marcas intactas
+  const KNOWN = [...DATA.products, { nombre: 'Doña Pepa 1 kg' }];
+  assert.equal(sanitizeLesson('apunta: siempre pido fideo don vittorio, los lunes', [], KNOWN), 'apunta: siempre pido fideo don vittorio, los lunes');
+  assert.equal(sanitizeLesson('anota: FIDEO DON VITTORIO SPAGHETTI 500GR X 20 llega el 5', [], KNOWN), 'anota: FIDEO DON VITTORIO SPAGHETTI 500GR X 20 llega el 5');
+  assert.equal(sanitizeLesson('anota: Doña Pepa, trae 12 cajas', [], KNOWN), 'anota: Doña Pepa, trae 12 cajas');
+  const x = sanitizeLesson('apunta: DON PEDRO X 2 cajas', [], KNOWN); assert.ok(!/PEDRO/.test(x) && /X 2 cajas/.test(x), x);
+  // guardado (pos_settings real) y lo que llega a la IA en el turno siguiente (servidor y token), con y sin partes
+  for (const stream of [false, true]) {
+    const { db, d1 } = realSettingsDb(), store = createSettingsUsageStore(d1);
+    const reply = stream ? () => streamR([delta({ content: 'Listo.' }, 'stop')]) : () => msg('Listo.');
+    const read = async (r) => (stream ? sseFinal(await r.text()) : await r.json());
+    const t1 = await route({ text: PHRASE, stream }, store, [reply]); const tok = (await read(t1.r)).invoice_memory;
+    const saved = db.prepare("SELECT value_json FROM pos_settings WHERE key LIKE 'internal:asst:taught:%'").all();
+    assert.equal(saved.length, 1); assert.ok(!/Pedro/i.test(saved[0].value_json) && /llega el 5/.test(saved[0].value_json), saved[0].value_json);
+    const t2 = await route({ text: '¿qué te enseñé hoy?', invoice_memory: tok, stream }, store, [reply]); await read(t2.r);
+    const sent = t2.cap[t2.cap.length - 1];
+    assert.ok(/ensenado_por_usuario/.test(sent) && /llega el 5/.test(sent), 'va lo enseñado');
+    assert.ok(!/Pedro/i.test(sent), 'llegó a la IA' + (stream ? ' (en partes)' : ''));
+  }
+});
