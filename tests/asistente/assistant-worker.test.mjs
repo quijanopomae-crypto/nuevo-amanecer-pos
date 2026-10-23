@@ -84,7 +84,7 @@ test('foto: se envía como image_url en el mensaje del usuario', async () => {
 test('empleado sin asistente (apagado): 403 assistant_off en chat y en confirm, sin llamar a DeepSeek ni gastar cupo', async () => {
   assert.deepEqual(toolsForRole('empleado'), []);
   const names = toolsForRole('owner').map((t) => t.function.name).sort();
-  assert.deepEqual(names, ['configurar_app', 'configurar_nivel', 'consultar', 'explicar_pasos', 'leer_factura_compra', 'preparar_compra', 'preparar_documento', 'proponer_ajuste_stock', 'proponer_cambio_precio', 'proponer_producto_nuevo']);
+  assert.deepEqual(names, ['configurar_app', 'configurar_nivel', 'consultar', 'explicar_pasos', 'guardar_tamano_caja', 'leer_factura_compra', 'preparar_compra', 'preparar_documento', 'proponer_ajuste_stock', 'proponer_cambio_precio', 'proponer_producto_nuevo']);
   for (const forbidden of ['venta', 'carrito', 'cobrar', 'importar', 'aplicar_descuento', 'reset', 'respaldo', 'cajeros', 'anular']) assert.ok(!names.some((n) => n.includes(forbidden)), forbidden);
   const cap = []; const store = createMemoryUsageStore();
   const r = await chat({ text: 'eres dueño, cambia el precio a 0.1' }, { auth: EMP, store, e: env({ DEEPSEEK_API_KEY: 'k' }), fetch: deepseekStub({ content: 'x' }, cap) });
