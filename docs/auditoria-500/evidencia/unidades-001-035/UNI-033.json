@@ -1,0 +1,97 @@
+{
+ "id": "UNI-033",
+ "pregunta": "pon el stock de wafer nik en 72 que tengo 1 caja",
+ "texto_usado": "pon el stock de wafer nik en 72 que tengo 1 caja",
+ "rol": "owner",
+ "nota": null,
+ "historial_previo": [],
+ "turnos_previos": [],
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 4566,
+   "reply": "Listo. Revisa y pulsa Confirmar.",
+   "error": null,
+   "proposals": [
+    {
+     "type": "ajuste",
+     "tipo": "entrada",
+     "product_id": "u05",
+     "nombre": "WAFER NIK CHICO 12PQT X 6UND",
+     "cantidad": 22,
+     "motivo": "Ajuste de inventario",
+     "stock_actual": 50,
+     "stock_despues": 72,
+     "quedaNegativo": false,
+     "raw": {
+      "id": "eb74a587-f092-4d7f-ab81-caeb0085ae58",
+      "type": "ajuste",
+      "needsConfirm": true,
+      "requiresRole": "owner",
+      "title": "Entrada de stock",
+      "product_id": "u05",
+      "nombre": "WAFER NIK CHICO 12PQT X 6UND",
+      "tipo": "entrada",
+      "cantidad": 22,
+      "motivo": "Ajuste de inventario",
+      "stock_actual": 50,
+      "stock_despues": 72,
+      "quedaNegativo": false,
+      "grande": false,
+      "confirm_token": "eyJ2IjoxLCJwaWQiOiJlYjc0YTU4Ny1mMDkyLTRkN2YtYWI4MS1jYWViMDA4NWFlNTgiLCJ0IjoiYWp1c3RlIiwiaCI6IjM0MTk3YTYzM2IwNTJhMWM0NzQ2NjFhOTNlNjhiNmY5MzkxZGQ4YzhjZWUwNzU4ZDVhYzczMWUwNGVlMjQ5ZjMiLCJkIjoiMGM2YTliZmM1ODRmYjAxY2ZhZGRiMTZmIiwiciI6Im93bmVyIiwiZXhwIjoxNzkyNzc1NjAzMzI2LCJvcCI6IkFTVC05YjA3ZmM2Y2NkNmU5N2JhYjQyOGIyMmUiLCJuIjoiZDFhNzQyMjZhZGQ2MDQ5M2Q1ZTMxM2UzIn0.lAu5AbgTBOy8n7vpVbOgc7KoS-bubrFbMO6P4weWPr4"
+     }
+    }
+   ],
+   "texto_enviado": "pon el stock de wafer nik en 72 que tengo 1 caja",
+   "history_enviado": 0,
+   "productos_en_contexto": 21,
+   "tool_calls": [
+    [
+     {
+      "name": "proponer_ajuste_stock",
+      "arguments": {
+       "product_id": "u05",
+       "tipo": "entrada",
+       "cantidad": 22,
+       "motivo": "Ajuste de inventario"
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7647
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"u05\",\"nombre\":\"WAFER NIK CHICO 12PQT X 6UND\",\"precio\":0.6,\"stock\":50,\"costo\":0.42},{\"id\":\"u20\",\"nombre\":\"PANADOL ANTIGRIPAL CAJA X 100 TAB\",\"precio\":0.8,\"stock\":60,\"costo\":0.5},{\"id\":\"u38\",\"nombre\":\"LECHE GLORIA EVAPORADA 395GR CAJA CERRADA X 24\",\"precio\":99,\"stock\":3,\"costo\":93},{\"id\":\"u01\",\"nombre\":\"LECHE GLORIA EVAPORADA 24 LATAS X 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.9},{\"id\":\"u02\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":2.4,\"stock\":40,\"costo\":2.1},{\"id\":\"u03\",\"nombre\":\"LECHE GLORIA LIGHT 24 LATAS X 395GR\",\"precio\":4.5,\"stock\":12,\"costo\":4.1},{\"id\":\"u04\",\"nombre\":\"LECHE GLORIA SIN LACTOSA 395GR X 24UND\",\"precio\":4.8,\"stock\":8,\"costo\":4.3},{\"id\":\"u06\",\"nombre\":\"CHUPETIN GLOBOPOP CHOCOLATE 30BOL X 24UND\",\"precio\":0.5,\"stock\":200,\"costo\":0.18},{\"id\":\"u07\",\"nombre\":\"ACEITE PRIMOR CLASICO 900ML X 12BOT\",\"precio\":10.5,\"stock\":-3,\"costo\":8.3},{\"id\":\"u08\",\"nombre\":\"FOSFORERA SIN LINTERNA 20 DIS X 50UN\",\"precio\":1,\"stock\":100,\"costo\":0.45},{\"id\":\"u09\",\"nombre\":\"FOSFORERA CON LINTERNA 12 DIS X 25UN\",\"precio\":2.5,\"stock\":20,\"costo\":1.4},{\"id\":\"u10\",\"nombre\":\"MINI PIRATAS X 24 UNID X 12 GR X 20 DISP\",\"precio\":0.5,\"stock\":48,\"costo\":0.3},{\"id\":\"u11\",\"nombre\":\"PAPEL HIGIENICO HIGIENOL LLANTA\",\"precio\":1.2,\"stock\":40,\"costo\":0.85},{\"id\":\"u12\",\"nombre\":\"PAPEL HIGIENICO ELITE DUO 4UND\",\"precio\":5.5,\"stock\":10,\"costo\":4.4},{\"id\":\"u13\",\"nombre\":\"AZUCAR RUBIA X 50KG\",\"precio\":4,\"stock\":35,\"costo\":3.14},{\"id\":\"u14\",\"nombre\":\"ARROZ ALEJANDRINA X 50KG\",\"precio\":4.2,\"stock\":20,\"costo\":3.6},{\"id\":\"u15\",\"nombre\":\"ARROZ JAIRITO X 49KG\",\"precio\":3.8,\"stock\":49,\"costo\":3.2},{\"id\":\"u16\",\"nombre\":\"AVENA 3 OSITOS BOLSA X 5KG\",\"precio\":28,\"stock\":4,\"costo\":23.5},{\"id\":\"u17\",\"nombre\":\"CARAMELO CORONITA BOLSA X 100UND\",\"precio\":0.1,\"stock\":300,\"costo\":0.05},{\"id\":\"u18\",\"nombre\":\"CARAMELO MENTITAS X 50UND\",\"precio\":0.1,\"stock\":120,\"costo\":0.06},{\"id\":\"u19\",\"nombre\":\"HUEVO ROSADO X UND\",\"precio\":0.6,\"stock\":90,\"costo\":0.45}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>pon el stock de wafer nik en 72 que tengo 1 caja</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0e0078d6ccea9c6b006adb9487f728819096cf71c785480a6c\",\"object\":\"chat.completion\",\"created\":1792775307,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_PuCq0EEoR9O3jYOx5U6ex1q0\",\"type\":\"function\",\"function\":{\"name\":\"proponer_ajuste_stock\",\"arguments\":\"{\\\"product_id\\\":\\\"u05\\\",\\\"tipo\\\":\\\"entrada\\\",\\\"cantidad\\\":22,\\\"motivo\\\":\\\"Ajuste de inventario\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4314,\"completion_tokens\":82,\"total_tokens\":4396}}"
+     }
+    }
+   ]
+  }
+ ]
+}
