@@ -18,14 +18,14 @@ import { SETTINGS_TOOL, SERVER_SETTINGS_TOOL, settingsSnapshot, settingsProposal
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
-import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
+import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, statedCost, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel, brandNoticeOf, BRAND_NOTICE, BRAND_NOTICE_LEAD, saysNoBrand } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
@@ -76,6 +76,14 @@ export const CONFIG_FORBIDDEN = Object.freeze({ error: 'config_forbidden', messa
 export const CONFIG_ADMIN_ONLY = Object.freeze({ error: 'config_forbidden', message: CONFIG_ADMIN_ONLY_TEXT });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
 const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
+// (auditoría 500, P-051/P-052) «Ventas bajo costo» pedida en el chat por un empleado SIN el permiso de costos («q productos estoy vendiendo
+// a perdida»): 403 below_cost_admin_only antes de abrir el canal, sin cupo ni modelo. Mismo patrón que el teléfono (BELOW_RE de asistente-ui.js),
+// Una baja «pasa 3 leches vencidas a pérdida» no entra: hace falta un verbo de venta (vendo, vendí, vendemos, vendiendo…) y hasta 3 palabras
+// antes de «a pérdida». Un mensaje con varios pedidos y uno de ellos sobre ventas bajo costo recibe el 403 completo (fijado en la prueba).
+// que al Admin y al nivel 3 con «costos y cambios» los manda directo a /auth/assistant/below-cost.
+export const BELOW_COST_DENIED = Object.freeze({ error: 'below_cost_admin_only', message: 'Las alertas de venta bajo costo son solo para el Admin.' });
+export const BELOW_COST_ASK_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bvend(?:o|es?|en|emos|[ií]|i[oó]|imos|ieron|iendo|ido|er|[ií]a[ns]?|[ií]amos)(?![a-záéíóúñ])(?:\s+[^\s.,;:!?¿¡]+){0,3}?\s+a\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
+export function employeeBelowCostDenied(role, text) { return String(role || '').startsWith('empleado:') && !seesOwnerData(role) && BELOW_COST_ASK_RE.test(String(text || '')); }
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
   const t = String(text || '');
@@ -1750,10 +1758,10 @@ export const NO_STOCK_TEXT = (n, q) => '«' + n + '» no lleva control de stock,
 // Con `ids` y un lector que sabe buscar por id, se leen SOLO esos productos (sin recorrer el catálogo ni la lista cortada a 5000).
 // Si la lectura de la base FALLA, el mapa sale con failed=true: el chat no ofrece compras ni ajustes (Bot 2), ver dropStockCards.
 export async function stockControlMap(reader, ctx, ids) {
-  const m = new Map();
+  const m = new Map(); m.units = new Map(); // m.units: id → unidad de venta (products.unit del servidor; el aparato no la manda)
   for (const p of (ctx?.products || [])) if (p.controla === false) m.set(String(p.id), false);
-  if (reader && ids && typeof reader.productsById === 'function') { try { for (const [id, p] of await reader.productsById(ids)) m.set(id, !!p.controla); } catch { m.failed = true; } }
-  else if (reader && typeof reader.products === 'function') { try { for (const p of await reader.products()) m.set(String(p.id), !!p.controla); } catch { m.failed = true; } }
+  if (reader && ids && typeof reader.productsById === 'function') { try { for (const [id, p] of await reader.productsById(ids)) { m.set(id, !!p.controla); m.units.set(id, p.unidad ?? null); } } catch { m.failed = true; } }
+  else if (reader && typeof reader.products === 'function') { try { for (const p of await reader.products()) { m.set(String(p.id), !!p.controla); m.units.set(String(p.id), p.unidad ?? null); } } catch { m.failed = true; } }
   return m;
 }
 export const STOCK_READ_FAILED_TEXT = 'No pude revisar el inventario en este momento, así que no preparé compras ni ajustes de stock. Inténtalo otra vez en un momento.';
@@ -1834,7 +1842,7 @@ const ARRIVAL_RE = /\b(?:me\s+llegaron|me\s+llego|llegaron|llego|compre|compramo
 const NOT_PURCHASE_RE = /\b(?:devoluc\w*|devolvi\w*|merma|vencid\w*|da[nñ]ad\w*|rot[oa]s?|conteo|cont[eé]|me\s+devolvieron)\b/;
 const COST_ASK_RE = /\b(?:actualiz\w*|cambi\w*|pon\w*|corrig\w*|modific\w*|sube\w*|subir|baja\w*|bajar|guarda\w*)\s+(?:(?:el|los|su|sus|tambien\s+el|tambien\s+los)\s+)?costos?\b|\bcostos?\s+nuevos?\b|\bnuevos?\s+costos?\b/;
 const NAME_STOP = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'con', 'para', 'por', 'en', 'y', 'e',
-  'unidad', 'unidades', 'und', 'unid', 'uni', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'saco', 'sacos', 'kilo', 'kilos', 'kg', 'docena', 'docenas', 'botella', 'botellas', 'lata', 'latas', 'frasco', 'frascos', 'sobre', 'sobres', 'blister', 'blisters']);
+  'unidad', 'unidades', 'und', 'unid', 'uni', 'suelto', 'sueltos', 'suelta', 'sueltas', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'saco', 'sacos', 'kilo', 'kilos', 'kg', 'docena', 'docenas', 'botella', 'botellas', 'lata', 'latas', 'frasco', 'frascos', 'sobre', 'sobres', 'blister', 'blisters']);
 export function isArrivalText(text) { const t = foldText(text); return ARRIVAL_RE.test(t) && !NOT_PURCHASE_RE.test(t); }
 export function asksCostChange(text) { return COST_ASK_RE.test(foldText(text)); }
 function nameWords(v) { return foldText(v).replace(/(\d)([a-zñ])/g, '$1 $2').replace(/[^a-z0-9ñ]+/g, ' ').split(' ').filter((w) => w.length >= 3 && !NAME_STOP.has(w)).map((w) => w.length > 4 ? w.replace(/(?:es|s)$/, '') : w); }
@@ -1869,20 +1877,31 @@ const NAME_CUT_RE = /\s+(?:(?:a|en|por|x)\s+(?:s\/\.?\s*)?\d|(?:a\s+)?s\/\.?\s*\
 const NAME_FILLER_RE = /^(?:(?:un|una|unos|unas)\s+)?productos?\s+nuevos?(?:\s+que\s+no\s+(?:tengo|tenia|tenía|tenemos|hay|est[aá]))?\s*[,:;-]?\s*/i;
 // Renglón que solo repite la cantidad para otras filas («12 de cada uno», «10 c/u»): no es un producto.
 const ONLY_FILLER_RE = /^(?:de\s+)?(?:cada\s+(?:un[oa]|cosa|producto)|c\/u|c\.u\.?|todo|todos|todas|cada\s+uno\s+de\s+ellos)$/i;
+// (UNI-067) Renglón que es solo un empaque («2 cajas», «1 paquete») y renglón que empieza por sueltos o unidades («3 sueltos de primor»).
+const PACK_ONLY_RE = /^(?:cajas?|paquetes?|packs?|bolsas?|sacos?|docenas?|displays?|blisters?|fardos?|six\s*packs?)$/i;
+const LOOSE_LEAD_RE = /^(sueltos?|sueltas?|unidades|unidad|und|unid)\s+(?:de\s+|del\s+)?(.+)$/i;
 // Renglones «N nombre [a X cada uno | a X en total]» después de «me llegaron», «compré», etc.
 export function parseArrivalItems(text) {
   const raw = String(text ?? '').replace(/[\x00-\x1f\x7f]+/g, ' '), t = foldText(raw);
   const m = ARRIVAL_RE.exec(t); if (!m) return [];
   let body = raw.slice(m.index + m[0].length).replace(/^\s*(?:hoy|ayer|esta\s+mañana)?\s*[:,-]?\s*/i, '');
   const out = [];
+  let pack = null; // (UNI-067) «2 cajas» sin producto: es la 1.ª mitad de «2 cajas y 3 sueltos de primor», no un renglón aparte
   for (const part of body.split(/\s*(?:(?<!\d),|,(?=\s)|[;\n]|\s+y\s+|\s+e\s+|\s+mas\s+|\s+más\s+)\s*(?=\d)/i)) {
+    const prev = pack; pack = null;
     const r = /^(\d+(?:[.,]\d+)?)\s+(.+?)(?:\s+(?:a|en|por|pagu[eé]|me\s+cost[oó]|cost[oó])\s+(?:s\/\.?\s*)?(\d+(?:[.,]\d+)?)\s*(?:soles?)?\s*(cada\s+un[oa]|c\/u|c\.u\.?|la\s+unidad|por\s+unidad|el\s+total|en\s+total|total|todo)?)?\s*[.!?]*\s*$/i.exec(part.trim());
     if (!r) continue;
     const cantidad = qty(String(r[1]).replace(',', '.'));
     const nombre = cleanText(r[2].replace(NAME_CUT_RE, '').replace(/\s+(?:de|del)\s+(?:la\s+|el\s+)?(?:distribuidora|proveedor|tienda|mercado|almac[eé]n)\b.*$/i, '').replace(/^(?:de|del)\s+/i, '').replace(NAME_FILLER_RE, '').replace(/[\s,;:.-]+$/, ''), 80);
+    if (cantidad && PACK_ONLY_RE.test(nombre)) { pack = cleanText(r[1] + ' ' + nombre, 30); continue; }
     if (!cantidad || !nombre || ONLY_FILLER_RE.test(nombre) || !nameWords(nombre).length) continue;
     let costo = r[3] != null ? money(String(r[3]).replace(',', '.')) : null;
     if (costo != null && r[4] && /total|todo/i.test(r[4])) costo = money(costo / cantidad);
+    const loose = prev ? LOOSE_LEAD_RE.exec(nombre) : null;
+    // Mezcla de cajas y sueltos del MISMO producto: un solo renglón. El total depende de cuántas trae la caja (no se adivina):
+    // la fila lleva «(2 cajas y 3 sueltos)» a la vista y nunca se vincula sola a un producto con la cantidad suelta.
+    // Cantidad VACÍA (no la suelta): sin saber cuántas trae la caja no se registra nada (revisión del PR #997).
+    if (loose && nameWords(loose[2]).length) { out.push({ nombre: cleanText(loose[2] + ' (' + prev + ' y ' + r[1] + ' ' + loose[1] + ')', 80), cantidad: null, costo_unitario: costo, mixta: true }); continue; }
     out.push({ nombre, cantidad, costo_unitario: costo });
     if (out.length >= 30) break;
   }
@@ -1910,18 +1929,38 @@ export function costIsStated(cost, cantidad, nums, packs = []) {
   const c = Number(cost), q = Number(cantidad), near = (a) => Math.abs(a - c) < 0.006;
   return nums.some((n) => near(n) || near(n / 100) || (q > 0 && near(n / q)) || packs.some((k) => near(n / k)));
 }
+// (UNI-037) Tamaño A GRANEL del nombre («AZUCAR RUBIA X 50KG», «X 2.5KG», «X 20LT»): solo kilos o litros, de 2 para arriba.
+// Gramos y mililitros no («GASEOSA 500ML», «X 170GR»): con 0.5 o 0.17 cualquier número dividido «salía» dicho.
+const WEIGHT_SIZE_RE = /(?:^|[^a-z0-9.,])(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|kilogramos?|lts?|litros?|l)(?![a-z])/g;
+const weightSizes = (name) => [...foldText(name).matchAll(WEIGHT_SIZE_RE)].map((m) => Number(m[1].replace(',', '.'))).filter((k) => Number.isFinite(k) && k >= 2);
 const packSizes = (name) => [...foldText(name).matchAll(/\b(?:caja|paquete|pack|bolsa|six|x)\s*(?:de\s+|x\s*)?(\d+)\b/g)].map((m) => Number(m[1])).filter((k) => k >= 2);
+// Unidad de venta del producto en el POS (products.unit en la base del servidor): ¿se vende por kilo o por litro?
+const WEIGHT_UNITS = new Set(['kilogramo', 'kilogramos', 'kg', 'kgs', 'kilo', 'kilos', 'litro', 'litros', 'l', 'lt', 'lts']);
+export const soldByWeight = (unit) => typeof unit === 'string' && WEIGHT_UNITS.has(foldText(unit).trim().replace(/\.$/, ''));
+export const MISSING_BOX_TEXT = 'Falta cuántas trae la caja';
+const MIXED_ROW = Symbol('fila mixta'); // solo la pone arrivalToPurchase (no viene del modelo ni del JSON)
 // Pone en 0 (marcado «costo») el costo que el modelo puso sin que nadie lo dijera. Devuelve los nombres de esas filas.
-export function clearUnstatedCosts(proposals, texts) {
-  const nums = statedNumbers(texts), names = [];
+// (UNI-037) Costo = lo dicho entre el tamaño a granel («157 el saco» / 50 kg = 3.14): vale SOLO si el producto se vende por kilo o
+// litro (units: id → unidad de venta, leída del servidor). Se vende entero o no se sabe: NO se divide; queda lo dicho (157), marcado
+// «costo», y el nombre va en names.porSaco para el aviso.
+export function clearUnstatedCosts(proposals, texts, units = null) {
+  const nums = statedNumbers(texts), names = [], porSaco = [];
   for (const p of proposals) {
     if (p.type !== 'compra' || !Array.isArray(p.lineas)) continue;
     for (const l of p.lineas) {
-      if (!(Number(l.costo_unitario) > 0) || costIsStated(l.costo_unitario, l.cantidad, nums, packSizes(l.nombre))) continue;
-      l.costo_unitario = 0; l.revisar = [...new Set([...(l.revisar || []), 'costo'])]; names.push(l.nombre);
+      const c = Number(l.costo_unitario);
+      if (!(c > 0) || costIsStated(c, 0, nums)) continue; // dicho tal cual (o en céntimos)
+      const ws = weightSizes(l.nombre), whole = nums.find((n) => ws.some((k) => Math.abs(n / k - c) < 0.006));
+      if (whole != null ? soldByWeight(units?.get?.(String(l.product_id))) : costIsStated(c, l.cantidad, nums, packSizes(l.nombre))) continue;
+      if (whole != null) { // se vende entero o no se sabe: el costo del saco, con las marcas de nuevo (costo raro, topes)
+        l.costo_unitario = money(whole); porSaco.push(l.nombre);
+        l.revisar = [...new Set([...reviewPurchaseLine(l, l.costo_actual != null ? { costo: l.costo_actual } : null), 'costo'])];
+        const hard = hardLimitLine(l); if (hard.length) l.limite = hard; else delete l.limite;
+      } else { l.costo_unitario = 0; l.revisar = [...new Set([...(l.revisar || []), 'costo'])]; names.push(l.nombre); }
     }
-    p.revisarFilas = p.lineas.filter((l) => l.revisar).length;
+    p.revisarFilas = p.lineas.filter((l) => l.revisar).length; p.fueraDeLimite = p.lineas.filter((l) => l.limite).length;
   }
+  names.porSaco = porSaco;
   return names;
 }
 export function arrivalToPurchase(proposals, dropped, text, role, ctx, image = false) {
@@ -1937,8 +1976,8 @@ export function arrivalToPurchase(proposals, dropped, text, role, ctx, image = f
   for (const it of items) {
     const have = lineas.find((l) => coveredBy(it, l, ctx));
     if (have) { if (have.costo_unitario == null && it.costo_unitario != null) have.costo_unitario = it.costo_unitario; continue; }
-    const p = uniqueProduct(it.nombre, ctx);
-    lineas.push({ product_id: p ? p.id : null, nombre: p ? p.nombre : it.nombre, cantidad: it.cantidad, costo_unitario: it.costo_unitario });
+    const p = it.mixta ? null : uniqueProduct(it.nombre, ctx);
+    lineas.push({ product_id: p ? p.id : null, nombre: p ? p.nombre : it.nombre, cantidad: it.cantidad, costo_unitario: it.costo_unitario, ...(it.mixta ? { [MIXED_ROW]: true } : {}) });
   }
   if (lineas.length <= (compras[0]?.lineas.length || 0) && compras.length <= 1 && !entradas.length) return proposals; // nada que sumar
   const first = compras[0] || entradas[0] || null;
@@ -2008,11 +2047,11 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'preparar_compra' || name === 'leer_factura_compra') {
     const lineas = [];
     for (const l of (Array.isArray(args.lineas) ? args.lineas : []).slice(0, 30)) {
-      const m = matchLine(l, idx), q = qty(l?.cantidad);
-      if (!q || !m.nombre) continue;
+      const m = matchLine(l, idx), q = qty(l?.cantidad), mixed = l?.[MIXED_ROW] === true;
+      if ((!q && !mixed) || !m.nombre) continue;
       const known = m.product_id ? idx.get(m.product_id) : null;
-      const line = { product_id: m.product_id, nombre: m.nombre, cantidad: q, costo_unitario: seesCosts(role) ? money(l?.costo_unitario) : null, costo_actual: seesCosts(role) && known && known.costo != null ? known.costo : null };
-      const flags = reviewPurchaseLine(line, known);
+      const line = { product_id: m.product_id, nombre: m.nombre, cantidad: mixed ? null : q, costo_unitario: seesCosts(role) ? money(l?.costo_unitario) : null, costo_actual: seesCosts(role) && known && known.costo != null ? known.costo : null };
+      const flags = mixed ? [MISSING_BOX_TEXT] : reviewPurchaseLine(line, known);
       if (flags.length) line.revisar = flags;
       const hard = hardLimitLine(line);
       if (hard.length) line.limite = hard; // fuera del tope duro: «Está bien» no la deja pasar; solo «Quitar fila»
@@ -2029,10 +2068,10 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'proponer_cambio_precio') {
     const p = idx.get(safeId(args.product_id)); const nuevo = money(args.precio_nuevo);
     if (!p || !nuevo || nuevo <= 0) return { dropped: 'bad_price', tool: name };
-    const delta = p.precio ? (nuevo - p.precio) / p.precio : null;
+    const delta = p.precio ? (nuevo - p.precio) / p.precio : null, quiso = decimalSlip(p.precio, nuevo);
     return { id, type: 'precio', needsConfirm: true, requiresRole: 'owner', title: 'Cambiar precio', product_id: p.id, nombre: p.nombre,
       precio_actual: p.precio, precio_nuevo: nuevo, motivo: cleanText(args.motivo, 160), cambioGrande: delta != null && Math.abs(delta) > 0.5,
-      bajoCosto: p.costo != null && nuevo < p.costo };
+      bajoCosto: p.costo != null && nuevo < p.costo, ...(quiso != null ? { quisoDecir: quiso } : {}) };
   }
   if (name === 'preparar_documento') {
     const tipo = DOC_TYPES.includes(args.tipo) ? args.tipo : null; if (!tipo) return { dropped: 'bad_document', tool: name };
@@ -2088,8 +2127,36 @@ export async function readLessons(store, auth, nowMs) {
 // (alfa, #957) lo guardado en pos_settings nunca lleva datos de clientes: nombres de la lista de clientes -> «cliente #código»; nombre tras
 // «cliente», «señora», «don»… -> se quita; DNI, RUC, teléfonos y correos con redactText (las mismas máscaras que van al modelo).
 const LESSON_FOLD = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr\w*|pag\w*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev\w*|quier\w*|pid\w*|tom(?:a|ó|o|an|aron)|recog\w*|llam\w*|dij\w*|tien\w*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad\w*|fi[oó]|encarg\w*|reserv\w*|apart\w*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
-export function sanitizeLesson(fact, customers = []) {
+const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr[\wÁÉÍÓÚÜÑáéíóúüñ]*|pag[\wÁÉÍÓÚÜÑáéíóúüñ]*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev[\wÁÉÍÓÚÜÑáéíóúüñ]*|quier[\wÁÉÍÓÚÜÑáéíóúüñ]*|pid[\wÁÉÍÓÚÜÑáéíóúüñ]*|tom(?:a|ó|o|an|aron)|recog[\wÁÉÍÓÚÜÑáéíóúüñ]*|llam[\wÁÉÍÓÚÜÑáéíóúüñ]*|dij[\wÁÉÍÓÚÜÑáéíóúüñ]*|tien[\wÁÉÍÓÚÜÑáéíóúüñ]*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad[\wÁÉÍÓÚÜÑáéíóúüñ]*|fi[oó]|encarg[\wÁÉÍÓÚÜÑáéíóúüñ]*|reserv[\wÁÉÍÓÚÜÑáéíóúüñ]*|apart[\wÁÉÍÓÚÜÑáéíóúüñ]*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
+// (auditoría 500, P-027; #988 revisión) Regla COMPARTIDA «don/doña» marca vs persona: la usan las lecciones (sanitizeLesson) y debe reusarla
+// el ocultado de respuestas (#998, maskReplyPeople).
+//   isBrandDon(text, start, end, known) -> true si el tramo text[start,end) («don/doña + nombre») es una MARCA y puede quedarse.
+//   - text: el texto completo; start/end: índices del tramo (empieza en «don»/«doña»); known: productos conocidos ({nombre} o strings).
+//   - Un verbo de deuda o pago cerca (hasta 4 palabras después del tramo o 3 antes: debe, paga, pagó, abonó, fía, le fié, me debe,
+//     cobrar a, prestar…) gana SIEMPRE: es persona.
+//   - Sin ese verbo, es marca si va justo después de una palabra de producto («fideo don …», «aceite doña …») o si «don/doña + primera
+//     palabra» está en el nombre de un producto conocido («Café Don Juan 250g»).
+//   - Nunca cuentan solos: las mayúsculas, un tamaño («2 KG», «X 20»), ni «producto» o «marca» como palabra antes.
+//   Los clientes de la lista se tapan ANTES, sin consultar esta función.
+const BRAND_CUE_RE = /^\s*(?:don|do[nñ]a)(?![a-zñ])/;
+const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada)\s+$/i;
+// sobre texto ya sin tildes y en minúsculas (LESSON_FOLD)
+const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|aba|ara|aron|ar|ado)|fi(?:o|e|a|an|aba|aron|amos|aste|ara|ar)|fiad[oa]s?|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
+const foldWords = (t) => LESSON_FOLD(t).split(/\s+/).filter(Boolean);
+export function isBrandDon(text, start, end, known = []) {
+  const all = String(text || ''), s = Math.max(0, start | 0), e = Math.max(s, Math.min(all.length, end | 0));
+  const span = LESSON_FOLD(all.slice(s, e));
+  if (!BRAND_CUE_RE.test(span)) return false;
+  const before = all.slice(0, s), after = all.slice(e);
+  if (DEBT_VERB.test(' ' + [...foldWords(before).slice(-3), ...foldWords(span), ...foldWords(after).slice(0, 4)].join(' ') + ' ')) return false;
+  if (PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before))) return true;
+  const w = span.replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' '), key = w[0] + ' ' + (w[1] || '');
+  return (w[1] || '').length >= 3 && (Array.isArray(known) ? known : []).some((p) => {
+    const n = typeof p === 'string' ? p : p && p.nombre;
+    return n && (' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(' ' + key + ' ');
+  });
+}
+export function sanitizeLesson(fact, customers = [], products = []) {
   let out = String(fact || '');
   const list = (Array.isArray(customers) ? customers : []).filter((c) => c && c.nombre && String(c.nombre).trim().length >= 3)
     .map((c) => ({ code: customerCode(c.id), nombre: String(c.nombre).trim() })).sort((a, b) => b.nombre.length - a.nombre.length);
@@ -2102,11 +2169,11 @@ export function sanitizeLesson(fact, customers = []) {
       for (const i of at.reverse()) out = out.slice(0, i) + (c.code ? 'cliente #' + c.code : 'un cliente') + out.slice(i + alt.length);
     }
   }
-  out = out.replace(PERSON_CUE, (m, cue, name) => /#/.test(name) ? m : cue + ' ');
+  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || isBrandDon(all, at, at + m.length, products) ? m : cue + ' ');
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
-export async function saveLesson(store, auth, nowMs, fact, customers = []) {
-  const f = sanitizeLesson(fact, customers).slice(0, 200); if (!f) return false;
+export async function saveLesson(store, auth, nowMs, fact, customers = [], products = []) {
+  const f = sanitizeLesson(fact, customers, products).slice(0, 200); if (!f) return false;
   try {
     const key = await lessonsKey(auth), day = limaDate(nowMs);
     for (let i = 0; i < 4; i++) {
@@ -2546,6 +2613,7 @@ export const CONFIRM_GATE = /puls/i;
 // partes, como la clave): sin ella el texto sale idéntico y lo ya pintado en vivo es siempre prefijo del texto final.
 export const REPLY_PEOPLE_GATE = /dni|d\.\s?n\.\s?i|documento|se(?:ñ|n\u0303|n)or|sra|srta|(?<![a-záéíóúñ])sr(?![a-záéíóúñ])|do(?:ñ|n\u0303|n)a|(?<![a-záéíóúñ])don(?![a-záéíóúñ])/i;
 export const NAME_MASK = '[nombre oculto]';
+const REPLY_REF_GATE = /(?<!client[ea]s?\s{0,2})#/i; // (INV-027) «producto #N» del Admin: se retiene hasta saber su nombre
 const DNI_REPLY_RE = /((?<![\p{L}\d])(?:dni|d\.\s?n\.\s?i\.?|documento(?:\s+de\s+identidad)?)(?![\p{L}\d])[^\d\n]{0,24}?)(\d{8})(?![\d.,]\d|\d)/giu;
 const HONORIFIC_RE = /(?<![\p{L}\d])(se(?:ñ|n\u0303|n)or(?:it)?a?|sra|srta|sr|do(?:ñ|n\u0303|n)a|don)(\.?)([ \t]+)/giu;
 const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'le', 'les', 'y', 'e', 'o', 'u', 'a', 'al', 'en', 'con', 'por', 'para', 'sin', 'su', 'sus', 'mi', 'tu',
@@ -2553,35 +2621,85 @@ const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'l
   'administrador', 'administradora', 'mismo', 'misma', 'otro', 'otra', 'como', 'cuando', 'donde', 'quien', 'quién', 'cual', 'cuál', 'aquí', 'ahí', 'allí', 'también', 'tambien',
   'muy', 'más', 'mas', 'menos', 'todo', 'toda', 'todos', 'todas', 'este', 'esta', 'ese', 'esa', 'aquel', 'aquella', 'usted', 'ustedes', 'vendedor', 'vendedora', 'cajero', 'cajera']);
 const NAME_WORD_RE = /^[\p{L}][\p{L}'’-]*/u;
-export function maskReplyPeople(value) {
+// (auditoría 500, UNI-058 / INV-041) «don/doña» de una MARCA no es una persona: «FIDEO DON VITTORIO», «fideo don vittorio» quedan igual.
+// (#998 sobre #988) La decisión marca/persona es la regla COMPARTIDA isBrandDon (la misma de sanitizeLesson), sobre la línea del texto:
+// verbo de deuda/pago cerca (debe, paga, pagó, abona, fía, le fié…) tapa siempre; si no, es marca solo tras una palabra de producto o si
+// «don X» está en un producto conocido de este pedido (known.products). Las MAYÚSCULAS o una medida solas no bastan. Un cliente de la lista
+// (known.customers) se tapa SIEMPRE (también sus apellidos en minúscula); «señora/sr./srta.» siempre es persona. Sin known (o 'strict'):
+// estricto, como antes (así el empleado, que no lo recibe).
+const REPLY_BRAND_CUE = /^(?:don|dona)$/;
+const replyWords = (x) => LESSON_FOLD(x).replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' ').filter(Boolean);
+const productNameOf = (p) => (typeof p === 'string' ? p : p && p.nombre) || '';
+// palabras de un cliente que bastan para reconocerlo: el nombre completo o sus dos primeras (palabras de 3+ letras), como sanitizeLesson
+const clientKeys = (customers) => (Array.isArray(customers) ? customers : []).map((c) => replyWords(productNameOf(c)).filter((w) => w.length >= 3)).filter((w) => w.length)
+  .flatMap((w) => (w.length > 2 ? [w, w.slice(0, 2)] : [w]));
+const startsWithWords = (ws, key) => key.length && key.every((k, i) => ws[i] === k);
+// (revisión #998) dónde termina el nombre tras «don/doña/señora…»: los apellidos siguen el estilo del primer nombre (en minúscula también,
+// «doña juana pérez»), pero no se tragan un verbo de deuda/pago (la lista de isBrandDon), una medida («KG», la «X» de «X 2»), palabras
+// vacías ni verbos comunes.
+const NAME_UNIT = new Set(['g', 'gr', 'grs', 'kg', 'kilo', 'kilos', 'ml', 'l', 'lt', 'lts', 'litro', 'litros', 'cc', 'oz', 'und', 'unid', 'un', 'bot', 'pqt', 'sob', 'soles']);
+const NAME_STOP_VERB = new Set(['tiene', 'vino', 'viene', 'esta', 'estuvo', 'quiere', 'dice', 'dijo', 'trajo', 'lleva', 'compra', 'pide', 'hoy', 'ayer', 'manana', 'siempre', 'aun', 'todavia']);
+const nameStop = (w, rest, lower) => { const f = LESSON_FOLD(w);
+  return NAME_NOT.has(w.toLowerCase()) || DEBT_VERB.test(' ' + f + ' ') || NAME_UNIT.has(f) || (f === 'x' && /^[ \t]*\d/.test(rest)) || (lower && (NAME_STOP_VERB.has(f) || /ó$/u.test(w))); };
+export function maskReplyPeople(value, known = null) {
   const s = String(value ?? '');
   if (!REPLY_PEOPLE_GATE.test(s)) return s;
+  const strict = !known || typeof known !== 'object', kn = strict ? {} : known;
+  const keys = strict ? [] : clientKeys(kn.customers);
   let out = s.replace(DNI_REPLY_RE, (m, pre, d) => pre + '****' + d.slice(4));
   HONORIFIC_RE.lastIndex = 0; let res = '', pos = 0, m;
   while ((m = HONORIFIC_RE.exec(out)) !== null) {
     const after = m.index + m[0].length, w1 = NAME_WORD_RE.exec(out.slice(after));
     if (!w1 || NAME_NOT.has(w1[0].toLowerCase())) continue;
     let end = after + w1[0].length, k = 0, nx;
-    while (k < 3 && (nx = /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u.exec(out.slice(end))) && !NAME_NOT.has(nx[1].toLowerCase())) { end += nx[0].length; k++; }
+    const lower = !/\p{Lu}/u.test(w1[0]), nextRe = lower ? /^[ \t]+(\p{Ll}[\p{L}'’-]*)/u : /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u;
+    while (k < 3 && (nx = nextRe.exec(out.slice(end))) && !nameStop(nx[1], out.slice(end + nx[0].length), lower)) { end += nx[0].length; k++; }
+    if (!strict) {
+      const nl = out.lastIndexOf('\n', m.index) + 1, eol = out.indexOf('\n', after), lineEnd = eol < 0 ? out.length : eol;
+      const tailWs = replyWords(out.slice(after, lineEnd)), client = keys.filter((key) => startsWithWords(tailWs, key)).reduce((a, key) => Math.max(a, key.length), 0);
+      if (client) { // cliente de la lista: tapado siempre, con todas sus palabras (también en minúscula)
+        let e2 = after, n = 0, wm; while (n < client && (wm = /^[^\p{L}\d\n]*([\p{L}\d][\p{L}\d'’-]*)/u.exec(out.slice(e2)))) { e2 += wm[0].length; n++; }
+        end = Math.max(end, e2);
+      } else if (REPLY_BRAND_CUE.test(LESSON_FOLD(m[1])) && isBrandDon(out.slice(nl, lineEnd), m.index - nl, end - nl, kn.products)) {
+        HONORIFIC_RE.lastIndex = end; continue; // marca (isBrandDon, #988): queda
+      }
+    }
     res += out.slice(pos, after) + NAME_MASK; pos = end; HONORIFIC_RE.lastIndex = end;
   }
   return res + out.slice(pos);
 }
+// (INV-027) nombre de producto que puede ir al Admin (y al historial que vuelve al modelo): sin persona tras «señora/don…» (salvo marca) y sin
+// el nombre de un cliente de la lista. Los que no, siguen como «producto #N».
+export function safeProductName(nombre, customers = []) {
+  const n = String(nombre || ''); if (!n.trim()) return false;
+  if (maskReplyPeople(n, { customers }) !== n) return false;
+  const ws = ' ' + replyWords(n).join(' ') + ' ';
+  return !clientKeys(customers).some((key) => ws.includes(' ' + key.join(' ') + ' '));
+}
+// (revisión #998) historial que manda el teléfono del Admin (mensajes anteriores, los escribe/guarda el aparato): antes del modelo, el nombre
+// tras «don/doña/señora…» se tapa con maskReplyPeople (misma regla isBrandDon); «fideo don vittorio» o un producto conocido quedan.
+export const HISTORY_DON_CUE = /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu;
+export function maskHistoryPeople(history, known) {
+  return (Array.isArray(history) ? history : []).map((m) => (m && typeof m.content === 'string' ? { ...m, content: maskReplyPeople(m.content, known) } : m));
+}
 export function finalReplyFilter(text, { change = true } = {}) { return change ? String(text ?? '') : stripConfirmHint(text); }
-export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false) {
+// known (opcional, chatCore): lo conocido del pedido para el filtro final ({ products, customers } -> maskReplyPeople; Admin: nameRefs + names ->
+// «producto #N» con su nombre, INV-027). Con nameRefs el texto del Admin se retiene desde un «#» (no «cliente #…») hasta el cierre.
+export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false, known = null) {
   const people = redact === redactReplyOwner || redact === redactReplyEmployee; // (auditoría 500, 8)
+  const ownerRefs = redact === redactReplyOwner && !!(known && known.nameRefs);
   if (people) redact = redact === redactReplyOwner ? redactOwnerText : redactEmployee;
   const stages = redact === redactText || redact === redactOwnerText || redact === redactModelOwner ? 1 : redact === redactEmployee ? 2 : 0; // (r8) redactModelOwner también por el camino incremental (paridad en las 4 vías)
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
   const wholeOf0 = stages === 2 ? (t) => redactOwnerData(redactEmployeeText(t), prime) : redact; // el filtro del texto entero (capReply aparte, en deliver)
-  const wholeOf = people ? (t) => maskReplyPeople(wholeOf0(t)) : wholeOf0; // (auditoría 500, 8) DNI y nombres tras «señora…»: retenido desde la palabra (REPLY_PEOPLE_GATE)
+  const wholeOf = people ? (t) => { const x = maskReplyPeople(wholeOf0(t), known); return ownerRefs && known.names && known.names.length ? nameProductRefs(x, known.names) : x; } : wholeOf0; // (auditoría 500, 8) DNI y nombres tras «señora…»: retenido desde la palabra (REPLY_PEOPLE_GATE)
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
   let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
   // acc: texto limpio llegado (lo que filtra wholeOf); lab: salida de la etapa de espacios aún sin pasar a sq (más la cola); out: lo ya puesto en ready
   let acc = '', lab = '', danger = false, conf = false, out = '';
   const gate = (x) => { if (danger || conf) return; lab += x;
-    if (PIN_GATE.test(lab) || (people && REPLY_PEOPLE_GATE.test(lab))) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas (clave, DNI o «señora…»)
+    if (PIN_GATE.test(lab) || (people && REPLY_PEOPLE_GATE.test(lab)) || (ownerRefs && REPLY_REF_GATE.test(lab))) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas (clave, DNI o «señora…»)
     if (CONFIRM_GATE.test(lab)) { conf = true; lab = ''; return; } // «pulsa Confirmar»: igual, se decide al cerrar (finalReplyFilter)
     const n = lab.length - LABEL_TAIL; if (n > 0) { const pass = lab.slice(0, n); lab = lab.slice(n); sq.push(pass); } };
   const finish = (noChange = false) => { if (cut) return; const zf = finalReplyFilter(wholeOf(acc), { change: !noChange }); conf = false; // al cerrar: el filtro entero de todo, una vez
@@ -2688,7 +2806,8 @@ function employeeQueryText(r, e) {
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   if (r.tipo === 'stock_producto' && iP >= 0 && iS >= 0) {
     if (!e.filas.length) return 'No encontré ese producto.';
-    return employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
+    // INV-047 / INV-008: marca que la tienda no tiene. Texto fijo: nunca repite la palabra escrita (revisión de #1001)
+    return (brandNoticeOf(r.resumen) ? BRAND_NOTICE_LEAD : '') + employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
   }
   if (r.tipo === 'stock_producto' && !e.filas.length) return 'No encontré ese producto.';
   if (r.tipo === 'bajo_stock' && iP >= 0 && iS >= 0) {
@@ -2987,6 +3106,13 @@ export function parseChatBody(body, role = null) {
   return { text, cut, image, history, context: body.context, stream: body.stream === true, resumen: readResumenField(body.resumen), overflow: Math.max(0, all.length - ASSISTANT_LIMITS.maxHistory), cards: parseCards(body.cards) };
 }
 // Estado de las tarjetas que el aparato tiene en pantalla (solo tipo y estado, de listas cerradas). Sin campo = aparato viejo: null.
+// (auditoría 500, P-044) «el azucar ponlo a 400» con precio S/ 4.00: unas 100 veces el precio = casi seguro faltó el punto («4.00»).
+// La tarjeta y la respuesta preguntan «¿Quiso decir S/ 4.00?»; se confirma igual con un toque (sin PIN ni pasos extra).
+export function decimalSlip(actual, nuevo) {
+  const a = Number(actual), n = Number(nuevo); if (!(a > 0) || !(n > 0)) return null;
+  const r = n / a; return r >= 50 && r <= 200 ? Math.round(n) / 100 : null;
+}
+export function decimalSlipText(v) { return '¿Quiso decir S/ ' + Number(v).toFixed(2) + '?'; }
 export const CARD_TYPES = Object.freeze(['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto']);
 export const CARD_STATES = Object.freeze(['pendiente', 'confirmada', 'cancelada', 'vencida', 'no_permitida']);
 export function parseCards(cards) {
@@ -3165,6 +3291,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
   // Sugerencias de compra o créditos atrasados pedidos por un empleado: 403 antes de abrir el canal, sin cupo ni modelo.
   if (employeeQueryDenied(role, parsed.text)) return json(QUERY_ADMIN_ONLY, 403);
+  if (employeeBelowCostDenied(role, parsed.text)) return json(BELOW_COST_DENIED, 403);
   if (employeeSummaryDenied(role, parsed.text)) return json(SUMMARY_ADMIN_ONLY, 403);
   const store = store0;
   if (!store) return json({ error: 'usage_store_missing' }, 500);
@@ -3185,7 +3312,28 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
-  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, seesOwnerData(role) ? null : ownerHold, prime) : null;
+  // (UNI-058 / INV-041 / INV-027) lo conocido en este pedido para el filtro final: productos (marca «Don Vittorio» no se tapa), clientes de la
+  // lista (siempre tapados) y, para el Admin, los nombres seguros de los «producto #N» citados. Se lee solo si hace falta (prepKnown).
+  // Solo el Admin: el empleado sigue exactamente como antes (sin known: tapado estricto, sin nombres de producto).
+  const known = { products: [...(ctx.products || [])], customers: [], names: [], nameRefs: role === 'owner' }, knownR = role === 'owner' ? known : null;
+  let custRead = false;
+  const loadCustomers = async () => { if (custRead) return known.customers; custRead = true;
+    try { const cs = rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; known.customers = Array.isArray(cs) ? cs : []; } catch { known.customers = []; }
+    return known.customers; };
+  const setKnownProducts = () => { known.products = [...(ctx.products || []), ...(sysProducts || [])]; };
+  const prepKnown = async (text) => { if (!knownR) return;
+    const t = String(text || '');
+    if (known.nameRefs && PRODUCT_REF_HINT.test(t)) {
+      if (!sysProducts) sysProducts = await loadProducts(); setKnownProducts();
+      const ids = productRefIds(t), cands = known.products.filter((p) => p && p.id != null && p.nombre && ids.has(String(p.id)));
+      known.names = cands.length ? (await loadCustomers(), cands.filter((p) => safeProductName(p.nombre, known.customers))) : [];
+    }
+    if (custRead || !REPLY_PEOPLE_GATE.test(t)) return;
+    const strict = maskReplyPeople(t, 'strict'); if (strict === t) return; // nada que tapar
+    if (!sysProducts && maskReplyPeople(t, known) === strict && /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu.test(t)) { sysProducts = await loadProducts(); setKnownProducts(); }
+    if (maskReplyPeople(t, known) !== strict) await loadCustomers(); // queda algo sin tapar por marca: confirmar que no es un cliente de la lista
+  };
+  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, seesOwnerData(role) ? null : ownerHold, prime, knownR) : null;
   const beat = createStatusBeat(sse, emit, deps.statusEveryMs); ctxOut.beat = beat; // se para al cerrar el canal (assistantChatRoute)
   // Tope del servidor (Bot 3): 90 s desde que el cuerpo (y la foto) ya se leyó; también corta si el celular se fue.
   const up = new AbortController(); if (deps.sse && deps.sse.signal) linkAbort(up, deps.sse.signal);
@@ -3203,16 +3351,28 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const bad = guard ? (result.calls || []).map((c) => guard({ name: c.name, arguments: typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments || {}) })).find(Boolean) : null;
     if (bad) result = { forbidden: bad, content: '', calls: [] };
     // Demostración también en partes: palabra por palabra con una pausa corta (deps.mockChunkMs).
-    else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } if (!confirmHeld(emit)) emit.flush(); }
+    else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } await prepKnown(result.content); if (!confirmHeld(emit)) emit.flush(); }
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
-    req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null, cards: parsed.cards });
+    // (revisión #998) Admin: el historial, el resumen y el mensaje actual van al modelo sin el nombre tras «don/doña/señora» (isBrandDon).
+    // Si solo un «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
+    let histToModel = parsed.history, resumenToModel = resumenIn || null, textToModel = parsed.text;
+    if (knownR) {
+      const all = [...parsed.history, { content: resumenToModel || '' }, { content: textToModel || '' }];
+      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, k);
+        return { out, changed: out.some((m, i) => m.content !== all[i].content && HISTORY_DON_CUE.test(all[i].content)) }; };
+      let r = maskAll();
+      if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
+      histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;
+    }
+    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenToModel, cards: parsed.cards });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
     result = emit ? await callModelStream(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
       : await callModel(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     noteCall(result, 'ms_model1', a1);
+    if (!result.error && !result.forbidden) await prepKnown(result.content);
     if (emit && !result.error && !result.forbidden && !confirmHeld(emit)) emit.flush(); // con «pulsa…» retenido se cierra abajo, con hasChange
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}), timings: failTimes() }, ERR_STATUS[result.error] || 502);
   }
@@ -3238,9 +3398,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
   // (auditoría 500, CP-037) costo que nadie dijo (ni en este mensaje ni en los anteriores de la persona): queda vacío y marcado, no inventado.
   // Solo compras dictadas por texto («compré…», «me llegaron…»); una factura leída trae sus costos.
+  // Se aplica más abajo, con la unidad de venta de cada producto leída del servidor (UNI-037: costo por kilo solo si se vende por kilo).
   const userTexts = [parsed.text, ...(parsed.history || []).filter((h) => h && h.role === 'user').map((h) => String(h.content || ''))];
-  const unpricedNames = parsed.image || !userTexts.some((t) => ARRIVAL_RE.test(foldText(t))) ? []
-    : clearUnstatedCosts(proposals.filter((p) => !p._call || p._call.name === 'preparar_compra'), userTexts);
+  const checkCosts = !parsed.image && userTexts.some((t) => ARRIVAL_RE.test(foldText(t)));
+  const costCalls = new Set(proposals.filter((p) => !p._call || p._call.name === 'preparar_compra'));
+  let unpricedNames = [];
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
   // Configuración sin el permiso «cambios»: 403 antes de leer nada de la base y sin segunda llamada al modelo.
   if (dropped.some((d) => d.dropped === 'config_forbidden')) { if (emit) { emit.drop(); emit.reset(); } return json(CONFIG_FORBIDDEN, 403); }
@@ -3263,6 +3425,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     noStock = dropped.filter((d) => d.dropped === 'sin_control_stock' && d.nombre).map((d) => { if (Number(d.cantidad) > 0) noStockQty.set(d.nombre, (noStockQty.get(d.nombre) || 0) + Number(d.cantidad)); return d.nombre; });
     if (map.failed) stockFailed = dropStockCards(proposals, dropped) > 0; // falla la lectura: fuera compras y ajustes, con mensaje simple
     else noStock.push(...applyStockControl(proposals, dropped, map, noStockQty));
+    if (checkCosts && !map.failed) unpricedNames = clearUnstatedCosts(proposals.filter((p) => costCalls.has(p)), userTexts, map.units);
   }
   const overNames = dropped.filter((d) => d.dropped === 'over_limit' && d.nombre).map((d) => d.nombre);
   // La compra ya lleva el costo: al registrarla, el POS guarda ese costo en el producto (costo-compra-ficha.js). Tarjetas «Actualizar costo»
@@ -3290,7 +3453,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     return json(COSTS_ADMIN_ONLY, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
-  const consultas = [], toolMsgs = [], refIds = new Set(); let queryCut = false;
+  const consultas = [], toolMsgs = [], refIds = new Set(); let queryCut = false, brandMissing = false;
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
   if (!seesOwnerData(role)) for (const p of proposals.filter((x) => x.type === 'documento')) {
     let d; try { d = reader ? await timed(() => employeeDocumentRows(reader, p.tipo)) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
@@ -3309,6 +3472,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (!costQueryAllowed(role, p.query?.tipo)) r = { error: COSTS_ADMIN_ONLY.error };
     else try { r = reader ? await timed(() => runAssistantQuery(reader, p.query, now)) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
     if (r && r.truncado) queryCut = true;
+    if (r && !r.error && brandNoticeOf(r.resumen)) brandMissing = true; // INV-047 / INV-008
     if (!seesOwnerData(role)) r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null, ...(r.truncado === true ? { truncado: true } : {}) };
     consultas.push(p);
@@ -3329,7 +3493,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const ownerText = (c) => redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
   // Dueño con resumen: los «producto #código» de la respuesta quedan como código (la respuesta vuelve al modelo como historial;
   // el nombre se ve solo en la tabla de la tarjeta).
-  const finalText = (c) => { const f = maskReplyPeople(!seesOwnerData(role) ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c)); const r = capReply(f); capped = r !== f ? r : null; return r; };
+  const finalText = (c) => { const f = maskReplyPeople(!seesOwnerData(role) ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c), knownR); const r = capReply(f); capped = r !== f ? r : null; return r; };
   let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
@@ -3339,7 +3503,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     // es el texto de la consulta (por el MISMO filtro del rol que la respuesta del modelo) y NO hay segunda llamada: ~1 llamada menos.
     const direct = directQueryReply({ result, proposals, dropped, consultas, queryCut, text: parsed.text, image: parsed.image });
     if (direct && mode !== 'mock') {
-      reply = finalText(direct); tm.second_call = false;
+      await prepKnown(direct); reply = finalText(direct); tm.second_call = false;
       if (emit) { emit.reset(); emit.push(reply); emit.flush(); }
     } else if (mode !== 'mock' && toolMsgs.length) {
       const calls = consultas.map((c) => ({ id: c._call.id, type: 'function', function: { name: 'consultar', arguments: typeof c._call.arguments === 'string' ? c._call.arguments : JSON.stringify(c._call.arguments || {}) } }));
@@ -3353,9 +3517,22 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       const second = emit ? await callModelStream(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal, { stallMs: deps.firstDataMs || FIRST_DATA_MS })
         : await callModel(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       noteCall(second, 'ms_model2', a2); tm.second_call = true;
+      if (!second.error) await prepKnown(second.content);
       if (emit && !second.error && !confirmHeld(emit)) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);
     }
+    // (INV-047 / INV-008) marca que la tienda no tiene: si la respuesta no lo dice, el servidor pone el aviso en su propia línea, antes.
+    // Texto fijo «No tengo esa marca…»: nunca lleva la palabra que escribió la persona (revisión de #1001).
+    if (brandMissing && !saysNoBrand(reply)) reply = BRAND_NOTICE + (reply ? '\n' + reply : '');
+  }
+  // (auditoría 500, M-035) costo nuevo dicho en el chat por el Admin: tarjeta «Actualizar costo» (firmada abajo), nunca una lección.
+  let costReply = null;
+  const said = role === 'owner' && !parsed.image && !resetAsk ? statedCost(parsed.text) : null;
+  if (said) {
+    if (!sysProducts) sysProducts = await loadProducts();
+    const sc = statedCostCard(said, [...(ctx.products || []), ...(sysProducts || [])]);
+    if (sc.card && !proposals.some((p) => p.type === 'costo' && String(p.product_id) === String(sc.card.product_id))) proposals.push(sc.card);
+    costReply = sc.reply;
   }
   for (const p of proposals) delete p._call;
   // Id único de propuesta: lo genera el SERVIDOR y queda firmado dentro del token (pid). El cliente nunca lo arma.
@@ -3372,6 +3549,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     reply = 'Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra.' + (missing ? ' Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.' : ' El stock se suma solo al registrar la compra.');
     const unpriced = unpricedNames.filter((n) => proposals.some((p) => p.type === 'compra' && p.lineas.some((l) => l.nombre === n)));
     if (unpriced.length) reply += ' Falta el costo de ' + unpriced.map((n) => '«' + n + '»').join(', ') + ': escríbelo en Nueva compra.';
+    const inCard = (n) => proposals.some((p) => p.type === 'compra' && p.lineas.some((l) => l.nombre === n));
+    const porSaco = [...new Set(unpricedNames.porSaco || [])].filter(inCard);
+    if (porSaco.length) reply += ' ' + porSaco.map((n) => '«' + n + '»').join(', ') + (porSaco.length === 1 ? ' no figura' : ' no figuran') + ' como venta por kilo ni por litro: dejé el costo que dijiste (el del saco o bidón), no el costo por kilo. Revísalo.';
+    const sinCaja = [...new Set(proposals.filter((p) => p.type === 'compra').flatMap((p) => p.lineas.filter((l) => l.cantidad == null && (l.revisar || []).includes(MISSING_BOX_TEXT)).map((l) => l.nombre)))];
+    if (sinCaja.length) reply += ' ' + MISSING_BOX_TEXT + ' de ' + sinCaja.map((n) => '«' + n + '»').join(', ') + ': dime cuántas trae o quita esa fila y anótala en Nueva compra.';
   }
   const notes = [...(bulkDropped ? [BULK_ADMIN_ONLY_TEXT] : []), ...[...new Set(noStock)].map((n) => NO_STOCK_TEXT(n, noStockQty.get(n))), ...[...new Set(overNames)].map((n) => '«' + n + '»: la cantidad pasa el límite de ' + PURCHASE_HARD_LIMITS.maxQty + '. Hazlo desde Inventario.')];
   if (notes.length) reply = (proposals.length ? (reply ? reply + ' ' : '') : '') + notes.join(' ');
@@ -3385,13 +3567,20 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (!reply) reply = 'No entendí bien. ¿Me lo dices de otra forma?';
   // (lote en vivo 22-10) el Admin ve el NOMBRE del producto, no «producto #id» (los nombres de producto sí van al modelo; los de clientes nunca).
   // Los productos de un resumen quedan como «producto #código» (su nombre puede ser de un cliente y la respuesta vuelve como historial al modelo).
-  if (role === 'owner' && PRODUCT_REF_HINT.test(reply)) { if (!sysProducts) sysProducts = await loadProducts(); reply = nameProductRefs(reply, [...(ctx.products || []), ...(sysProducts || [])].filter((p) => p && !refIds.has(String(p.id)) && !refIds.has(p.id))); }
+  // (INV-027, decisión del lead) los productos de resúmenes y consultas (refIds) NUNCA vuelven con nombre al historial del modelo: «reply» (y el
+  // turno firmado) queda con «producto #N»; el nombre (solo nombres seguros, safeProductName) va únicamente a lo que ve el Admin (shown y el texto en partes).
+  const notRef = (p) => !refIds.has(String(p.id)) && !refIds.has(p.id);
+  if (role === 'owner' && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); reply = nameProductRefs(reply, known.names.filter(notRef)); }
   // (lote en vivo 22-10, c/d) RUC de proveedor: nunca «no puedo compartir»; montos «que te indiqué» que no están en el historial ni en las consultas.
   if (RUC_ASK_RE.test(parsed.text) && REFUSE_SHARE_RE.test(reply)) reply = RUC_MISSING_TEXT;
   // (auditoría 500) CP-012: proveedor de un producto sin dato de líneas; CP-027: borrar una compra por un camino que no existe.
   if (role === 'owner' && SUPPLIER_OF_PRODUCT_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm)) reply = SUPPLIER_OF_PRODUCT_TEXT;
   if (PURCHASE_VOID_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm) && (VOID_PATH_RE.test(reply) || !proposals.length)) reply = role === 'owner' ? PURCHASE_VOID_TEXT : PURCHASE_VOID_EMPLOYEE_TEXT;
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
+  if (costReply) reply = proposals.some((p) => p.needsConfirm && p.type !== 'costo') ? reply + ' ' + costReply : costReply;
+  // (auditoría 500, P-044) precio unas 100 veces el actual: la respuesta pregunta lo mismo que la tarjeta.
+  for (const p of proposals) if (p.type === 'precio' && p.quisoDecir != null && !reply.includes(decimalSlipText(p.quisoDecir)))
+    reply = (reply ? reply + ' ' : '') + (proposals.filter((x) => x.type === 'precio').length > 1 ? '«' + p.nombre + '» a ' + 'S/ ' + Number(p.precio_nuevo).toFixed(2) + ': ' : '') + decimalSlipText(p.quisoDecir) + ' Si es así, no confirmes y escríbeme el precio con punto.';
   // (lote en vivo 22-10) borrar todo o reiniciar: el asistente nunca lo ofrece ni lo hace; sin tarjetas.
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
   // (auditoría 500, SEG) varias tarjetas de cambio de producto en una respuesta: el servidor dice cuántas son y que cada una se aplica aparte
@@ -3421,12 +3610,15 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; } await saveLesson(store, auth, now, redactModelOwner(fact), cust); } }
+  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
+    if (!sysProducts) sysProducts = await loadProducts(); await saveLesson(store, auth, now, redactModelOwner(fact), cust, [...(ctx.products || []), ...(sysProducts || [])]); } }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
   const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner}) : null;
-  return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
+  let shown = reply; // lo que ve el Admin en pantalla: los «producto #N» de resúmenes/consultas con su nombre; turns e historial siguen con el código
+  if (role === 'owner' && refIds.size && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); shown = nameProductRefs(reply, known.names.filter((p) => !notRef(p))); }
+  return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 
@@ -3524,6 +3716,8 @@ export function dropUnsaidAmountRefs(text, said) {
 }
 // «producto #id» / «artículo #id» / «#id» con un id de <datos_pos> -> el nombre del producto (solo Admin).
 export const PRODUCT_REF_HINT = /#|\b(?:producto|art[ií]culo|[ií]tem)\s/i;
+const PRODUCT_REF_RE = /(?:\b(?:el\s+)?(?:producto|art[ií]culo|item|ítem)\s*(?:#\s*|n[°º.]\s*|c[oó]digo\s+)?|#)([A-Za-z0-9][A-Za-z0-9._:-]{0,79})/gi;
+function productRefIds(text) { const ids = new Set(); for (const m of String(text || '').matchAll(PRODUCT_REF_RE)) ids.add(m[1].replace(/[.:]+$/, '')); return ids; }
 export function nameProductRefs(text, products) {
   const byId = new Map((Array.isArray(products) ? products : []).filter((p) => p && p.id && p.nombre).map((p) => [String(p.id), p.nombre]));
   if (!byId.size) return String(text || '');
@@ -3549,6 +3743,25 @@ export function infoOnlyText(proposals) {
   return 'Aquí tienes la información.';
 }
 
+// (auditoría 500, M-035) «el pollo ahora me cuesta 9.20»: el costo nuevo dicho por el Admin va a la ficha del producto con la MISMA tarjeta
+// «Actualizar costo» (al confirmar se abre la ficha con el costo; se aplica solo cuando la persona pulsa Guardar). No se guarda como lección.
+// Un solo producto que coincide: tarjeta. Varios: se pregunta cuál (sin tarjeta). Ninguno: se dice que no está.
+const soles2 = (n) => n == null || !Number.isFinite(Number(n)) ? 'sin costo' : 'S/ ' + Number(n).toFixed(2);
+export function statedCostCard(said, products) {
+  const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const seen = new Set(), list = (Array.isArray(products) ? products : []).filter((p) => p && p.id != null && p.nombre && !seen.has(String(p.id)) && seen.add(String(p.id)));
+  const nuevo = money(said && said.costo); if (!said || !nuevo) return { card: null, reply: null };
+  const hits = matchProducts(list, said.nombre), full = hits.filter((p) => fold(p.nombre).includes(fold(said.nombre)));
+  const pick = hits.length === 1 ? hits[0] : full.length === 1 ? full[0] : null;
+  if (!pick) return { card: null, reply: hits.length
+    ? 'Ese costo va en la ficha del producto (así las ganancias salen bien), no como nota. ¿De cuál es? ' + hits.slice(0, 5).map((p) => '«' + p.nombre + '»').join(', ') + '. Dime el nombre y te preparo el cambio de costo.'
+    : 'No encontré «' + said.nombre + '» en tus productos. Dime el nombre como está en el inventario y te preparo el cambio de costo.' };
+  const actual = pick.costo == null || !Number.isFinite(Number(pick.costo)) ? null : Number(pick.costo);
+  if (actual != null && Math.abs(actual - nuevo) < 0.005) return { card: null, reply: '«' + pick.nombre + '» ya tiene ese costo (' + soles2(nuevo) + '). No hay nada que cambiar.' };
+  return { card: { id: 'costo-' + pick.id, type: 'costo', needsConfirm: true, requiresRole: 'owner', title: 'Actualizar costo', product_id: pick.id, nombre: pick.nombre,
+    costo_actual: actual, costo_nuevo: nuevo, origen: null, deChat: true },
+  reply: 'Ese costo va en la ficha del producto, así las ganancias salen bien. Preparé el cambio de costo de «' + pick.nombre + '»: ' + soles2(actual) + ' → ' + soles2(nuevo) + '. Pulsa Confirmar para abrir la ficha con el costo nuevo; se aplica cuando pulses Guardar.' };
+}
 // Tarjetas «Actualizar costo» a partir de una compra: solo filas con producto conocido, costo leído distinto (>1 %) y sin marcas de revisión.
 export function costProposals(compra) {
   const out = [];
