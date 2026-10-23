@@ -145,7 +145,8 @@ const isDay = (v) => typeof v === 'string' && DATE.test(v), isCount = (v) => Num
 const NOTICE_FIELDS = Object.freeze({
   fecha_invalida: { fecha: isDay }, fecha_futura: { desde: isDay, hasta: isDay, hoy: isDay },
   mes_futuro: { mes: (v) => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v), hoy: isDay }, hasta_futuro: { hasta: isDay, hoy: isDay },
-  periodo_recortado: { pedido_desde: isDay, pedido_hasta: isDay, desde: isDay, hasta: isDay, max_dias: isCount }, lista_cortada: { mostrados: isCount, total: isCount } });
+  periodo_recortado: { pedido_desde: isDay, pedido_hasta: isDay, desde: isDay, hasta: isDay, max_dias: isCount }, lista_cortada: { mostrados: isCount, total: isCount },
+  marca_no_encontrada: { marca: (v) => isBrandWord(v) } });
 export const EMPLOYEE_NOTICE_KINDS = Object.freeze(Object.keys(NOTICE_FIELDS));
 // Copia limpia (solo los campos del tipo, cada uno validado) o null.
 export function cleanNotice(n) {
@@ -161,6 +162,7 @@ export function noticeText(n) {
     case 'hasta_futuro': return 'El período pedido termina en una fecha futura (' + c.hasta + '): conté hasta hoy (' + c.hoy + ').';
     case 'periodo_recortado': return 'El período pedido (' + c.pedido_desde + ' a ' + c.pedido_hasta + ') pasa de ' + c.max_dias + ' días: conté solo del ' + c.desde + ' al ' + c.hasta + '.';
     case 'lista_cortada': return 'Mostrando ' + c.mostrados + ' de ' + c.total + ' productos vendidos.';
+    case 'marca_no_encontrada': return brandNoticeLine(c.marca);
   }
   return null;
 }
@@ -587,6 +589,50 @@ export function matchProducts(list, text) {
   return exact.length ? exact : rank(soundK);
 }
 export const PRODUCT_MATCH_ROWS = 8;
+// (auditoría 500, INV-047 / INV-008) Marca que la tienda NO tiene: «fideo lavaggi», «cerveza pilsen». matchProducts encuentra los fideos o
+// las cervezas por la palabra genérica y antes se listaban en silencio, como si fueran la marca pedida. missingBrand devuelve la palabra
+// distintiva («Lavaggi») que no aparece en NINGÚN nombre del catálogo (ni exacta ni sonando igual, ver soundK), o null. No cuentan: palabras
+// genéricas que sí coinciden (fideo, arroz), tamaños y números («5kg», «500»), palabras de pregunta o de relleno, ni nombres de persona
+// (la palabra que sigue a «don», «doña», «señora»… nunca se toma como marca). Solo se usa cuando HAY parecidos (si no, «No encontré…»).
+const BRAND_SKIP = new Set(('cuanto cuanta cuantos cuantas tanto tanta tantos tantas queda quedan quedo quedaba tengo tiene tienen tenemos tenia hay habia '
+  + 'stock sale salen salio sali esta estan estaba estoy porque precio precios cuesta cuestan vale valen marca marcas producto productos unidad unidades unid '
+  + 'kilo kilos litro litros gramo gramos paquete paquetes bolsa bolsas botella botellas lata latas sixpack pack docena docenas sobre sobres saco sacos frasco '
+  + 'frascos tarro tarros grande grandes chico chica chicos chicas mediano mediana pequeno pequena familiar personal negativo negativos negativa cero '
+  + 'entera entero evaporada descremada light integral blanco blanca rubia rubio extra superior especial normal natural original clasico clasica sabor sabores '
+  + 'rojo roja azul verde negra negro amarillo amarilla dorada dorado fresca fresco nuevo nueva todo toda todos todas otro otra otros otras mismo misma ahora '
+  + 'ayer dime dame muestra muestrame mira revisa busca buscame consulta cual cuales donde como cuando aqui tienda almacen inventario mucho mucha muchos muchas '
+  + 'poco poca pocos pocas solo sola algo alguna alguno algunos ningun ninguna tambien bien favor porfa porfavor explica explicame sabes saber quiero queria '
+  + 'necesito vender vendo vendi compre comprar compra llego llegaron falta faltan negativo menos mas hola buenas buenos dias tardes noches gracias '
+  + 'nombre oculto oculta cliente clientes codigo').split(' '));
+// Más suelto que soundK (solo para decidir si FALTA la marca: suelto = menos avisos falsos): «cerbesa» = «cerveza», «yuca» = «lluca».
+const loose = (s) => soundK(String(s || '').replace(/c(?=[ei])/g, 's').replace(/z/g, 's').replace(/v/g, 'b').replace(/ll/g, 'y').replace(/h/g, ''));
+const HONORIFIC = new Set(['don', 'dona', 'senor', 'senora', 'senorita', 'sr', 'sra', 'srta', 'srita', 'sres']);
+export function missingBrand(list, text) {
+  const toks = String(text || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean), names = (Array.isArray(list) ? list : []).map((p) => norm(p.nombre));
+  const out = []; let afterHonorific = 0;
+  for (const tok of toks) {
+    const w = norm(tok);
+    if (HONORIFIC.has(w)) { afterHonorific = 3; continue; }
+    if (afterHonorific > 0) { afterHonorific--; continue; }
+    if (w.length < 4 || /\d/.test(w) || FILLER.has(w) || BRAND_SKIP.has(w) || BRAND_SKIP.has(stem(w))) continue;
+    const st = stem(w), k = loose(st);
+    if (names.some((n) => n.includes(st) || loose(n).includes(k))) continue;
+    if (!out.includes(tok)) out.push(tok);
+  }
+  if (!out.length) return null;
+  const marca = out.slice(0, 2).map((t) => t.toLowerCase().replace(/^./, (c) => c.toUpperCase())).join(' ');
+  return isBrandWord(marca) ? marca : null;
+}
+const isBrandWord = (v) => typeof v === 'string' && /^\p{L}[\p{L}' -]{2,39}$/u.test(v);
+export const brandNoticeLine = (marca) => 'No tengo ' + marca + '; lo más parecido es lo de la lista.';
+// ¿La respuesta ya dice «No tengo <marca>»? (sin tildes ni mayúsculas)
+export const saysNoBrand = (reply, marca) => norm(reply).includes(norm('no tengo ' + marca));
+// La marca del aviso estructurado de una consulta (Admin y empleado), o null.
+export function brandNoticeOf(resumen) {
+  const list = resumen && Array.isArray(resumen[NOTICES]) ? resumen[NOTICES] : [];
+  const n = list.map(cleanNotice).find((x) => x && x.tipo === 'marca_no_encontrada');
+  return n ? n.marca : null;
+}
 // Cálculo puro de las sugerencias (se prueba aparte). products: forma del lector; sold: Map product_id -> unidades vendidas en `dias` días.
 // Entra un producto con control de stock si está agotado, en o bajo el mínimo, o si a su ritmo de venta le alcanza para menos de
 // alertaDias días. Objetivo: mínimo + lo que se vende en diasCobertura días (sin ventas: el doble del mínimo, como «¿Qué falta reponer?»).
@@ -664,9 +710,11 @@ async function runQuery(reader, args, nowMs, checked) {
       const all = matchProducts(list, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
       if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };
       const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio, p.costo]);
+      const marca = missingBrand(list, args.producto || ''); // INV-047 / INV-008: «No tengo Lavaggi; lo más parecido es: …»
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/', 'Costo S/'], filas, total: all.length,
-        texto: sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
-        resumen: { encontrados: all.length, productos: hits.map((p) => ({ ...(p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) }), precio: p.precio, costo: p.costo })) } };
+        texto: (marca ? 'No tengo ' + marca + '; lo más parecido es: ' : '') + sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
+        resumen: { encontrados: all.length, productos: hits.map((p) => ({ ...(p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) }), precio: p.precio, costo: p.costo })),
+          ...(marca ? { marca_no_encontrada: marca, aviso: brandNoticeLine(marca), [NOTICES]: [{ tipo: 'marca_no_encontrada', marca }] } : {}) } };
     }
     if (tipo === 'bajo_stock') {
       // Servicios fuera (no llevan stock), igual que la pestaña «Crítico» de Inventario.
