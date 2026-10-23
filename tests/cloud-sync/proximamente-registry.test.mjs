@@ -48,7 +48,7 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
     }
   }
   const prioritized = api.list().filter(f => f.priority);
-  assert.equal(prioritized.length, 87);
+  assert.equal(prioritized.length, 88);
   assert.deepEqual(Array.from(api.list().filter(f=>f.uncertain).map(f=>f.id)).sort(), 'app-android-nativa cpe-sin-internet venta-granel gaveta-dinero comprobante-por-correo app-almaceneros equipos-pos shopify-woocommerce bandeja-multicanal plan-distribuidor multi-ruc balanza calendario-gastos gasto-a-cuenta tipo-cierre firma-digital sunat-comprobantes'.split(' ').sort());
   for (const id of ['cuotas', 'cobro-multiple', 'lista-ventas', 'precios-mayor', 'limite-credito', 'compras', 'stock-lotes-fefo']) assert.equal(api.get(id), undefined, id + ' already exists in the POS');
 });
