@@ -60,6 +60,19 @@ también estas claves, que se guardan en el servidor para todos los aparatos:
   roles desconocidos: 403 sin leer la base, en chat y en confirm.
 - Pruebas: `tests/asistente/assistant-proponer-configuracion.test.mjs`.
 
+### RUC tapado o vacío (decisión de alfa)
+- El filtro de DNI/RUC no se afloja. Si `configurar_app` llega con `negocio_ruc` tapado (`10*******12`, `[RUC oculto]`, `XXXX…`) o vacío, la tarjeta sale igual, sin el número:
+  `{type:'configuracion', destino:'servidor', ajuste:'negocio_ruc', nombre:'RUC', alcance:'todos los aparatos', antes:<RUC actual>, valor:'', completar:['valor'], confirm_token}`.
+- Usa el mismo mecanismo que la tarjeta de compra (`completar` → `needFields`/`fillValues`). El celular pide el RUC y manda `POST /auth/assistant/confirm {token, proposal, manual:{valor:'…'}}`. `manual` va fuera de la propuesta firmada y no entra en el hash, así que el número nunca pasa por el modelo.
+- En el servidor (`fillCheck` + `configFillNames`/`configFillValue`):
+  - Solo se puede completar `valor` y solo en esa tarjeta. Cualquier otra clave, o `manual` en otra tarjeta, da 400 `manual_not_allowed`.
+  - Si falta o viene tapado: 422 `fields_required`, `fields:['valor']`.
+  - Si no son 11 dígitos: 400 `config_invalid` con «El RUC debe tener 11 dígitos.».
+  - Si el prefijo no es 10/15/16/17/20 (validador `ruc` que ya existía): 400 `config_invalid` con «El RUC debe empezar con 10, 15, 16, 17 o 20.».
+  - Espacios, puntos y guiones se quitan.
+  - Lo demás no cambia: nada se guarda en un 400/422, `revision_conflict` 409, solo UPDATE, una fila de bitácora sin el número y los mismos permisos.
+- Un RUC mal escrito que no está tapado (`123`) se sigue descartando con `bad_setting`. Las otras claves no usan `completar`.
+
 ## Verificación
 
 - `node --test tests/asistente/assistant-settings.test.mjs`
