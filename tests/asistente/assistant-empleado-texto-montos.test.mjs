@@ -160,7 +160,7 @@ test('employeeQueryResult: stock_producto y bajo_stock se leen igual que antes (
     assert.equal(e.total, null);
   }
   const s = employeeQueryResult(await runAssistantQuery(memoryReader(DATA), { tipo: 'stock_producto', producto: 'arroz' }, NOW));
-  assert.equal(s.texto, 'Arroz 1 kg (S/ 4.50): ' + stockLabel(2) + '.');
+  assert.equal(s.texto, 'Arroz 1 kg (S/ 4.50): ' + stockLabel(2)); // «2 unid.» ya termina en punto
 });
 
 test('employeeQueryResult: lista larga de bajo_stock conserva el aviso «se revisaron los primeros»', async () => {
