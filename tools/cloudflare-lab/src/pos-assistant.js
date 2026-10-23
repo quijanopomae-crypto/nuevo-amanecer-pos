@@ -2144,7 +2144,7 @@ const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don
 const BRAND_CUE_RE = /^\s*(?:don|do[nñ]a)(?![a-zñ])/;
 const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada)\s+$/i;
 // sobre texto ya sin tildes y en minúsculas (LESSON_FOLD)
-const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|ara|aron|ar|ado)|fi(?:o|e|a|an|aron|amos|aste|ara|ar)|fiad[oa]s?\s+a|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
+const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|aba|ara|aron|ar|ado)|fi(?:o|e|a|an|aba|aron|amos|aste|ara|ar)|fiad[oa]s?|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
 // Palabras para la ventana del verbo de deuda o pago: la puntuación («,», «.», «;», «:», «—», «…») no es palabra, y los pronombres átonos
 // («me», «lo», «le»…) tampoco cuentan: «arroz don Pedro, que siempre me lo debe» llega a «debe» dentro de 4 palabras.
 const CLITIC_WORD = /^(?:me|te|se|lo|la|le|los|las|les|nos)$/;
@@ -2622,6 +2622,7 @@ export const CONFIRM_GATE = /puls/i;
 // partes, como la clave): sin ella el texto sale idéntico y lo ya pintado en vivo es siempre prefijo del texto final.
 export const REPLY_PEOPLE_GATE = /dni|d\.\s?n\.\s?i|documento|se(?:ñ|n\u0303|n)or|sra|srta|(?<![a-záéíóúñ])sr(?![a-záéíóúñ])|do(?:ñ|n\u0303|n)a|(?<![a-záéíóúñ])don(?![a-záéíóúñ])/i;
 export const NAME_MASK = '[nombre oculto]';
+const REPLY_REF_GATE = /(?<!client[ea]s?\s{0,2})#/i; // (INV-027) «producto #N» del Admin: se retiene hasta saber su nombre
 const DNI_REPLY_RE = /((?<![\p{L}\d])(?:dni|d\.\s?n\.\s?i\.?|documento(?:\s+de\s+identidad)?)(?![\p{L}\d])[^\d\n]{0,24}?)(\d{8})(?![\d.,]\d|\d)/giu;
 const HONORIFIC_RE = /(?<![\p{L}\d])(se(?:ñ|n\u0303|n)or(?:it)?a?|sra|srta|sr|do(?:ñ|n\u0303|n)a|don)(\.?)([ \t]+)/giu;
 const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'le', 'les', 'y', 'e', 'o', 'u', 'a', 'al', 'en', 'con', 'por', 'para', 'sin', 'su', 'sus', 'mi', 'tu',
@@ -2629,35 +2630,85 @@ const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'l
   'administrador', 'administradora', 'mismo', 'misma', 'otro', 'otra', 'como', 'cuando', 'donde', 'quien', 'quién', 'cual', 'cuál', 'aquí', 'ahí', 'allí', 'también', 'tambien',
   'muy', 'más', 'mas', 'menos', 'todo', 'toda', 'todos', 'todas', 'este', 'esta', 'ese', 'esa', 'aquel', 'aquella', 'usted', 'ustedes', 'vendedor', 'vendedora', 'cajero', 'cajera']);
 const NAME_WORD_RE = /^[\p{L}][\p{L}'’-]*/u;
-export function maskReplyPeople(value) {
+// (auditoría 500, UNI-058 / INV-041) «don/doña» de una MARCA no es una persona: «FIDEO DON VITTORIO», «fideo don vittorio» quedan igual.
+// (#998 sobre #988) La decisión marca/persona es la regla COMPARTIDA isBrandDon (la misma de sanitizeLesson), sobre la línea del texto:
+// verbo de deuda/pago cerca (debe, paga, pagó, abona, fía, le fié…) tapa siempre; si no, es marca solo tras una palabra de producto o si
+// «don X» está en un producto conocido de este pedido (known.products). Las MAYÚSCULAS o una medida solas no bastan. Un cliente de la lista
+// (known.customers) se tapa SIEMPRE (también sus apellidos en minúscula); «señora/sr./srta.» siempre es persona. Sin known (o 'strict'):
+// estricto, como antes (así el empleado, que no lo recibe).
+const REPLY_BRAND_CUE = /^(?:don|dona)$/;
+const replyWords = (x) => LESSON_FOLD(x).replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' ').filter(Boolean);
+const productNameOf = (p) => (typeof p === 'string' ? p : p && p.nombre) || '';
+// palabras de un cliente que bastan para reconocerlo: el nombre completo o sus dos primeras (palabras de 3+ letras), como sanitizeLesson
+const clientKeys = (customers) => (Array.isArray(customers) ? customers : []).map((c) => replyWords(productNameOf(c)).filter((w) => w.length >= 3)).filter((w) => w.length)
+  .flatMap((w) => (w.length > 2 ? [w, w.slice(0, 2)] : [w]));
+const startsWithWords = (ws, key) => key.length && key.every((k, i) => ws[i] === k);
+// (revisión #998) dónde termina el nombre tras «don/doña/señora…»: los apellidos siguen el estilo del primer nombre (en minúscula también,
+// «doña juana pérez»), pero no se tragan un verbo de deuda/pago (la lista de isBrandDon), una medida («KG», la «X» de «X 2»), palabras
+// vacías ni verbos comunes.
+const NAME_UNIT = new Set(['g', 'gr', 'grs', 'kg', 'kilo', 'kilos', 'ml', 'l', 'lt', 'lts', 'litro', 'litros', 'cc', 'oz', 'und', 'unid', 'un', 'bot', 'pqt', 'sob', 'soles']);
+const NAME_STOP_VERB = new Set(['tiene', 'vino', 'viene', 'esta', 'estuvo', 'quiere', 'dice', 'dijo', 'trajo', 'lleva', 'compra', 'pide', 'hoy', 'ayer', 'manana', 'siempre', 'aun', 'todavia']);
+const nameStop = (w, rest, lower) => { const f = LESSON_FOLD(w);
+  return NAME_NOT.has(w.toLowerCase()) || DEBT_VERB.test(' ' + f + ' ') || NAME_UNIT.has(f) || (f === 'x' && /^[ \t]*\d/.test(rest)) || (lower && (NAME_STOP_VERB.has(f) || /ó$/u.test(w))); };
+export function maskReplyPeople(value, known = null) {
   const s = String(value ?? '');
   if (!REPLY_PEOPLE_GATE.test(s)) return s;
+  const strict = !known || typeof known !== 'object', kn = strict ? {} : known;
+  const keys = strict ? [] : clientKeys(kn.customers);
   let out = s.replace(DNI_REPLY_RE, (m, pre, d) => pre + '****' + d.slice(4));
   HONORIFIC_RE.lastIndex = 0; let res = '', pos = 0, m;
   while ((m = HONORIFIC_RE.exec(out)) !== null) {
     const after = m.index + m[0].length, w1 = NAME_WORD_RE.exec(out.slice(after));
     if (!w1 || NAME_NOT.has(w1[0].toLowerCase())) continue;
     let end = after + w1[0].length, k = 0, nx;
-    while (k < 3 && (nx = /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u.exec(out.slice(end))) && !NAME_NOT.has(nx[1].toLowerCase())) { end += nx[0].length; k++; }
+    const lower = !/\p{Lu}/u.test(w1[0]), nextRe = lower ? /^[ \t]+(\p{Ll}[\p{L}'’-]*)/u : /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u;
+    while (k < 3 && (nx = nextRe.exec(out.slice(end))) && !nameStop(nx[1], out.slice(end + nx[0].length), lower)) { end += nx[0].length; k++; }
+    if (!strict) {
+      const nl = out.lastIndexOf('\n', m.index) + 1, eol = out.indexOf('\n', after), lineEnd = eol < 0 ? out.length : eol;
+      const tailWs = replyWords(out.slice(after, lineEnd)), client = keys.filter((key) => startsWithWords(tailWs, key)).reduce((a, key) => Math.max(a, key.length), 0);
+      if (client) { // cliente de la lista: tapado siempre, con todas sus palabras (también en minúscula)
+        let e2 = after, n = 0, wm; while (n < client && (wm = /^[^\p{L}\d\n]*([\p{L}\d][\p{L}\d'’-]*)/u.exec(out.slice(e2)))) { e2 += wm[0].length; n++; }
+        end = Math.max(end, e2);
+      } else if (REPLY_BRAND_CUE.test(LESSON_FOLD(m[1])) && isBrandDon(out.slice(nl, lineEnd), m.index - nl, end - nl, kn.products)) {
+        HONORIFIC_RE.lastIndex = end; continue; // marca (isBrandDon, #988): queda
+      }
+    }
     res += out.slice(pos, after) + NAME_MASK; pos = end; HONORIFIC_RE.lastIndex = end;
   }
   return res + out.slice(pos);
 }
+// (INV-027) nombre de producto que puede ir al Admin (y al historial que vuelve al modelo): sin persona tras «señora/don…» (salvo marca) y sin
+// el nombre de un cliente de la lista. Los que no, siguen como «producto #N».
+export function safeProductName(nombre, customers = []) {
+  const n = String(nombre || ''); if (!n.trim()) return false;
+  if (maskReplyPeople(n, { customers }) !== n) return false;
+  const ws = ' ' + replyWords(n).join(' ') + ' ';
+  return !clientKeys(customers).some((key) => ws.includes(' ' + key.join(' ') + ' '));
+}
+// (revisión #998) historial que manda el teléfono del Admin (mensajes anteriores, los escribe/guarda el aparato): antes del modelo, el nombre
+// tras «don/doña/señora…» se tapa con maskReplyPeople (misma regla isBrandDon); «fideo don vittorio» o un producto conocido quedan.
+export const HISTORY_DON_CUE = /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu;
+export function maskHistoryPeople(history, known) {
+  return (Array.isArray(history) ? history : []).map((m) => (m && typeof m.content === 'string' ? { ...m, content: maskReplyPeople(m.content, known) } : m));
+}
 export function finalReplyFilter(text, { change = true } = {}) { return change ? String(text ?? '') : stripConfirmHint(text); }
-export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false) {
+// known (opcional, chatCore): lo conocido del pedido para el filtro final ({ products, customers } -> maskReplyPeople; Admin: nameRefs + names ->
+// «producto #N» con su nombre, INV-027). Con nameRefs el texto del Admin se retiene desde un «#» (no «cliente #…») hasta el cierre.
+export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false, known = null) {
   const people = redact === redactReplyOwner || redact === redactReplyEmployee; // (auditoría 500, 8)
+  const ownerRefs = redact === redactReplyOwner && !!(known && known.nameRefs);
   if (people) redact = redact === redactReplyOwner ? redactOwnerText : redactEmployee;
   const stages = redact === redactText || redact === redactOwnerText || redact === redactModelOwner ? 1 : redact === redactEmployee ? 2 : 0; // (r8) redactModelOwner también por el camino incremental (paridad en las 4 vías)
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
   const wholeOf0 = stages === 2 ? (t) => redactOwnerData(redactEmployeeText(t), prime) : redact; // el filtro del texto entero (capReply aparte, en deliver)
-  const wholeOf = people ? (t) => maskReplyPeople(wholeOf0(t)) : wholeOf0; // (auditoría 500, 8) DNI y nombres tras «señora…»: retenido desde la palabra (REPLY_PEOPLE_GATE)
+  const wholeOf = people ? (t) => { const x = maskReplyPeople(wholeOf0(t), known); return ownerRefs && known.names && known.names.length ? nameProductRefs(x, known.names) : x; } : wholeOf0; // (auditoría 500, 8) DNI y nombres tras «señora…»: retenido desde la palabra (REPLY_PEOPLE_GATE)
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
   let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
   // acc: texto limpio llegado (lo que filtra wholeOf); lab: salida de la etapa de espacios aún sin pasar a sq (más la cola); out: lo ya puesto en ready
   let acc = '', lab = '', danger = false, conf = false, out = '';
   const gate = (x) => { if (danger || conf) return; lab += x;
-    if (PIN_GATE.test(lab) || (people && REPLY_PEOPLE_GATE.test(lab))) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas (clave, DNI o «señora…»)
+    if (PIN_GATE.test(lab) || (people && REPLY_PEOPLE_GATE.test(lab)) || (ownerRefs && REPLY_REF_GATE.test(lab))) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas (clave, DNI o «señora…»)
     if (CONFIRM_GATE.test(lab)) { conf = true; lab = ''; return; } // «pulsa Confirmar»: igual, se decide al cerrar (finalReplyFilter)
     const n = lab.length - LABEL_TAIL; if (n > 0) { const pass = lab.slice(0, n); lab = lab.slice(n); sq.push(pass); } };
   const finish = (noChange = false) => { if (cut) return; const zf = finalReplyFilter(wholeOf(acc), { change: !noChange }); conf = false; // al cerrar: el filtro entero de todo, una vez
@@ -3275,7 +3326,28 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
-  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, seesOwnerData(role) ? null : ownerHold, prime) : null;
+  // (UNI-058 / INV-041 / INV-027) lo conocido en este pedido para el filtro final: productos (marca «Don Vittorio» no se tapa), clientes de la
+  // lista (siempre tapados) y, para el Admin, los nombres seguros de los «producto #N» citados. Se lee solo si hace falta (prepKnown).
+  // Solo el Admin: el empleado sigue exactamente como antes (sin known: tapado estricto, sin nombres de producto).
+  const known = { products: [...(ctx.products || [])], customers: [], names: [], nameRefs: role === 'owner' }, knownR = role === 'owner' ? known : null;
+  let custRead = false;
+  const loadCustomers = async () => { if (custRead) return known.customers; custRead = true;
+    try { const cs = rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; known.customers = Array.isArray(cs) ? cs : []; } catch { known.customers = []; }
+    return known.customers; };
+  const setKnownProducts = () => { known.products = [...(ctx.products || []), ...(sysProducts || [])]; };
+  const prepKnown = async (text) => { if (!knownR) return;
+    const t = String(text || '');
+    if (known.nameRefs && PRODUCT_REF_HINT.test(t)) {
+      if (!sysProducts) sysProducts = await loadProducts(); setKnownProducts();
+      const ids = productRefIds(t), cands = known.products.filter((p) => p && p.id != null && p.nombre && ids.has(String(p.id)));
+      known.names = cands.length ? (await loadCustomers(), cands.filter((p) => safeProductName(p.nombre, known.customers))) : [];
+    }
+    if (custRead || !REPLY_PEOPLE_GATE.test(t)) return;
+    const strict = maskReplyPeople(t, 'strict'); if (strict === t) return; // nada que tapar
+    if (!sysProducts && maskReplyPeople(t, known) === strict && /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu.test(t)) { sysProducts = await loadProducts(); setKnownProducts(); }
+    if (maskReplyPeople(t, known) !== strict) await loadCustomers(); // queda algo sin tapar por marca: confirmar que no es un cliente de la lista
+  };
+  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, seesOwnerData(role) ? null : ownerHold, prime, knownR) : null;
   const beat = createStatusBeat(sse, emit, deps.statusEveryMs); ctxOut.beat = beat; // se para al cerrar el canal (assistantChatRoute)
   // Tope del servidor (Bot 3): 90 s desde que el cuerpo (y la foto) ya se leyó; también corta si el celular se fue.
   const up = new AbortController(); if (deps.sse && deps.sse.signal) linkAbort(up, deps.sse.signal);
@@ -3293,16 +3365,28 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const bad = guard ? (result.calls || []).map((c) => guard({ name: c.name, arguments: typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments || {}) })).find(Boolean) : null;
     if (bad) result = { forbidden: bad, content: '', calls: [] };
     // Demostración también en partes: palabra por palabra con una pausa corta (deps.mockChunkMs).
-    else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } if (!confirmHeld(emit)) emit.flush(); }
+    else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } await prepKnown(result.content); if (!confirmHeld(emit)) emit.flush(); }
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
-    req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null, cards: parsed.cards });
+    // (revisión #998) Admin: el historial, el resumen y el mensaje actual van al modelo sin el nombre tras «don/doña/señora» (isBrandDon).
+    // Si solo un «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
+    let histToModel = parsed.history, resumenToModel = resumenIn || null, textToModel = parsed.text;
+    if (knownR) {
+      const all = [...parsed.history, { content: resumenToModel || '' }, { content: textToModel || '' }];
+      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, k);
+        return { out, changed: out.some((m, i) => m.content !== all[i].content && HISTORY_DON_CUE.test(all[i].content)) }; };
+      let r = maskAll();
+      if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
+      histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;
+    }
+    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenToModel, cards: parsed.cards });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
     result = emit ? await callModelStream(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
       : await callModel(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     noteCall(result, 'ms_model1', a1);
+    if (!result.error && !result.forbidden) await prepKnown(result.content);
     if (emit && !result.error && !result.forbidden && !confirmHeld(emit)) emit.flush(); // con «pulsa…» retenido se cierra abajo, con hasChange
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}), timings: failTimes() }, ERR_STATUS[result.error] || 502);
   }
@@ -3423,7 +3507,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const ownerText = (c) => redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
   // Dueño con resumen: los «producto #código» de la respuesta quedan como código (la respuesta vuelve al modelo como historial;
   // el nombre se ve solo en la tabla de la tarjeta).
-  const finalText = (c) => { const f = maskReplyPeople(!seesOwnerData(role) ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c)); const r = capReply(f); capped = r !== f ? r : null; return r; };
+  const finalText = (c) => { const f = maskReplyPeople(!seesOwnerData(role) ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c), knownR); const r = capReply(f); capped = r !== f ? r : null; return r; };
   let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
@@ -3433,7 +3517,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     // es el texto de la consulta (por el MISMO filtro del rol que la respuesta del modelo) y NO hay segunda llamada: ~1 llamada menos.
     const direct = directQueryReply({ result, proposals, dropped, consultas, queryCut, text: parsed.text, image: parsed.image });
     if (direct && mode !== 'mock') {
-      reply = finalText(direct); tm.second_call = false;
+      await prepKnown(direct); reply = finalText(direct); tm.second_call = false;
       if (emit) { emit.reset(); emit.push(reply); emit.flush(); }
     } else if (mode !== 'mock' && toolMsgs.length) {
       const calls = consultas.map((c) => ({ id: c._call.id, type: 'function', function: { name: 'consultar', arguments: typeof c._call.arguments === 'string' ? c._call.arguments : JSON.stringify(c._call.arguments || {}) } }));
@@ -3447,6 +3531,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       const second = emit ? await callModelStream(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal, { stallMs: deps.firstDataMs || FIRST_DATA_MS })
         : await callModel(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       noteCall(second, 'ms_model2', a2); tm.second_call = true;
+      if (!second.error) await prepKnown(second.content);
       if (emit && !second.error && !confirmHeld(emit)) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);
     }
@@ -3496,7 +3581,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (!reply) reply = 'No entendí bien. ¿Me lo dices de otra forma?';
   // (lote en vivo 22-10) el Admin ve el NOMBRE del producto, no «producto #id» (los nombres de producto sí van al modelo; los de clientes nunca).
   // Los productos de un resumen quedan como «producto #código» (su nombre puede ser de un cliente y la respuesta vuelve como historial al modelo).
-  if (role === 'owner' && PRODUCT_REF_HINT.test(reply)) { if (!sysProducts) sysProducts = await loadProducts(); reply = nameProductRefs(reply, [...(ctx.products || []), ...(sysProducts || [])].filter((p) => p && !refIds.has(String(p.id)) && !refIds.has(p.id))); }
+  // (INV-027, decisión del lead) los productos de resúmenes y consultas (refIds) NUNCA vuelven con nombre al historial del modelo: «reply» (y el
+  // turno firmado) queda con «producto #N»; el nombre (solo nombres seguros, safeProductName) va únicamente a lo que ve el Admin (shown y el texto en partes).
+  const notRef = (p) => !refIds.has(String(p.id)) && !refIds.has(p.id);
+  if (role === 'owner' && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); reply = nameProductRefs(reply, known.names.filter(notRef)); }
   // (lote en vivo 22-10, c/d) RUC de proveedor: nunca «no puedo compartir»; montos «que te indiqué» que no están en el historial ni en las consultas.
   if (RUC_ASK_RE.test(parsed.text) && REFUSE_SHARE_RE.test(reply)) reply = RUC_MISSING_TEXT;
   // (auditoría 500) CP-012: proveedor de un producto sin dato de líneas; CP-027: borrar una compra por un camino que no existe.
@@ -3547,7 +3635,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
   const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner, taughtClean}) : null;
-  return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
+  let shown = reply; // lo que ve el Admin en pantalla: los «producto #N» de resúmenes/consultas con su nombre; turns e historial siguen con el código
+  if (role === 'owner' && refIds.size && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); shown = nameProductRefs(reply, known.names.filter((p) => !notRef(p))); }
+  return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 
@@ -3645,6 +3735,8 @@ export function dropUnsaidAmountRefs(text, said) {
 }
 // «producto #id» / «artículo #id» / «#id» con un id de <datos_pos> -> el nombre del producto (solo Admin).
 export const PRODUCT_REF_HINT = /#|\b(?:producto|art[ií]culo|[ií]tem)\s/i;
+const PRODUCT_REF_RE = /(?:\b(?:el\s+)?(?:producto|art[ií]culo|item|ítem)\s*(?:#\s*|n[°º.]\s*|c[oó]digo\s+)?|#)([A-Za-z0-9][A-Za-z0-9._:-]{0,79})/gi;
+function productRefIds(text) { const ids = new Set(); for (const m of String(text || '').matchAll(PRODUCT_REF_RE)) ids.add(m[1].replace(/[.:]+$/, '')); return ids; }
 export function nameProductRefs(text, products) {
   const byId = new Map((Array.isArray(products) ? products : []).filter((p) => p && p.id && p.nombre).map((p) => [String(p.id), p.nombre]));
   if (!byId.size) return String(text || '');
