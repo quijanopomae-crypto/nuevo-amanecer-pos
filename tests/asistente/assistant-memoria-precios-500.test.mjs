@@ -145,6 +145,28 @@ test('4) servidor: empleado sin permiso de costos que pregunta «vendiendo a per
   assert.equal(ok.status, 200, 'nivel 3 con costos sí pasa');
 });
 
+// (revisión #988) dar de baja mercadería «a pérdida» NO es preguntar por ventas bajo costo: sin verbo de venta no abre el informe ni da 403.
+const WRITE_OFF = ['pasa 3 leches vencidas a pérdida', 'manda a pérdidas el pan malogrado'];
+const LOSS_WORDS_BETWEEN = ['qué estoy vendiendo a pérdida', 'vendo algo a perdida', 'vendo el arroz a pérdida', 'vendí la leche a pérdida', 'vendemos el pan a perdida', 'vendimos el arroz a pérdida'];
+test('4) bajas «a pérdida» (sin verbo de venta) no son «ventas bajo costo», en el teléfono ni en el servidor', () => {
+  const phone = PHONE_BELOW();
+  for (const t of WRITE_OFF) { assert.ok(!phone.test(t), 'teléfono: ' + t); assert.ok(!A.BELOW_COST_ASK_RE.test(t), 'servidor: ' + t); }
+  for (const t of LOSS_WORDS_BETWEEN) { assert.ok(phone.test(t), 'teléfono: ' + t); assert.ok(A.BELOW_COST_ASK_RE.test(t), 'servidor: ' + t); }
+});
+test('4) servidor: empleado sin permiso de costos que pide una baja «a pérdida» no recibe 403', async () => {
+  for (const role of ['empleado:consultas', 'empleado:completo']) for (const t of WRITE_OFF) {
+    const r = await chat(t, { role });
+    assert.notEqual(r.status, 403, role + ': ' + t); assert.notEqual(r.body && r.body.error, 'below_cost_admin_only', role + ': ' + t); assert.equal(r.status, 200, role + ': ' + t);
+  }
+});
+test('4) servidor (comportamiento fijado): varios pedidos en un mensaje y uno es sobre ventas bajo costo = 403 completo al empleado sin costos', async () => {
+  const t = 'pasa 3 leches vencidas a pérdida y dime qué vendo el arroz a pérdida';
+  for (const role of ['empleado:consultas', 'empleado:completo']) {
+    const r = await chat(t, { role });
+    assert.equal(r.status, 403, role); assert.equal(r.body.error, 'below_cost_admin_only', role); assert.equal(r.calls, 0, role);
+  }
+});
+
 // ---------- 5) teléfono: nivel 3 con «costos y cambios» ----------
 function phoneGate(access) {
   const src = ['isAdmin', 'isOwnerAccess', 'canBelowCost'].map((n) => UI.match(new RegExp('  function ' + n + '\\(\\) \\{.*\\}\\n'))[0]).join('');

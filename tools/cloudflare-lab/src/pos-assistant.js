@@ -75,9 +75,11 @@ const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(
 const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
 // (auditoría 500, P-051/P-052) «Ventas bajo costo» pedida en el chat por un empleado SIN el permiso de costos («q productos estoy vendiendo
 // a perdida»): 403 below_cost_admin_only antes de abrir el canal, sin cupo ni modelo. Mismo patrón que el teléfono (BELOW_RE de asistente-ui.js),
+// Una baja «pasa 3 leches vencidas a pérdida» no entra: hace falta un verbo de venta (vendo, vendí, vendemos, vendiendo…) y hasta 3 palabras
+// antes de «a pérdida». Un mensaje con varios pedidos y uno de ellos sobre ventas bajo costo recibe el 403 completo (fijado en la prueba).
 // que al Admin y al nivel 3 con «costos y cambios» los manda directo a /auth/assistant/below-cost.
 export const BELOW_COST_DENIED = Object.freeze({ error: 'below_cost_admin_only', message: 'Las alertas de venta bajo costo son solo para el Admin.' });
-export const BELOW_COST_ASK_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\ba\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
+export const BELOW_COST_ASK_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bvend(?:o|es?|en|emos|[ií]|i[oó]|imos|ieron|iendo|ido|er|[ií]a[ns]?|[ií]amos)(?![a-záéíóúñ])(?:\s+[^\s.,;:!?¿¡]+){0,3}?\s+a\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
 export function employeeBelowCostDenied(role, text) { return String(role || '').startsWith('empleado:') && !seesOwnerData(role) && BELOW_COST_ASK_RE.test(String(text || '')); }
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;

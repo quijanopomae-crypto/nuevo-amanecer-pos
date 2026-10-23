@@ -828,8 +828,9 @@
   }
   // ---------- «Ventas bajo costo» (solo Admin) ----------
   // Solo lectura: el servidor compara lo cobrado con el costo actual y arma el informe. Aquí solo se muestra (texto, sin tablas HTML).
-  // (auditoría 500, P-051/P-052) «vendiendo a perdida», «vendo a pérdida»: mismo patrón que el Worker (BELOW_COST_ASK_RE).
-  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\ba\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
+  // (auditoría 500, P-051/P-052) «vendiendo a perdida», «vendo algo a pérdida»: verbo de venta y hasta 3 palabras antes de «a pérdida»
+  // (una baja como «pasa 3 leches vencidas a pérdida» NO abre el informe). Mismo patrón que el Worker (BELOW_COST_ASK_RE).
+  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bvend(?:o|es?|en|emos|[ií]|i[oó]|imos|ieron|iendo|ido|er|[ií]a[ns]?|[ií]amos)(?![a-záéíóúñ])(?:\s+[^\s.,;:!?¿¡]+){0,3}?\s+a\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
   function belowRows(m, d) {
     var list = el('div', 'na-asst-below');
     (d.ventas || []).slice(0, 50).forEach(function (g) { if (!g) return; var r = el('div', 'na-asst-below-row');
