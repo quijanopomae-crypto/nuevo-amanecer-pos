@@ -25,7 +25,7 @@ import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
@@ -385,7 +385,7 @@ function quoteDecide(kw, mid, sep, art, op, body) {
     if (st < 0) { const lim = Math.min(body.length, PIN_WRAP_BODY); while (e < lim && e > 0 && !/\s/.test(body[e]) && !/\s/.test(body[e - 1])) e++; }
     core = body.slice(0, e); rest = body.slice(e); }
   const r = { closed, core, rest, fw, st, ok: false };
-  const bt = core.trim(); if (!bt || bt === '[oculto]' || (!closed && bt.startsWith('[oculto]')) || wrapMoney(bt)) return r;
+  const bt = core.trim(); if (!bt || bt === '[oculto]' || /^\[oculto\][\uF8E0-\uF8E9]$/.test(bt) || (!closed && bt.startsWith('[oculto]')) || wrapMoney(bt)) return r;
   if (/[—–]/.test(sep) && !pinDashOk(k, mid)) return r; // guion de inciso, no separador (ver pinDashOk)
   if (!/[\u0022'«»“”‘’‹›„‚]/.test(op)) { // envoltorio sin comilla: como pinAlpha
     const strong = k === 'password' || k.startsWith('contrase') || (mid && PIN_CRED_RE.test(mid)), colon = /[:=]/.test(sep);
@@ -633,12 +633,30 @@ const PIN_NAME_RE = /(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])([pP])([iI][nN
 const PIN_NAME_P = '\uF8F0', PIN_NAME_PU = '\uF8F1';
 function pinNameShield(v) { const s = /[\uF8F0\uF8F1]/.test(v) ? v.replace(/[\uF8F0\uF8F1]/g, ' ') : v; return /pin/i.test(s) ? s.replace(PIN_NAME_RE, (m, p, rest) => (p === 'p' ? PIN_NAME_P : PIN_NAME_PU) + rest) : s; }
 function pinNameRestore(v) { return /[\uF8F0\uF8F1]/.test(v) ? v.replace(/\uF8F0/g, 'p').replace(/\uF8F1/g, 'P') : v; }
+// (fix/asist-placeholder-doble) Las marcas de tapado que ya puso otro filtro («[clave oculta]» de maskCredentialValues, «[nombre oculto]»,
+// «[correo oculto]»…) llevan «clave» u «oculto» dentro: el filtro de siempre las volvía a tapar a medias («pin [clave oculta]» →
+// «pin [oculto] oculta]»; «la contraseña: [nombre oculto]» → «… [[oculto]]»). Mientras corren los patrones cada marca entera se cambia por
+// «[oculto]» + un carácter privado que dice cuál era (\uF8E0–\uF8E9; no choca con \uE000/\uE001 de protectProductRefs ni con
+// \uF8F0/\uF8F1 de pinNameShield). «[oculto]» ya es una marca que las reglas respetan, así que «pin [oculto]\uF8E0» queda igual y al final
+// vuelve a ser «pin [clave oculta]». Si una regla se llevara el «[oculto]», el carácter suelto se quita. Lo de afuera nunca trae esos
+// caracteres (se cambian por un espacio antes).
+const MASK_HOLDERS = ['[clave oculta]', '[nombre oculto]', '[correo oculto]', '[teléfono oculto]', '[imagen omitida]', '[mensaje anterior omitido]', '[texto largo omitido]', '[dato del dueño]', '[dato del Admin]'];
+const MASK_HOLD_RE = new RegExp(MASK_HOLDERS.map((x) => x.replace(/[[\]]/g, '\\$&')).join('|'), 'g');
+const MASK_HOLD_CH = /[\uF8E0-\uF8E9]/g;
+function maskHoldShield(v) {
+  const s = MASK_HOLD_CH.test(v) ? v.replace(MASK_HOLD_CH, ' ') : v; MASK_HOLD_CH.lastIndex = 0;
+  return s.includes('[') ? s.replace(MASK_HOLD_RE, (m) => '[oculto]' + String.fromCharCode(0xF8E0 + MASK_HOLDERS.indexOf(m))) : s;
+}
+function maskHoldRestore(v) {
+  if (!MASK_HOLD_CH.test(v)) { MASK_HOLD_CH.lastIndex = 0; return v; } MASK_HOLD_CH.lastIndex = 0;
+  return v.replace(/\[oculto\]([\uF8E0-\uF8E9])/g, (_m, c) => MASK_HOLDERS[c.charCodeAt(0) - 0xF8E0]).replace(MASK_HOLD_CH, '');
+}
 const WS_LONG = new RegExp('\\s{' + (WS_RUN_MAX + 1) + '}');
 function collapseWs(v) { if (!WS_LONG.test(v) && !WS_ZW.test(v)) return v; let o = ''; const st = createWsStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 export function redactText(value) {
-  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
+  let out = supQuotes(collapseWs(pinNameShield(maskHoldShield(String(value ?? '')))));
   const kw = PIN_GATE.test(out); for (const [re, label] of PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return pinNameRestore(out);
+  return maskHoldRestore(pinNameRestore(out));
 }
 // (Bot 2 sobre 6280deae, revisado por la sala) Lo que va AL MODELO cuando el rol del SERVIDOR es dueño (mensaje, historial, contexto) y los
 // campos proveedor/documento de su tarjeta de compra: igual que redactText, salvo
@@ -704,9 +722,9 @@ const MODEL_OWNER_PATTERNS = PATTERNS.map((pt) => {
   return [pt[0], (m, d4, off, str) => (/^\d/.test(m) && (RECEIPT_BEFORE.test(str.slice(Math.max(0, off - 6), off)) || CODE_LABEL_RE.test(idBefore(str, off)) || idCodeColumn(str, off)) ? m : /^\d/.test(m) ? idLabel8(m, d4, off, str) : 'DNI ****' + d4), 'id'];
 });
 export function redactModelOwner(value) {
-  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
+  let out = supQuotes(collapseWs(pinNameShield(maskHoldShield(String(value ?? '')))));
   const kw = PIN_GATE.test(out); for (const [re, label] of MODEL_OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return pinNameRestore(out);
+  return maskHoldRestore(pinNameRestore(out));
 }
 // ¿Quedó algo tapado? («****», «[dato del dueño]», «[oculto]», «[imagen omitida]», «[correo oculto]»…): en una tarjeta ese campo va VACÍO
 // (Bot 5 sobre 58200f60) también máscaras no ASCII: «∗∗∗∗6789», «＊＊6789», «••••6789», «●●●●6789», «**6789», «…6789», «xxxx6789», «(oculto)».
@@ -716,9 +734,9 @@ export function redactModelOwner(value) {
 export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
-  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
+  let out = supQuotes(collapseWs(pinNameShield(maskHoldShield(String(value ?? '')))));
   const kw = PIN_GATE.test(out); for (const [re, label] of OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return pinNameRestore(out);
+  return maskHoldRestore(pinNameRestore(out));
 }
 // Bot 5 + sala: para un EMPLEADO se tapa SOLO EL MONTO de un dato del dueño (la palabra queda: «El costo es [dato del dueño]»).
 // Lectura de izquierda a derecha con un estado chico: una palabra del dueño (costo, costó, costaron, cto., c. unit, precio de compra,
@@ -1732,10 +1750,10 @@ export const NO_STOCK_TEXT = (n, q) => '«' + n + '» no lleva control de stock,
 // Con `ids` y un lector que sabe buscar por id, se leen SOLO esos productos (sin recorrer el catálogo ni la lista cortada a 5000).
 // Si la lectura de la base FALLA, el mapa sale con failed=true: el chat no ofrece compras ni ajustes (Bot 2), ver dropStockCards.
 export async function stockControlMap(reader, ctx, ids) {
-  const m = new Map();
+  const m = new Map(); m.units = new Map(); // m.units: id → unidad de venta (products.unit del servidor; el aparato no la manda)
   for (const p of (ctx?.products || [])) if (p.controla === false) m.set(String(p.id), false);
-  if (reader && ids && typeof reader.productsById === 'function') { try { for (const [id, p] of await reader.productsById(ids)) m.set(id, !!p.controla); } catch { m.failed = true; } }
-  else if (reader && typeof reader.products === 'function') { try { for (const p of await reader.products()) m.set(String(p.id), !!p.controla); } catch { m.failed = true; } }
+  if (reader && ids && typeof reader.productsById === 'function') { try { for (const [id, p] of await reader.productsById(ids)) { m.set(id, !!p.controla); m.units.set(id, p.unidad ?? null); } } catch { m.failed = true; } }
+  else if (reader && typeof reader.products === 'function') { try { for (const p of await reader.products()) { m.set(String(p.id), !!p.controla); m.units.set(String(p.id), p.unidad ?? null); } } catch { m.failed = true; } }
   return m;
 }
 export const STOCK_READ_FAILED_TEXT = 'No pude revisar el inventario en este momento, así que no preparé compras ni ajustes de stock. Inténtalo otra vez en un momento.';
@@ -1816,7 +1834,7 @@ const ARRIVAL_RE = /\b(?:me\s+llegaron|me\s+llego|llegaron|llego|compre|compramo
 const NOT_PURCHASE_RE = /\b(?:devoluc\w*|devolvi\w*|merma|vencid\w*|da[nñ]ad\w*|rot[oa]s?|conteo|cont[eé]|me\s+devolvieron)\b/;
 const COST_ASK_RE = /\b(?:actualiz\w*|cambi\w*|pon\w*|corrig\w*|modific\w*|sube\w*|subir|baja\w*|bajar|guarda\w*)\s+(?:(?:el|los|su|sus|tambien\s+el|tambien\s+los)\s+)?costos?\b|\bcostos?\s+nuevos?\b|\bnuevos?\s+costos?\b/;
 const NAME_STOP = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'con', 'para', 'por', 'en', 'y', 'e',
-  'unidad', 'unidades', 'und', 'unid', 'uni', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'saco', 'sacos', 'kilo', 'kilos', 'kg', 'docena', 'docenas', 'botella', 'botellas', 'lata', 'latas', 'frasco', 'frascos', 'sobre', 'sobres', 'blister', 'blisters']);
+  'unidad', 'unidades', 'und', 'unid', 'uni', 'suelto', 'sueltos', 'suelta', 'sueltas', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'saco', 'sacos', 'kilo', 'kilos', 'kg', 'docena', 'docenas', 'botella', 'botellas', 'lata', 'latas', 'frasco', 'frascos', 'sobre', 'sobres', 'blister', 'blisters']);
 export function isArrivalText(text) { const t = foldText(text); return ARRIVAL_RE.test(t) && !NOT_PURCHASE_RE.test(t); }
 export function asksCostChange(text) { return COST_ASK_RE.test(foldText(text)); }
 function nameWords(v) { return foldText(v).replace(/(\d)([a-zñ])/g, '$1 $2').replace(/[^a-z0-9ñ]+/g, ' ').split(' ').filter((w) => w.length >= 3 && !NAME_STOP.has(w)).map((w) => w.length > 4 ? w.replace(/(?:es|s)$/, '') : w); }
@@ -1851,20 +1869,31 @@ const NAME_CUT_RE = /\s+(?:(?:a|en|por|x)\s+(?:s\/\.?\s*)?\d|(?:a\s+)?s\/\.?\s*\
 const NAME_FILLER_RE = /^(?:(?:un|una|unos|unas)\s+)?productos?\s+nuevos?(?:\s+que\s+no\s+(?:tengo|tenia|tenía|tenemos|hay|est[aá]))?\s*[,:;-]?\s*/i;
 // Renglón que solo repite la cantidad para otras filas («12 de cada uno», «10 c/u»): no es un producto.
 const ONLY_FILLER_RE = /^(?:de\s+)?(?:cada\s+(?:un[oa]|cosa|producto)|c\/u|c\.u\.?|todo|todos|todas|cada\s+uno\s+de\s+ellos)$/i;
+// (UNI-067) Renglón que es solo un empaque («2 cajas», «1 paquete») y renglón que empieza por sueltos o unidades («3 sueltos de primor»).
+const PACK_ONLY_RE = /^(?:cajas?|paquetes?|packs?|bolsas?|sacos?|docenas?|displays?|blisters?|fardos?|six\s*packs?)$/i;
+const LOOSE_LEAD_RE = /^(sueltos?|sueltas?|unidades|unidad|und|unid)\s+(?:de\s+|del\s+)?(.+)$/i;
 // Renglones «N nombre [a X cada uno | a X en total]» después de «me llegaron», «compré», etc.
 export function parseArrivalItems(text) {
   const raw = String(text ?? '').replace(/[\x00-\x1f\x7f]+/g, ' '), t = foldText(raw);
   const m = ARRIVAL_RE.exec(t); if (!m) return [];
   let body = raw.slice(m.index + m[0].length).replace(/^\s*(?:hoy|ayer|esta\s+mañana)?\s*[:,-]?\s*/i, '');
   const out = [];
+  let pack = null; // (UNI-067) «2 cajas» sin producto: es la 1.ª mitad de «2 cajas y 3 sueltos de primor», no un renglón aparte
   for (const part of body.split(/\s*(?:(?<!\d),|,(?=\s)|[;\n]|\s+y\s+|\s+e\s+|\s+mas\s+|\s+más\s+)\s*(?=\d)/i)) {
+    const prev = pack; pack = null;
     const r = /^(\d+(?:[.,]\d+)?)\s+(.+?)(?:\s+(?:a|en|por|pagu[eé]|me\s+cost[oó]|cost[oó])\s+(?:s\/\.?\s*)?(\d+(?:[.,]\d+)?)\s*(?:soles?)?\s*(cada\s+un[oa]|c\/u|c\.u\.?|la\s+unidad|por\s+unidad|el\s+total|en\s+total|total|todo)?)?\s*[.!?]*\s*$/i.exec(part.trim());
     if (!r) continue;
     const cantidad = qty(String(r[1]).replace(',', '.'));
     const nombre = cleanText(r[2].replace(NAME_CUT_RE, '').replace(/\s+(?:de|del)\s+(?:la\s+|el\s+)?(?:distribuidora|proveedor|tienda|mercado|almac[eé]n)\b.*$/i, '').replace(/^(?:de|del)\s+/i, '').replace(NAME_FILLER_RE, '').replace(/[\s,;:.-]+$/, ''), 80);
+    if (cantidad && PACK_ONLY_RE.test(nombre)) { pack = cleanText(r[1] + ' ' + nombre, 30); continue; }
     if (!cantidad || !nombre || ONLY_FILLER_RE.test(nombre) || !nameWords(nombre).length) continue;
     let costo = r[3] != null ? money(String(r[3]).replace(',', '.')) : null;
     if (costo != null && r[4] && /total|todo/i.test(r[4])) costo = money(costo / cantidad);
+    const loose = prev ? LOOSE_LEAD_RE.exec(nombre) : null;
+    // Mezcla de cajas y sueltos del MISMO producto: un solo renglón. El total depende de cuántas trae la caja (no se adivina):
+    // la fila lleva «(2 cajas y 3 sueltos)» a la vista y nunca se vincula sola a un producto con la cantidad suelta.
+    // Cantidad VACÍA (no la suelta): sin saber cuántas trae la caja no se registra nada (revisión del PR #997).
+    if (loose && nameWords(loose[2]).length) { out.push({ nombre: cleanText(loose[2] + ' (' + prev + ' y ' + r[1] + ' ' + loose[1] + ')', 80), cantidad: null, costo_unitario: costo, mixta: true }); continue; }
     out.push({ nombre, cantidad, costo_unitario: costo });
     if (out.length >= 30) break;
   }
@@ -1892,18 +1921,38 @@ export function costIsStated(cost, cantidad, nums, packs = []) {
   const c = Number(cost), q = Number(cantidad), near = (a) => Math.abs(a - c) < 0.006;
   return nums.some((n) => near(n) || near(n / 100) || (q > 0 && near(n / q)) || packs.some((k) => near(n / k)));
 }
+// (UNI-037) Tamaño A GRANEL del nombre («AZUCAR RUBIA X 50KG», «X 2.5KG», «X 20LT»): solo kilos o litros, de 2 para arriba.
+// Gramos y mililitros no («GASEOSA 500ML», «X 170GR»): con 0.5 o 0.17 cualquier número dividido «salía» dicho.
+const WEIGHT_SIZE_RE = /(?:^|[^a-z0-9.,])(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|kilogramos?|lts?|litros?|l)(?![a-z])/g;
+const weightSizes = (name) => [...foldText(name).matchAll(WEIGHT_SIZE_RE)].map((m) => Number(m[1].replace(',', '.'))).filter((k) => Number.isFinite(k) && k >= 2);
 const packSizes = (name) => [...foldText(name).matchAll(/\b(?:caja|paquete|pack|bolsa|six|x)\s*(?:de\s+|x\s*)?(\d+)\b/g)].map((m) => Number(m[1])).filter((k) => k >= 2);
+// Unidad de venta del producto en el POS (products.unit en la base del servidor): ¿se vende por kilo o por litro?
+const WEIGHT_UNITS = new Set(['kilogramo', 'kilogramos', 'kg', 'kgs', 'kilo', 'kilos', 'litro', 'litros', 'l', 'lt', 'lts']);
+export const soldByWeight = (unit) => typeof unit === 'string' && WEIGHT_UNITS.has(foldText(unit).trim().replace(/\.$/, ''));
+export const MISSING_BOX_TEXT = 'Falta cuántas trae la caja';
+const MIXED_ROW = Symbol('fila mixta'); // solo la pone arrivalToPurchase (no viene del modelo ni del JSON)
 // Pone en 0 (marcado «costo») el costo que el modelo puso sin que nadie lo dijera. Devuelve los nombres de esas filas.
-export function clearUnstatedCosts(proposals, texts) {
-  const nums = statedNumbers(texts), names = [];
+// (UNI-037) Costo = lo dicho entre el tamaño a granel («157 el saco» / 50 kg = 3.14): vale SOLO si el producto se vende por kilo o
+// litro (units: id → unidad de venta, leída del servidor). Se vende entero o no se sabe: NO se divide; queda lo dicho (157), marcado
+// «costo», y el nombre va en names.porSaco para el aviso.
+export function clearUnstatedCosts(proposals, texts, units = null) {
+  const nums = statedNumbers(texts), names = [], porSaco = [];
   for (const p of proposals) {
     if (p.type !== 'compra' || !Array.isArray(p.lineas)) continue;
     for (const l of p.lineas) {
-      if (!(Number(l.costo_unitario) > 0) || costIsStated(l.costo_unitario, l.cantidad, nums, packSizes(l.nombre))) continue;
-      l.costo_unitario = 0; l.revisar = [...new Set([...(l.revisar || []), 'costo'])]; names.push(l.nombre);
+      const c = Number(l.costo_unitario);
+      if (!(c > 0) || costIsStated(c, 0, nums)) continue; // dicho tal cual (o en céntimos)
+      const ws = weightSizes(l.nombre), whole = nums.find((n) => ws.some((k) => Math.abs(n / k - c) < 0.006));
+      if (whole != null ? soldByWeight(units?.get?.(String(l.product_id))) : costIsStated(c, l.cantidad, nums, packSizes(l.nombre))) continue;
+      if (whole != null) { // se vende entero o no se sabe: el costo del saco, con las marcas de nuevo (costo raro, topes)
+        l.costo_unitario = money(whole); porSaco.push(l.nombre);
+        l.revisar = [...new Set([...reviewPurchaseLine(l, l.costo_actual != null ? { costo: l.costo_actual } : null), 'costo'])];
+        const hard = hardLimitLine(l); if (hard.length) l.limite = hard; else delete l.limite;
+      } else { l.costo_unitario = 0; l.revisar = [...new Set([...(l.revisar || []), 'costo'])]; names.push(l.nombre); }
     }
-    p.revisarFilas = p.lineas.filter((l) => l.revisar).length;
+    p.revisarFilas = p.lineas.filter((l) => l.revisar).length; p.fueraDeLimite = p.lineas.filter((l) => l.limite).length;
   }
+  names.porSaco = porSaco;
   return names;
 }
 export function arrivalToPurchase(proposals, dropped, text, role, ctx, image = false) {
@@ -1919,8 +1968,8 @@ export function arrivalToPurchase(proposals, dropped, text, role, ctx, image = f
   for (const it of items) {
     const have = lineas.find((l) => coveredBy(it, l, ctx));
     if (have) { if (have.costo_unitario == null && it.costo_unitario != null) have.costo_unitario = it.costo_unitario; continue; }
-    const p = uniqueProduct(it.nombre, ctx);
-    lineas.push({ product_id: p ? p.id : null, nombre: p ? p.nombre : it.nombre, cantidad: it.cantidad, costo_unitario: it.costo_unitario });
+    const p = it.mixta ? null : uniqueProduct(it.nombre, ctx);
+    lineas.push({ product_id: p ? p.id : null, nombre: p ? p.nombre : it.nombre, cantidad: it.cantidad, costo_unitario: it.costo_unitario, ...(it.mixta ? { [MIXED_ROW]: true } : {}) });
   }
   if (lineas.length <= (compras[0]?.lineas.length || 0) && compras.length <= 1 && !entradas.length) return proposals; // nada que sumar
   const first = compras[0] || entradas[0] || null;
@@ -1990,11 +2039,11 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'preparar_compra' || name === 'leer_factura_compra') {
     const lineas = [];
     for (const l of (Array.isArray(args.lineas) ? args.lineas : []).slice(0, 30)) {
-      const m = matchLine(l, idx), q = qty(l?.cantidad);
-      if (!q || !m.nombre) continue;
+      const m = matchLine(l, idx), q = qty(l?.cantidad), mixed = l?.[MIXED_ROW] === true;
+      if ((!q && !mixed) || !m.nombre) continue;
       const known = m.product_id ? idx.get(m.product_id) : null;
-      const line = { product_id: m.product_id, nombre: m.nombre, cantidad: q, costo_unitario: seesCosts(role) ? money(l?.costo_unitario) : null, costo_actual: seesCosts(role) && known && known.costo != null ? known.costo : null };
-      const flags = reviewPurchaseLine(line, known);
+      const line = { product_id: m.product_id, nombre: m.nombre, cantidad: mixed ? null : q, costo_unitario: seesCosts(role) ? money(l?.costo_unitario) : null, costo_actual: seesCosts(role) && known && known.costo != null ? known.costo : null };
+      const flags = mixed ? [MISSING_BOX_TEXT] : reviewPurchaseLine(line, known);
       if (flags.length) line.revisar = flags;
       const hard = hardLimitLine(line);
       if (hard.length) line.limite = hard; // fuera del tope duro: «Está bien» no la deja pasar; solo «Quitar fila»
@@ -2654,8 +2703,33 @@ export function employeeQueryResult(r) {
   const keep = (v) => Array.isArray(v) ? v.map(keep) : v && typeof v === 'object'
     ? Object.fromEntries(Object.entries(v).filter(([k]) => EMPLOYEE_QUERY_FIELDS.resumen.includes(k) && !OWNER_ONLY_KEY.test(k)).map(([k, x]) => [k, keep(x)])) : v;
   const cols = Array.isArray(r.columnas) ? r.columnas : [], idx = cols.map((c, i) => EMPLOYEE_QUERY_FIELDS.columnas.includes(c) ? i : -1).filter((i) => i >= 0);
-  return { tipo: r.tipo, titulo: r.titulo, columnas: idx.map((i) => cols[i]), filas: (Array.isArray(r.filas) ? r.filas : []).map((f) => idx.map((i) => f[i])),
-    texto: r.texto, total: typeof r.total === 'number' ? r.total : null, resumen: withNotice(keep(r.resumen || {}), employeeNoticeText(r.resumen)) };
+  const out = { tipo: r.tipo, titulo: r.titulo, columnas: idx.map((i) => cols[i]), filas: (Array.isArray(r.filas) ? r.filas : []).map((f) => idx.map((i) => f[i])),
+    texto: '', total: null, resumen: withNotice(keep(r.resumen || {}), employeeNoticeText(r.resumen)) };
+  out.texto = employeeQueryText(r, out);
+  return out;
+}
+// Segunda barrera (#989): el texto del EMPLEADO se arma de nuevo SOLO con lo que ya pasó la lista blanca (columnas y resumen de arriba);
+// el texto original de la consulta nunca pasa, y el total tampoco (en una consulta de plata es un monto). Si un día la lista de consultas
+// de un nivel se abre por error (ventas, deudas, caja…), al empleado no le llega ningún monto. stock_producto y bajo_stock se leen igual
+// que antes (con el precio de venta, la misma columna «Precio S/» de su lista de precios). Admin y nivel 3 + «costos y cambios» no pasan por aquí.
+const EMPLOYEE_ONLY_ADMIN_TEXT = 'Ese dato es solo para el Admin.';
+const employeeSentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
+function employeeQueryText(r, e) {
+  const col = (name) => e.columnas.indexOf(name), iP = col('Producto'), iS = col('Stock'), iPr = col('Precio S/');
+  const num = (v) => typeof v === 'number' && Number.isFinite(v);
+  if (r.tipo === 'stock_producto' && iP >= 0 && iS >= 0) {
+    if (!e.filas.length) return 'No encontré ese producto.';
+    return employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
+  }
+  if (r.tipo === 'stock_producto' && !e.filas.length) return 'No encontré ese producto.';
+  if (r.tipo === 'bajo_stock' && iP >= 0 && iS >= 0) {
+    const n = num(e.resumen.total) ? e.resumen.total : e.filas.length; // cantidad de productos (no plata)
+    const note = r.truncado === true && num(e.resumen.revisados) ? ' (lista larga: se revisaron los primeros ' + e.resumen.revisados + ')' : '';
+    if (!n) return 'Ningún producto está bajo el mínimo' + note + '.';
+    return (n === 1 ? 'Hay 1 producto en o bajo el mínimo' : 'Hay ' + n + ' productos en o bajo el mínimo') + note + '. Los más urgentes: ' +
+      e.filas.slice(0, 3).map((f) => String(f[iP]) + ' (' + (num(f[iS]) && f[iS] <= 0 ? stockLabel(f[iS]) : f[iS]) + ')').join(', ') + '.';
+  }
+  return EMPLOYEE_ONLY_ADMIN_TEXT;
 }
 
 // ---------- Rol para el asistente ----------
@@ -3219,9 +3293,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
   // (auditoría 500, CP-037) costo que nadie dijo (ni en este mensaje ni en los anteriores de la persona): queda vacío y marcado, no inventado.
   // Solo compras dictadas por texto («compré…», «me llegaron…»); una factura leída trae sus costos.
+  // Se aplica más abajo, con la unidad de venta de cada producto leída del servidor (UNI-037: costo por kilo solo si se vende por kilo).
   const userTexts = [parsed.text, ...(parsed.history || []).filter((h) => h && h.role === 'user').map((h) => String(h.content || ''))];
-  const unpricedNames = parsed.image || !userTexts.some((t) => ARRIVAL_RE.test(foldText(t))) ? []
-    : clearUnstatedCosts(proposals.filter((p) => !p._call || p._call.name === 'preparar_compra'), userTexts);
+  const checkCosts = !parsed.image && userTexts.some((t) => ARRIVAL_RE.test(foldText(t)));
+  const costCalls = new Set(proposals.filter((p) => !p._call || p._call.name === 'preparar_compra'));
+  let unpricedNames = [];
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
   // Configuración sin el permiso «cambios»: 403 antes de leer nada de la base y sin segunda llamada al modelo.
   if (dropped.some((d) => d.dropped === 'config_forbidden')) { if (emit) { emit.drop(); emit.reset(); } return json(CONFIG_FORBIDDEN, 403); }
@@ -3244,6 +3320,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     noStock = dropped.filter((d) => d.dropped === 'sin_control_stock' && d.nombre).map((d) => { if (Number(d.cantidad) > 0) noStockQty.set(d.nombre, (noStockQty.get(d.nombre) || 0) + Number(d.cantidad)); return d.nombre; });
     if (map.failed) stockFailed = dropStockCards(proposals, dropped) > 0; // falla la lectura: fuera compras y ajustes, con mensaje simple
     else noStock.push(...applyStockControl(proposals, dropped, map, noStockQty));
+    if (checkCosts && !map.failed) unpricedNames = clearUnstatedCosts(proposals.filter((p) => costCalls.has(p)), userTexts, map.units);
   }
   const overNames = dropped.filter((d) => d.dropped === 'over_limit' && d.nombre).map((d) => d.nombre);
   // La compra ya lleva el costo: al registrarla, el POS guarda ese costo en el producto (costo-compra-ficha.js). Tarjetas «Actualizar costo»
@@ -3353,6 +3430,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     reply = 'Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra.' + (missing ? ' Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.' : ' El stock se suma solo al registrar la compra.');
     const unpriced = unpricedNames.filter((n) => proposals.some((p) => p.type === 'compra' && p.lineas.some((l) => l.nombre === n)));
     if (unpriced.length) reply += ' Falta el costo de ' + unpriced.map((n) => '«' + n + '»').join(', ') + ': escríbelo en Nueva compra.';
+    const inCard = (n) => proposals.some((p) => p.type === 'compra' && p.lineas.some((l) => l.nombre === n));
+    const porSaco = [...new Set(unpricedNames.porSaco || [])].filter(inCard);
+    if (porSaco.length) reply += ' ' + porSaco.map((n) => '«' + n + '»').join(', ') + (porSaco.length === 1 ? ' no figura' : ' no figuran') + ' como venta por kilo ni por litro: dejé el costo que dijiste (el del saco o bidón), no el costo por kilo. Revísalo.';
+    const sinCaja = [...new Set(proposals.filter((p) => p.type === 'compra').flatMap((p) => p.lineas.filter((l) => l.cantidad == null && (l.revisar || []).includes(MISSING_BOX_TEXT)).map((l) => l.nombre)))];
+    if (sinCaja.length) reply += ' ' + MISSING_BOX_TEXT + ' de ' + sinCaja.map((n) => '«' + n + '»').join(', ') + ': dime cuántas trae o quita esa fila y anótala en Nueva compra.';
   }
   const notes = [...(bulkDropped ? [BULK_ADMIN_ONLY_TEXT] : []), ...[...new Set(noStock)].map((n) => NO_STOCK_TEXT(n, noStockQty.get(n))), ...[...new Set(overNames)].map((n) => '«' + n + '»: la cantidad pasa el límite de ' + PURCHASE_HARD_LIMITS.maxQty + '. Hazlo desde Inventario.')];
   if (notes.length) reply = (proposals.length ? (reply ? reply + ' ' : '') : '') + notes.join(' ');
