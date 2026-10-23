@@ -44,6 +44,8 @@ const PRECACHE_URLS = [
   './js/modules/etiquetas-precios.js',
   './css/productos-sin-movimiento.css',
   './js/modules/productos-sin-movimiento.js',
+  './css/historial-exportaciones.css',
+  './js/modules/historial-exportaciones.js',
   './css/sugerencia-compra.css',
   './js/modules/sugerencia-compra.js',
   './css/ajustes-inventario.css',
