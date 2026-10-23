@@ -2156,6 +2156,88 @@ export function isBrandDon(text, start, end, known = []) {
     return n && (' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(' ' + key + ' ');
   });
 }
+// (fix/asist-tapar-personas-nuevas) Regla COMPARTIDA para una persona NUEVA (no está en la lista de clientes), junto a isBrandDon: la usan
+// sanitizeLesson (lo enseñado) y maskHistoryPeople (lo que va al modelo: mensaje actual, historial y resumen). Tapa con NAME_MASK:
+//   - tras «cliente/clienta/vecino/casero…» (también en minúscula: «agrega cliente juan pérez»);
+//   - tras «verbo + a/al» de persona («registra a», «le vendí a», «le fié a», «cóbrale a»…; también en minúscula);
+//   - tras «a/al» suelto o «debe/pagó/abonó…» solo si es Nombre con mayúscula («A Rosa Quispe le fié…», «pagó Juan Pérez»);
+//   - antes de «(me/le/nos) debe/pagó/abonó/fió…» («Rosa Quispe me debe 2 kg»; en minúscula solo al empezar la frase).
+// No tapa: números, «#código», medidas, «a granel», palabras vacías/verbos, pantallas del POS, palabras de producto («arroz costeño»,
+// «leche gloria») ni un tramo que está en el nombre de un producto conocido (known) tras «a» suelto o antes del verbo. «don/doña/señora…»
+// los decide maskReplyPeople/PERSON_CUE con isBrandDon (aquí se dejan). Un verbo de deuda/pago cerca gana como en isBrandDon: es persona.
+const CUE_STRONG = new Set(['cliente', 'clienta', 'clientes', 'vecino', 'vecina', 'casero', 'casera', 'compadre', 'comadre']);
+const CUE_VERB_A = /^(?:vend\w*|fi(?:a|e|o|ale|ele|ado|aste)|cobr\w*|registr\w*|agreg\w*|anad\w*|apunt\w*|anot\w*|prest\w*|d(?:a|i|io|ale|ele)|entreg\w*|devolv\w*|devuelv\w*|deb(?:o|e|emos)|abon\w*|rebaj\w*|descont\w*|regal\w*|mand\w*|envi\w*)$/;
+const DEBT_WORD = /^(?:deb(?:e|en|ia|io|era)|pag(?:a|o|an|aron|ara|ue)|abon(?:a|o|e|an|aron|aba)|fi(?:o|a|aba)|adeud[ao]|fiad[oa]s?)$/;
+const PRODUCT_WORD = new Set(['arroz', 'azucar', 'aceite', 'leche', 'fideo', 'fideos', 'tallarin', 'tallarines', 'harina', 'galleta', 'galletas', 'cafe', 'salsa', 'atun', 'paneton',
+  'chocolate', 'mermelada', 'gaseosa', 'agua', 'cerveza', 'pan', 'huevo', 'huevos', 'pollo', 'carne', 'queso', 'yogurt', 'jabon', 'detergente', 'lejia', 'papel', 'sal', 'avena',
+  'menestra', 'lenteja', 'frejol', 'producto', 'productos', 'marca', 'caja', 'paquete', 'bolsa', 'botella', 'lata', 'sobre', 'granel', 'precio', 'costo', 'stock', 'oferta']);
+const POS_WORD = new Set(['inventario', 'ventas', 'venta', 'clientes', 'caja', 'gastos', 'configuracion', 'compras', 'compra', 'reportes', 'reporte', 'kardex', 'punto', 'admin',
+  'nuevo', 'nueva', 'guia', 'ajustes', 'whatsapp', 'yape', 'plin', 'excel', 'pdf', 'sunat', 'credito', 'contado', 'efectivo', 'tarjeta', 'mayor', 'menor', 'lima', 'peru']);
+const COMMON_AFTER = new Set(['nuevo', 'nueva', 'nuevos', 'nuevas', 'frecuente', 'habitual', 'fiel', 'final', 'mayorista', 'minorista', 'moroso', 'morosa', 'deudor', 'deudora',
+  'especial', 'vip', 'general', 'varios', 'anonimo', 'anonima', 'ocasional', 'regular', 'numero', 'codigo', 'lista', 'ficha', 'datos', 'dato', 'nombre', 'telefono', 'dni', 'ruc',
+  'direccion', 'credito', 'deuda', 'cuenta', 'saldo', 'granel', 'precio', 'costo', 'mitad', 'medias', 'cuotas', 'plazo', 'tiempo', 'hora', 'diario', 'semana', 'mes', 'dia',
+  'ver', 'buscar', 'crear', 'registrar', 'agregar', 'editar', 'borrar', 'todos', 'cada', 'alguno', 'ninguno', 'cualquiera', 'quien', 'nadie', 'alguien', 'ella', 'ellos', 'ellas',
+  'compra', 'compran', 'lleva', 'llevan', 'pide', 'quiere', 'trae', 'vino', 'viene', 'tiene', 'vive', 'sabe', 'dice', 'esta', 'estan', 'siempre', 'nunca', 'hoy', 'ayer', 'manana',
+  'aqui', 'ahi', 'alla', 'casa', 'tienda', 'puesto', 'mercado', 'bodega', 'kilo', 'kilos', 'unidad', 'unidades', 'docena', 'litro', 'sol', 'soles']);
+const HONOR = new Set(['don', 'dona', 'senor', 'senora', 'senorita', 'sr', 'sra', 'srta']);
+// Proveedores/empresas no son «persona nueva»: «la compraste a Distribuidora Secreta SAC», «le compré a Alicorp».
+const BIZ_WORD = new Set(['distribuidora', 'distribuidor', 'distribuciones', 'comercial', 'comercializadora', 'inversiones', 'corporacion', 'empresa', 'importadora',
+  'industrias', 'negocios', 'grupo', 'sac', 'eirl', 'srl', 'minimarket', 'almacen', 'proveedor', 'proveedora', 'proveedores', 'mayorista', 'molino', 'molinera']);
+const BUY_VERB = /^(?:compr\w*|ped\w*|pid\w*|encarg\w*|surt\w*)$/;
+const CUED_TOKEN = /[\p{L}][\p{L}'’-]*|[\d#S][^\s,;:!?()«»"]*/gu;
+const isCap = (w) => /^\p{Lu}/u.test(w);
+function cuedWordOk(w, lower) {
+  const f = LESSON_FOLD(w);
+  if (!/^\p{L}/u.test(w) || f.length < 2 || NAME_NOT.has(w.toLowerCase()) || NAME_NOT.has(f) || HONOR.has(f) || CUE_STRONG.has(f) || NAME_UNIT.has(f) || PRODUCT_WORD.has(f)) return false;
+  if (DEBT_VERB.test(' ' + f + ' ') || DEBT_WORD.test(f) || NAME_STOP_VERB.has(f) || COMMON_AFTER.has(f) || POS_WORD.has(f) || BIZ_WORD.has(f)) return false;
+  return !lower || !/(?:mente|ante|ente|ivo|iva|ado|ada|ido|ida|cion|ar|er|ir)$/.test(f);
+}
+const inCatalog = (words, known) => { const key = ' ' + words.map((w) => LESSON_FOLD(w)).join(' ') + ' ';
+  return (Array.isArray(known) ? known : []).some((p) => { const n = typeof p === 'string' ? p : p && p.nombre; return n && (' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(key); }); };
+export function maskCuedPeople(text, known = []) {
+  const s = String(text ?? ''); if (!s) return s;
+  const tk = [...s.matchAll(CUED_TOKEN)].map((m) => ({ w: m[0], s: m.index, e: m.index + m[0].length }));
+  const joined = (i) => i > 0 && /^[ \t]+$/.test(s.slice(tk[i - 1].e, tk[i].s)); // tk[i] sigue a tk[i-1] solo con espacios
+  const spans = [];
+  const forward = (i, mode) => { // mode: 'strong' (minúscula vale), 'cap' (solo Nombre con mayúscula)
+    const first = tk[i]; if (!first || !joined(i)) return;
+    const lower = !isCap(first.w); if (lower && mode === 'cap') return;
+    if (!cuedWordOk(first.w, lower) || (mode === 'cap' && LESSON_FOLD(first.w).length < 3)) return;
+    let j = i; while (j + 1 < tk.length && j - i < 3 && joined(j + 1) && (lower ? !isCap(tk[j + 1].w) : isCap(tk[j + 1].w)) && cuedWordOk(tk[j + 1].w, lower)) j++;
+    const words = tk.slice(i, j + 1).map((t) => t.w);
+    if (mode === 'cap' && !nearDebt(i, j) && inCatalog(words, known)) return; // «a Gloria» con «Leche Gloria» en el catálogo: marca
+    spans.push([first.s, tk[j].e]);
+  };
+  const nearDebt = (i, j) => tk.slice(Math.max(0, i - 4), j + 5).some((t) => DEBT_WORD.test(LESSON_FOLD(t.w)) || /^fi[eé]$/i.test(t.w));
+  for (let i = 0; i < tk.length; i++) {
+    const f = LESSON_FOLD(tk[i].w);
+    if (CUE_STRONG.has(f)) forward(i + 1, 'strong');
+    else if ((f === 'a' || f === 'al') && joined(i + 1 < tk.length ? i + 1 : i)) {
+      // «le vendí a», «registra a», «agrega al» (verbo justo antes, o con «le/les» delante): persona también en minúscula
+      const v = i > 0 && joined(i) ? LESSON_FOLD(tk[i - 1].w) : '';
+      // «compré/pedí a X» es proveedor; «a S/ 7.77 a Distribuidora…» tampoco cuenta: el verbo de compra manda en la frase
+      const buy = tk.slice(Math.max(0, i - 6), i).some((t) => BUY_VERB.test(LESSON_FOLD(t.w)));
+      if (CUE_VERB_A.test(v) && !PRODUCT_WORD.has(v)) forward(i + 1, 'strong'); else if (!buy) forward(i + 1, 'cap');
+    } else if (DEBT_WORD.test(f)) {
+      forward(i + 1, 'cap');
+      // hacia atrás: «Rosa Quispe (me) debe»
+      let k = i - 1; if (k >= 0 && /^(?:me|le|les|nos|te)$/.test(LESSON_FOLD(tk[k].w)) && joined(k + 1)) k--;
+      if (k < 0 || !joined(k + 1)) continue;
+      const lower = !isCap(tk[k].w); let st = k;
+      while (st >= 0 && k - st < 3 && (lower ? !isCap(tk[st].w) : isCap(tk[st].w)) && cuedWordOk(tk[st].w, lower) && (st === k || joined(st + 1))) st--;
+      st++; if (st > k) continue;
+      const atStart = st === 0 || /[.!?;:\n]\s*$|^\s*$/.test(s.slice(st > 0 ? tk[st - 1].e : 0, tk[st].s)) || /^(?:que|y|pero|ojo|recuerda|anota|apunta)$/.test(LESSON_FOLD(tk[st - 1].w));
+      if (lower && !atStart) continue;
+      if (st > 0 && PRODUCT_WORD.has(LESSON_FOLD(tk[st - 1].w))) continue; // «la leche Gloria debe…»: lo decide el resto (no es nombre suelto)
+      if (inCatalog(tk.slice(st, k + 1).map((t) => t.w), known) && !isCap(tk[st].w)) continue;
+      spans.push([tk[st].s, tk[k].e]);
+    }
+  }
+  if (!spans.length) return s;
+  spans.sort((a, b) => a[0] - b[0]); let out = '', pos = 0;
+  for (const [a, b] of spans) { if (a < pos) { pos = Math.max(pos, b); continue; } out += s.slice(pos, a) + NAME_MASK; pos = b; }
+  return out + s.slice(pos);
+}
 export function sanitizeLesson(fact, customers = [], products = []) {
   let out = String(fact || '');
   const list = (Array.isArray(customers) ? customers : []).filter((c) => c && c.nombre && String(c.nombre).trim().length >= 3)
@@ -2170,6 +2252,7 @@ export function sanitizeLesson(fact, customers = [], products = []) {
     }
   }
   out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || isBrandDon(all, at, at + m.length, products) ? m : cue + ' ');
+  out = maskCuedPeople(out, products); // persona nueva sin «don/señora»: «Rosa Quispe me debe 2 kg», «le fié a Juan Pérez»
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
 export async function saveLesson(store, auth, nowMs, fact, customers = [], products = []) {
@@ -2679,8 +2762,12 @@ export function safeProductName(nombre, customers = []) {
 // (revisión #998) historial que manda el teléfono del Admin (mensajes anteriores, los escribe/guarda el aparato): antes del modelo, el nombre
 // tras «don/doña/señora…» se tapa con maskReplyPeople (misma regla isBrandDon); «fideo don vittorio» o un producto conocido quedan.
 export const HISTORY_DON_CUE = /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu;
+// (fix/asist-tapar-personas-nuevas) y luego la regla compartida maskCuedPeople: persona nueva tras «cliente», «registra a», «le vendí a»… o
+// antes de «me debe/pagó» («Rosa Quispe me debe»). known.products: el catálogo (las marcas quedan). known.cuedOnly (empleado): solo esta regla.
 export function maskHistoryPeople(history, known) {
-  return (Array.isArray(history) ? history : []).map((m) => (m && typeof m.content === 'string' ? { ...m, content: maskReplyPeople(m.content, known) } : m));
+  const prods = known && typeof known === 'object' ? known.products : [], only = !!(known && known.cuedOnly);
+  return (Array.isArray(history) ? history : []).map((m) => (m && typeof m.content === 'string'
+    ? { ...m, content: maskCuedPeople(only ? m.content : maskReplyPeople(m.content, known), prods) } : m));
 }
 export function finalReplyFilter(text, { change = true } = {}) { return change ? String(text ?? '') : stripConfirmHint(text); }
 // known (opcional, chatCore): lo conocido del pedido para el filtro final ({ products, customers } -> maskReplyPeople; Admin: nameRefs + names ->
@@ -3357,10 +3444,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     // (revisión #998) Admin: el historial, el resumen y el mensaje actual van al modelo sin el nombre tras «don/doña/señora» (isBrandDon).
     // Si solo un «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
     let histToModel = parsed.history, resumenToModel = resumenIn || null, textToModel = parsed.text;
-    if (knownR) {
+    // (fix/asist-tapar-personas-nuevas) también la persona NUEVA (maskCuedPeople): Admin y empleado (el empleado solo esta regla, sin #998).
+    {
       const all = [...parsed.history, { content: resumenToModel || '' }, { content: textToModel || '' }];
-      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, k);
-        return { out, changed: out.some((m, i) => m.content !== all[i].content && HISTORY_DON_CUE.test(all[i].content)) }; };
+      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, knownR ? k : { ...k, cuedOnly: true });
+        return { out, changed: out.some((m, i) => m.content !== all[i].content) }; };
       let r = maskAll();
       if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
       histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;

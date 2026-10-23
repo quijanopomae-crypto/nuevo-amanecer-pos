@@ -96,7 +96,7 @@ test('regla compartida maskCuedPeople: personas tapadas, marcas/números/unidade
     'registra a rosa quispe como cliente', 'agrega cliente juan pérez, teléfono [teléfono oculto]', 'la vecina Rosa Quispe paga el viernes'])
     assert.doesNotMatch(A.maskCuedPeople(t, K), NAMES, t + ' -> ' + A.maskCuedPeople(t, K));
   for (const t of [...KEEP, 'arroz costeño', 'fideo don vittorio', 'leche gloria', 'a granel', 'a S/ 3.50', 'a 2 kg', 'registra un cliente nuevo', 'cliente #C-0001 debe 20',
-    'pasa a Inventario', 'mi proveedor del arroz es distribuidora san juan', 'el arroz costeño cuesta 4.50'])
+    'pasa a Inventario', 'mi proveedor del arroz es distribuidora san juan', 'La compraste a S/ 7.77 a Distribuidora Secreta SAC', 'le compré a Alicorp 2 cajas', 'el arroz costeño cuesta 4.50'])
     assert.equal(A.maskCuedPeople(t, K), t, t);
 });
 test('lecciones (sanitizeLesson): «Rosa Quispe me debe 2 kg» no guarda el nombre', () => {
