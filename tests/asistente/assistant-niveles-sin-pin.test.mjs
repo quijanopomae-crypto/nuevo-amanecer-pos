@@ -33,7 +33,7 @@ class El {
   get text() { return [this.textContent, this._html, ...this.children.map((c) => c.text)].join(' '); }
 }
 
-function mountRow({ cur = 'off', askPin = true } = {}) {
+function mountRow({ cur = 'off', askPin = true, reply = { ok: true, logged: true } } = {}) {
   const calls = { post: [], askPin: [], prompt: 0 };
   const box = new El('div', 'na-asst-acc'); const list = box.appendChild(new El('div', 'na-asst-acc-l'));
   const root = {
@@ -41,7 +41,7 @@ function mountRow({ cur = 'off', askPin = true } = {}) {
     prompt: () => { calls.prompt++; return '1234'; },
     NA_ROLES: askPin ? { askPin: (title, detail, verify) => { calls.askPin.push([title, detail]); return verify('1234').then((r) => !!(r && r.ok)); } } : undefined,
   };
-  const post = async (path, body, headers) => { calls.post.push({ path, body, headers }); return path === '/auth/owner-approval' ? { approval_id: 'APR-1' } : { ok: true, logged: true }; };
+  const post = async (path, body, headers) => { calls.post.push({ path, body, headers }); return path === '/auth/owner-approval' ? { approval_id: 'APR-1' } : reply; };
   const C = { esc: (s) => String(s) };
   const el = (tag, cls, html) => { const e = new El(tag, cls); if (html != null) e.innerHTML = html; return e; };
   const paintAccess = new Function('LEVELS_UNUSED', 'C', 'el', 'post', 'root', 'creds', LEVELS_SRC + PAINT_SRC + '\nreturn paintAccess;')(null, C, el, post, root, () => ({ endpoint: 'https://w.test', token: 't' }));
@@ -80,6 +80,28 @@ test('celular: «Cancelar» deja el nivel como estaba y no manda nada', async ()
   pick('off'); row.querySelector('[data-act=cancel]').onclick(); await tick();
   assert.equal(calls.post.length, 0); assert.equal(radios.consultas.checked, true); assert.equal(row.dataset.cur, 'consultas');
   assert.equal(st.textContent, 'Sin cambios.'); assert.equal(row.querySelector('.na-asst-acc-c'), null);
+});
+
+// Empleado en nivel 3 («completo», puesto desde el chat): el celular no tiene ese botón, así que ninguna opción sale marcada.
+// Si el Admin elige otra y cancela (o falla el guardado), no debe quedar marcada una opción que NO es la guardada.
+test('celular: empleado en nivel 3 — «Cancelar» o un error no dejan marcada otra opción', async () => {
+  const a = mountRow({ cur: 'completo' });
+  a.pick('consultas'); a.row.querySelector('[data-act=cancel]').onclick(); await tick();
+  assert.equal(a.calls.post.length, 0); assert.equal(a.row.dataset.cur, 'completo');
+  assert.deepEqual(Object.values(a.radios).map((r) => r.checked), [false, false, false], 'ninguna marcada: sigue en nivel 3');
+  assert.equal(a.st.textContent, 'Sin cambios.');
+  const b = mountRow({ cur: 'completo', reply: { error: 'admin_only', status: 403 } });
+  b.pick('off'); await b.row.querySelector('[data-act=apply]').onclick();
+  assert.equal(b.row.dataset.cur, 'completo'); assert.equal(b.st.textContent, 'Solo el Admin puede cambiar esto.');
+  assert.deepEqual(Object.values(b.radios).map((r) => r.checked), [false, false, false]);
+  assert.equal(b.row.querySelector('.na-asst-acc-c'), null);
+});
+
+test('celular: si el servidor rechaza, vuelve al nivel anterior y lo dice', async () => {
+  const { row, st, radios, pick } = mountRow({ cur: 'consultas', reply: { error: 'not_employee_device', status: 409 } });
+  pick('off'); await row.querySelector('[data-act=apply]').onclick();
+  assert.equal(row.dataset.cur, 'consultas'); assert.equal(radios.consultas.checked, true);
+  assert.equal(st.textContent, 'Ese aparato ya no es de empleado.');
 });
 
 test('celular: el texto de la pantalla ya no habla de PIN', () => {

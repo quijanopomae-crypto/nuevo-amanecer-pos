@@ -1420,10 +1420,11 @@
     l.onchange = function (e) {
       var inp = e.target; if (!inp || inp.type !== 'radio') return;
       var row = inp.closest('.na-asst-acc-r'), st = row.querySelector('.st'), prev = row.dataset.cur, lvl = inp.value;
+      // Nivel 3 («completo», puesto desde el chat) no tiene botón aquí: al revertir no se deja marcada una opción que no es la guardada.
       var old = row.querySelector('.na-asst-acc-c'); if (old) old.remove();
       st.textContent = '';
       if (lvl === prev) return;
-      function revert(msg) { var r = row.querySelector('input[value="' + prev + '"]'); if (r) r.checked = true; var c0 = row.querySelector('.na-asst-acc-c'); if (c0) c0.remove(); st.textContent = msg || ''; }
+      function revert(msg) { var r = row.querySelector('input[value="' + prev + '"]'); if (r) r.checked = true; else inp.checked = false; var c0 = row.querySelector('.na-asst-acc-c'); if (c0) c0.remove(); st.textContent = msg || ''; }
       var name = LEVELS.filter(function (L) { return L[0] === lvl; })[0], c = el('div', 'na-asst-acc-c na-asst-prov-c');
       c.setAttribute('role', 'group'); c.setAttribute('aria-label', 'Aplicar nivel del asistente');
       c.appendChild(el('p', null, 'Asistente: <strong>' + C.esc(name ? name[1] : lvl) + '</strong>. Aplica desde la próxima pregunta en ese aparato.'));
