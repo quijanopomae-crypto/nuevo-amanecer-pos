@@ -2556,17 +2556,20 @@ const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'l
 const NAME_WORD_RE = /^[\p{L}][\p{L}'’-]*/u;
 // (auditoría 500, UNI-058 / INV-041) «don/doña» de una MARCA no es una persona: «FIDEO DON VITTORIO», «fideo don vittorio» quedan igual.
 // Misma regla que sanitizeLesson (#988): palabra de producto justo antes en la línea, o «don X» dentro del nombre de un producto conocido en
-// este pedido (known.products); además el estilo de catálogo en MAYÚSCULAS («DON VITTORIO SPAGHETTI 500GR X 20»). Un cliente de la lista
+// este pedido (known.products); además MAYÚSCULAS de catálogo CON medida («DON VITTORIO SPAGHETTI 500GR X 20»; las mayúsculas solas no bastan). Un cliente de la lista
 // (known.customers) se tapa SIEMPRE (también sus apellidos en minúscula); «señora/sr./srta.» siempre es persona. known === 'strict': como antes.
 const REPLY_BRAND_CUE = /^(?:don|dona)$/;
 const REPLY_PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada|marca|producto)\s+$/i;
 const REPLY_CATALOG_TOKEN = /(?<![\p{L}\d])\d+(?:[.,]\d+)?\s*(?:G|GR|GRS|KG|ML|L|LT|LTS|CC|OZ|UND|UNID|UN|BOT|PQT|SOB)(?![\p{L}\d])|(?<![\p{L}\d])X\s*\d/u;
+// (revisión #998) tras «don/doña» + nombre, un verbo de deuda/pago (con o sin tilde, también «le fié») es siempre una persona: se tapa.
+const REPLY_DEBT_VERB = /^(?:deb(?:e|en|ia|ian|era|eria)|adeud\w*|pag(?:o|aba|aron|ara|ue)|abon(?:o|aba|aron|ara|e)|fi(?:o|e|aba|aron|amos|ado|ada))$/;
 const replyWords = (x) => LESSON_FOLD(x).replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' ').filter(Boolean);
 const productNameOf = (p) => (typeof p === 'string' ? p : p && p.nombre) || '';
 // palabras de un cliente que bastan para reconocerlo: el nombre completo o sus dos primeras (palabras de 3+ letras), como sanitizeLesson
 const clientKeys = (customers) => (Array.isArray(customers) ? customers : []).map((c) => replyWords(productNameOf(c)).filter((w) => w.length >= 3)).filter((w) => w.length)
   .flatMap((w) => (w.length > 2 ? [w, w.slice(0, 2)] : [w]));
 const startsWithWords = (ws, key) => key.length && key.every((k, i) => ws[i] === k);
+const debtAfter = (rest) => { const ws = replyWords(rest); return REPLY_DEBT_VERB.test(ws[0] || '') || (/^(?:le|les|me|nos|te)$/.test(ws[0] || '') && REPLY_DEBT_VERB.test(ws[1] || '')); };
 const isCaps = (w) => /\p{Lu}/u.test(w) && w === w.toUpperCase();
 export function maskReplyPeople(value, known = null) {
   const s = String(value ?? '');
@@ -2580,19 +2583,19 @@ export function maskReplyPeople(value, known = null) {
     const after = m.index + m[0].length, w1 = NAME_WORD_RE.exec(out.slice(after));
     if (!w1 || NAME_NOT.has(w1[0].toLowerCase())) continue;
     let end = after + w1[0].length, k = 0, nx;
-    while (k < 3 && (nx = /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u.exec(out.slice(end))) && !NAME_NOT.has(nx[1].toLowerCase())) { end += nx[0].length; k++; }
+    while (k < 3 && (nx = /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u.exec(out.slice(end))) && !NAME_NOT.has(nx[1].toLowerCase()) && !REPLY_DEBT_VERB.test(LESSON_FOLD(nx[1]))) { end += nx[0].length; k++; }
     if (!strict) {
       const nl = out.lastIndexOf('\n', m.index) + 1, eol = out.indexOf('\n', after), lineEnd = eol < 0 ? out.length : eol;
       const tailWs = replyWords(out.slice(after, lineEnd)), client = keys.filter((key) => startsWithWords(tailWs, key)).reduce((a, key) => Math.max(a, key.length), 0);
       if (client) { // cliente de la lista: tapado siempre, con todas sus palabras (también en minúscula)
         let e2 = after, n = 0, wm; while (n < client && (wm = /^[^\p{L}\d\n]*([\p{L}\d][\p{L}\d'’-]*)/u.exec(out.slice(e2)))) { e2 += wm[0].length; n++; }
         end = Math.max(end, e2);
-      } else if (REPLY_BRAND_CUE.test(LESSON_FOLD(m[1]))) {
+      } else if (REPLY_BRAND_CUE.test(LESSON_FOLD(m[1])) && !debtAfter(out.slice(end, lineEnd))) {
         const first = replyWords(w1[0])[0] || '', key = ' ' + LESSON_FOLD(m[1]) + ' ' + first + ' ';
-        const before = out.slice(nl, m.index), prev = /([\p{L}\d]+)[^\p{L}\d]*$/u.exec(before);
+        const before = out.slice(nl, m.index);
         const brand = REPLY_PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before)) // «fideo don …», «aceite doña …» (sanitizeLesson)
           || (first.length >= 3 && prods.some((p) => p.includes(key))) // «don vittorio» en un producto conocido del pedido
-          || (isCaps(m[1]) && isCaps(w1[0]) && ((prev && /^\p{L}{2,}$/u.test(prev[1]) && isCaps(prev[1])) || REPLY_CATALOG_TOKEN.test(out.slice(end, lineEnd)))); // catálogo en MAYÚSCULAS
+          || (isCaps(m[1]) && isCaps(w1[0]) && REPLY_CATALOG_TOKEN.test(out.slice(end, lineEnd))); // MAYÚSCULAS de catálogo, solo con medida (KG, GR, X 20…)
         if (brand) { HONORIFIC_RE.lastIndex = end; continue; }
       }
     }
