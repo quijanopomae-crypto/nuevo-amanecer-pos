@@ -89,6 +89,23 @@ test('empleado: al menos igual de estricto (la persona nueva tampoco llega al mo
     assert.doesNotMatch(r.bodies[0], NAMES, 'stream=' + stream);
   }
 });
+test('empleado (pedido de alfa): «le fié a Rosa Quispe» llega al modelo como «[nombre oculto]», en partes y entero; también en su historial firmado', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const r = await chat('le fié a Rosa Quispe', { role: EMP, stream });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ': ' + r.raw.slice(0, 200));
+    assert.doesNotMatch(r.bodies[0], /Rosa Quispe|Rosa|Quispe/, 'stream=' + stream);
+    assert.match(r.lastUser, /le fié a \[nombre oculto\]/, 'stream=' + stream + ': ' + r.lastUser);
+    // historial del empleado: turno firmado por el servidor con el nombre crudo -> la copia del modelo va tapada
+    const iat = NOW - 1000, u = 'le fié a Rosa Quispe 2 kg de arroz', a = 'Anotado.';
+    const sig = await A.signTurnPair(SECRET, 'empleado', 'session:personas-nuevas', 0, iat, u, a);
+    const h = await chat('¿y qué más?', { role: EMP, stream, history: [{ role: 'user', content: u, sig, n: 0, iat }, { role: 'assistant', content: a, sig, n: 0, iat }] });
+    assert.equal(h.bodies.length, 1, 'stream=' + stream + ': ' + h.raw.slice(0, 200));
+    const msgs = JSON.parse(h.bodies[0]).messages.map((m) => String(m.content));
+    assert.ok(msgs.some((m) => /le fié a \[nombre oculto\] 2 kg de arroz/.test(m)), 'stream=' + stream + ': el turno firmado vuelve al modelo, tapado: ' + msgs.join(' | ').slice(0, 400));
+    assert.doesNotMatch(h.bodies[0], /Rosa|Quispe/, 'stream=' + stream);
+  }
+});
 test('regla compartida maskCuedPeople: personas tapadas, marcas/números/unidades quedan', () => {
   assert.equal(typeof A.maskCuedPeople, 'function');
   const K = DATA.products;
@@ -124,4 +141,7 @@ test('lecciones, memoria FIRMADA (invoice_memory.taught) sin el nombre', { todo:
   const body = await r.json(), mem = await readInvoiceMemory(body.invoice_memory, SECRET, { principalId: 'session:personas-nuevas', posRole: 'owner' }, NOW);
   assert.ok(mem && mem.taught.length === 1, JSON.stringify(mem && mem.taught));
   assert.doesNotMatch(mem.taught[0], NAMES, mem.taught[0]);
+});
+test('limpieza (pedido de alfa): HISTORY_DON_CUE ya no existe (maskHistoryPeople tapa siempre con la regla compartida)', () => {
+  assert.equal('HISTORY_DON_CUE' in A, false);
 });
