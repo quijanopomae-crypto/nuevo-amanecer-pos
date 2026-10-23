@@ -134,3 +134,70 @@ test('send(): el atajo va ANTES de la red, de maskCustomers y del historial', ()
 });
 
 test.todo('Admin: «Nuevo cliente» se abre sin pedir PIN (pendiente #993)');
+
+// ---------- Revisión #1015 (BLOCK): el atajo solo toma «<verbo> cliente <nombre>» al INICIO; lo demás va al asistente (tapado) ----------
+const NO_ALTA = (x) => [
+  `crea el estado de cuenta del cliente ${x}`,
+  `dime cuánto debe el cliente nuevo ${x}`,
+  `registra el pago del cliente ${x}`,
+  `agrega 2 arroz al cliente ${x}`,
+  `registra que el cliente ${x} pagó 50`
+];
+
+test('revisión #1015: órdenes que mencionan «cliente» no son alta; van al asistente con el nombre tapado', () => {
+  for (const x of ['Rosa Quispe', 'Juan Pérez', 'Ana Torres']) for (const t of NO_ALTA(x)) {
+    assert.equal(C.customerIntent(t), null, t);
+    for (const owner of [true, false]) {
+      const p = phone({ owner });
+      assert.equal(p.ctx.customerShortcut(t), false, t);
+      assert.equal(p.msgs.length, 0, t); assert.equal(p.opened.length, 0, t); assert.equal(p.closed.length, 0, t);
+      assert.equal(p.ctx.inputEl.value, 'x', 'no borra lo escrito: ' + t);
+    }
+  }
+  // camino normal: maskCustomers tapa el nombre del cliente que el aparato conoce antes de cualquier envío
+  for (const x of ['Rosa Quispe', 'Juan Pérez']) for (const t of NO_ALTA(x)) {
+    const out = C.maskCustomers(t, CLIENTES, [], []).text;
+    assert.doesNotMatch(out, /rosa|quispe|juan|p[eé]rez/i, t + ' -> ' + out);
+  }
+});
+
+test('revisión #1015: las altas válidas siguen funcionando', () => {
+  const ok = [
+    ['agrega cliente Rosa Quispe 987654321', P('Rosa Quispe', '987654321')],
+    ['nuevo cliente Rosa Quispe', P('Rosa Quispe')],
+    ['registra al cliente Juan Pérez DNI 12345678', P('Juan Pérez', '', '12345678')],
+    ['agrega un cliente nuevo Rosa Quispe', P('Rosa Quispe')],
+    ['Añade una clienta nueva: Ana Torres', P('Ana Torres')],
+    ['da de alta al cliente Ana Torres', P('Ana Torres')]
+  ];
+  for (const [t, want] of ok) assert.deepEqual({ ...C.customerIntent(t) }, want, t);
+  const p = phone({ owner: false });
+  assert.equal(p.ctx.customerShortcut('nuevo cliente Ana Torres'), true);
+  assert.equal(p.els.cNombre.value, 'Ana Torres');
+});
+
+test('revisión #1015: el nombre se corta en verbos, conectores y números que no son celular ni DNI', () => {
+  const ok = [
+    ['nuevo cliente Ana Torres pagó 50', P('Ana Torres')],
+    ['agrega cliente Ana Torres que debe 20 soles', P('Ana Torres')],
+    ['agrega cliente Ana Torres debe 20', P('Ana Torres')],
+    ['agrega cliente Ana Torres paga los viernes', P('Ana Torres')],
+    ['agrega cliente Ana Torres por 30 soles', P('Ana Torres')],
+    ['crea cliente Ana Torres con celular 912345678', P('Ana Torres', '912345678')],
+    ['agrega cliente Ana Torres compró arroz', P('Ana Torres')],
+    ['nuevo cliente Ana Torres llevó 2 panes', P('Ana Torres')],
+    ['agrega cliente Ana Torres a la cuenta', P('Ana Torres')],
+    ['agrega cliente Ana Torres al fiado', P('Ana Torres')],
+    ['agrega cliente Ana Torres venta de 20', P('Ana Torres')],
+    ['agrega cliente Ana Torres 20 soles', P('Ana Torres')],
+    ['crea cliente Pedro de la Cruz 955 444 333', P('Pedro de la Cruz', '955444333')]
+  ];
+  for (const [t, want] of ok) assert.deepEqual({ ...C.customerIntent(t) }, want, t);
+});
+
+test('revisión #1015: si coincide solo por DNI, no dice «con ese nombre»', () => {
+  const byDni = [{ id: 30, nombre: 'Luis Rojas', dni: '11112222' }, { id: 31, nombre: 'Luis R.', dni: '11112222' }];
+  const p = P('Otro Nombre', '', '11112222');
+  assert.match(C.customerExistsReply(byDni, p), /^Ya existen 2 clientes con ese DNI:/);
+  assert.match(C.customerExistsReply(CLIENTES.slice(0, 2), P('Rosa Quispe')), /^Ya existen 2 clientes con ese nombre:/);
+});
