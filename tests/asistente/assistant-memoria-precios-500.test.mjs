@@ -90,6 +90,42 @@ test('2) «Don Vittorio» es marca: la lección la conserva (P-027); los nombres
     assert.ok(o.includes(code), o); assert.doesNotMatch(o, /juana|p[eé]rez|vittorio|ramos/i, o);
   }
 });
+test('2) «don/doña + nombre» con verbo de deuda o pago se tapa siempre (le gana a la palabra de producto y al producto conocido)', () => {
+  const KNOWN = [{ nombre: 'Café Don Juan 250g' }, { nombre: 'Galletas Doña Pepa x 6' }];
+  for (const [t, want] of [
+    ['leche don pedro debe 20', 'leche don debe 20'],
+    ['le di arroz don Pedro, debe 5 soles', 'le di arroz don , debe 5 soles'],
+    ['el producto don Pedro debe', 'el producto don debe'],
+    ['la marca don Pedro me debe 10', 'la marca don me debe 10'],
+    ['DON JUAN DEBE 2 KG', 'DON DEBE 2 KG'],
+    ['don juan debe 2 kg', 'don debe 2 kg'],
+    ['a don juan le fié 3 kg', 'a don le fié 3 kg'],
+    ['DEBE DON PEDRO', 'DEBE DON'],
+    ['DON PEDRO 2 KG', 'DON 2 KG'],
+    ['DOÑA ROSA PAGÓ 2 KG', 'DOÑA PAGÓ 2 KG'],
+    ['aceite doña Rosa pagó ayer', 'aceite doña pagó ayer'],
+    ['doña pepa debe 20', 'doña debe 20'],
+    ['café don juan, hoy me abonó 15', 'café don , hoy me abonó 15'],
+    ['arroz don Lucho fiado a 2 semanas', 'arroz don fiado a 2 semanas'],
+    ['azucar don Beto le presto 50', 'azucar don le presto 50'],
+    ['le fié arroz don Pedro', 'le fié arroz don'],
+  ]) {
+    const o = A.sanitizeLesson(t, [], KNOWN);
+    assert.equal(o, want, t);
+    assert.doesNotMatch(o, /pedro|juan|rosa|pepa|lucho|beto/i, t);
+  }
+  // marcas sin verbo de deuda: se quedan
+  for (const t of ['fideo don vittorio cuesta 2.20', 'trae 6 cajas de galletas doña pepa', 'el café don juan sube a 9.50',
+    'pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50'])
+    assert.equal(A.sanitizeLesson(t, [], KNOWN), t, t);
+  assert.equal(A.sanitizeLesson('doña pepa viene en caja de 6', [], KNOWN), 'doña pepa viene en caja de 6', 'producto conocido sin verbo');
+  // «producto» y «marca» ya no destapan solos; las mayúsculas solas tampoco
+  assert.equal(A.sanitizeLesson('el producto don Pedro llegó', [], []), 'el producto don llegó');
+  assert.equal(A.sanitizeLesson('MARCA DON PEDRO', [], []), 'MARCA DON');
+  // clientes de la lista: siempre primero
+  const o = A.sanitizeLesson('fideo don vittorio ramos debe 30', CUST, KNOWN);
+  assert.ok(o.includes('#c9'), o); assert.doesNotMatch(o, /vittorio|ramos/i, o);
+});
 test('2) chat del Admin: P-027 se guarda con la marca', async () => {
   const p027 = 'pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50';
   const r = await chat(p027);
