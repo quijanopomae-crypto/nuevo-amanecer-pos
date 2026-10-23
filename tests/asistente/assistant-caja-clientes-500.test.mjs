@@ -61,7 +61,7 @@ test('CAJ-008: «cuánto hice ayer en la caja? el cierre» con caja_abierta -> r
   assert.match(cs[0].result.titulo, new RegExp(AYER));
   assert.doesNotMatch(r.final.reply, /caja todav[ií]a est[aá] abierta/i);
   assert.match(r.final.reply, /S\/ 50\.00/, 'ventas de ayer'); assert.match(r.final.reply, /pantalla Caja/, 'dice dónde ver el conteo del cierre');
-  assert.match(system(bodies[0]), /AYER: cierre o ventas de ayer/, 'regla de ayer en el primer envío (solo con «ayer»)');
+  assert.match(system(bodies[0]), /CAJA O CIERRE DE AYER: consultar resumen_dia/, 'regla de ayer en el primer envío (solo con «ayer»)');
 });
 
 test('CAJ-021: «compara la caja de hoy con la de ayer» (caja_abierta dos veces) -> resumen_dia de hoy con el día anterior', async (t) => {
@@ -78,16 +78,16 @@ test('sin «ayer», la caja abierta sigue igual y el primer envío no lleva la r
   quiet(t); const bodies = [];
   const r = await chat('como va la caja', { fetch: seq([first(call(0, 'c1', { tipo: 'caja_abierta' })), SECOND], bodies) });
   assert.equal(consulta(r)[0].query.tipo, 'caja_abierta'); assert.match(r.final.reply, /caja todav[ií]a est[aá] abierta/);
-  assert.doesNotMatch(system(bodies[0]), /AYER: /);
+  assert.doesNotMatch(system(bodies[0]), /CIERRE DE AYER/);
 });
 
 // ---------- Arreglo 2: el texto contesta la pregunta ----------
 const FOCUS = [
-  ['CAJ-002', 'cuanto vendi hoy en efectivo y cuanto en yape', { tipo: 'ventas_periodo', periodo: 'hoy' }, 'ventas_periodo', [/Efectivo S\/ 136\.10/, /Yape S\/ 33\.00/]],
+  ['CAJ-002', 'cuanto vendi hoy en efectivo y cuanto en yape', { tipo: 'caja_abierta' }, 'caja_abierta', [/Efectivo S\/ 136\.10/, /Yape S\/ 33\.00/]],
   ['CAJ-012', 'cuanto se fue en gastos hoy', { tipo: 'ventas_periodo', periodo: 'hoy' }, 'caja_abierta', [/Gastos de hoy en la caja: S\/ 12\.00 en efectivo/]],
   ['CAJ-013', 'los cobros de fiado de hoy entraron a caja?', { tipo: 'caja_abierta' }, 'caja_abierta', [/S\/ 15\.00 en efectivo \(eso sí entra a la caja\)/, /S\/ 9\.00 por Yape, Plin o transferencia \(no entran como efectivo\)/]],
   ['CAJ-014', 'hubo devoluciones hoy? cuanto salio', { tipo: 'ventas_periodo', periodo: 'hoy' }, 'caja_abierta', [/No hubo devoluciones por anulación/]],
-  ['CAJ-020', 'cuantas ventas a credito hubo hoy', { tipo: 'ventas_periodo', periodo: 'hoy' }, 'ventas_periodo', [/Crédito S\/ 31\.00/, /no entra como efectivo/]],
+  ['CAJ-020', 'cuantas ventas a credito hubo hoy', { tipo: 'resumen_dia', periodo: 'hoy' }, 'resumen_dia', [/Crédito S\/ 31\.00/, /no entra como efectivo/]],
   ['CAJ-032', 'cuanto entro por yape y plin, separado porfa', { tipo: 'caja_abierta' }, 'caja_abierta', [/Yape S\/ 33\.00 · Plin S\/ 16\.80/]],
   ['CLI-014', 'quien me debe mas', { tipo: 'deudas_clientes' }, 'deudas_clientes', [/Quien más debe es cliente #3: S\/ 150\.00/]]
 ];
@@ -139,4 +139,13 @@ test('CLI-010: «lo máximo que le puedo fiar» -> dice claro que los límites d
   assert.match(t2.final.reply, /límites de crédito todavía no existen/); assert.doesNotMatch(t2.final.reply, /S\/ 500/, 'no inventa un límite');
   const t3 = await chat('quien me debe mas', { fetch: seq([first(call(0, 'c1', { tipo: 'deudas_clientes' })), SECOND], []) });
   assert.doesNotMatch(t3.final.reply, /límites de crédito/, 'una pregunta de deuda no lleva el aviso');
+});
+
+// ---------- Alcance: ventas_periodo (fechas y texto) sigue igual ----------
+test('alcance: ventas_periodo con métodos o «ayer» queda con su texto y su periodo de siempre', async (t) => {
+  quiet(t);
+  const a = await chat('cuanto vendi hoy en efectivo y cuanto en yape', { fetch: seq([first(call(0, 'c1', { tipo: 'ventas_periodo', periodo: 'hoy' })), SECOND], []) });
+  assert.equal(consulta(a)[0].query.tipo, 'ventas_periodo'); assert.match(a.final.reply, /^Ventas /); assert.doesNotMatch(a.final.reply, /Ventas por método/);
+  const b = await chat('cuanto vendi ayer', { fetch: seq([first(call(0, 'c1', { tipo: 'ventas_periodo', periodo: 'hoy' })), SECOND], []) });
+  assert.equal(consulta(b)[0].query.tipo, 'ventas_periodo'); assert.match(consulta(b)[0].result.titulo, new RegExp(HOY), 'la fecha de ventas no se corrige aquí');
 });

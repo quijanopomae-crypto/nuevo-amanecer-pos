@@ -1,7 +1,8 @@
 // Auditoría 500 (caja y clientes, 23-10): respuestas que contestan LO QUE SE PREGUNTÓ cuando el dato ya está en la consulta.
 // Sin lecturas propias ni escrituras: solo mira el texto de la persona, la consulta que eligió el modelo y el resultado ya leído.
-// - «ayer» (cierre / ventas de ayer, comparar hoy con ayer): resumen_dia del día anterior en Lima, nunca la caja abierta de HOY.
-// - gastos / devoluciones / cobros / métodos de pago / quién debe más: una frase con ESE monto (no el total genérico).
+// - «ayer» con la caja (cierre de ayer, comparar la caja de hoy con ayer): resumen_dia del día anterior en Lima, nunca la caja abierta de HOY.
+// - gastos / devoluciones / cobros / métodos de pago (caja abierta o resumen del día) / quién debe más: una frase con ESE monto.
+//   Alcance: solo caja_abierta, resumen_dia y deudas_clientes; precios, márgenes, stock y fechas de ventas_periodo no se tocan.
 // - límite de crédito: no existe todavía; se dice claro (no se responde con la deuda como si fuera el límite).
 
 const fold = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -28,8 +29,7 @@ export function retargetCajaQuery(query, text) {
   const tipo = query.tipo, per = String(query.periodo || '').toLowerCase(), y = yesterdayAsk(text);
   // La caja abierta es SOLO la de hoy: «ayer» / «compara con ayer» -> resumen del día (el de hoy ya trae el día anterior al lado).
   if (y && tipo === 'caja_abierta') return { tipo: 'resumen_dia', periodo: y };
-  // «cuánto vendí ayer» con ventas de HOY: el día que se preguntó.
-  if (y && y !== 'hoy' && (tipo === 'ventas_periodo' || tipo === 'resumen_dia') && (!per || per === 'hoy') && !query.fecha && !query.desde) return { ...query, periodo: y };
+  // (alcance) ventas_periodo con fechas no se toca aquí: eso es de la rama de ventas.
   // Gastos / devoluciones / ingresos / egresos de HOY pedidos con ventas o resumen: la caja abierta (ahí están).
   const ft = fold(text), cajaAsk = CAJA_ONLY_RE.test(ft) || (tipo === 'ventas_periodo' && COBROS_RE.test(ft)); // el resumen del día sí trae cobros
   if (!y && cajaAsk && (tipo === 'ventas_periodo' || tipo === 'resumen_dia') && (!per || per === 'hoy') && !query.fecha && !query.desde) return { tipo: 'caja_abierta' };
@@ -43,12 +43,12 @@ export function retargetCall(c, text) {
   return q ? { ...c, arguments: JSON.stringify(q) } : c;
 }
 // Instrucción breve SOLO cuando la pregunta la necesita (el primer envío del Admin tiene tope de tamaño).
-export const AYER_RULE = 'AYER: cierre o ventas de ayer -> consultar resumen_dia periodo «ayer»; comparar hoy con ayer -> resumen_dia periodo «hoy» (trae el día anterior). caja_abierta es solo la caja de hoy.';
+export const AYER_RULE = 'CAJA O CIERRE DE AYER: consultar resumen_dia periodo «ayer»; comparar la caja de hoy con ayer -> resumen_dia periodo «hoy» (trae el día anterior). caja_abierta es solo la caja de hoy.';
 export const CAJA_DETALLE_RULE = 'GASTOS, DEVOLUCIONES, COBROS, INGRESOS O EGRESOS DE HOY: consultar caja_abierta (los trae); responde ese monto, y si es 0 di que no hubo.';
 const CAJA_DETALLE_ASK = /\bgast|devol|anulaci|\bcobr|\bingres(?:o|aron)|\begres/;
 export function cajaPromptLines(text) {
   const t = fold(text), out = [];
-  if (yesterdayAsk(text)) out.push(AYER_RULE);
+  if (yesterdayAsk(text) && /caja|cierre|cerr/.test(t)) out.push(AYER_RULE);
   else if (CAJA_DETALLE_ASK.test(t)) out.push(CAJA_DETALLE_RULE);
   return out;
 }
@@ -101,7 +101,8 @@ export function focusedText(query, r, text) {
   const t = fold(text), out = [];
   if (query.tipo === 'caja_abierta') { const c = cajaFocus(t, r.resumen); if (c) out.push(...c); }
   if (query.tipo === 'resumen_dia' && COBROS_RE.test(t) && r.resumen && r.resumen.actual && r.resumen.actual.cobros_soles != null) out.push('Cobros de créditos: ' + soles(r.resumen.actual.cobros_soles) + '.');
-  if (!COBROS_RE.test(t)) { const m = methodsFocus(t, query, r); if (m) out.push(m); }
+  // (alcance) métodos de pago solo sobre la caja abierta o el resumen del día; ventas_periodo queda con su texto de siempre.
+  if (!COBROS_RE.test(t) && (query.tipo === 'caja_abierta' || query.tipo === 'resumen_dia')) { const m = methodsFocus(t, query, r); if (m) out.push(m); }
   if (query.tipo === 'deudas_clientes' && DEBE_MAS_RE.test(t) && Array.isArray(r.filas) && r.filas.length) out.push('Quien más debe es ' + r.filas[0][0] + ': ' + soles(r.filas[0][1]) + '.');
   if (query.tipo === 'resumen_dia' && query.periodo !== 'hoy' && yesterdayAsk(text) && /caja|cierre|cerr/.test(t)) out.push('El conteo y la diferencia del cierre de caja no los tengo aquí; se ven en la pantalla Caja.');
   return out.length ? out.join(' ') + ' ' + r.texto : null;
