@@ -75,12 +75,15 @@ const WORD_ALIASES = { hoy: 'hoy', oy: 'hoy', ayer: 'ayer', 'esta semana': 'esta
   // (auditoría VEN-028) «mañana» ya no se pierde (antes: null → hoy en silencio). NO está en DATE_WORDS (el esquema del modelo no cambia):
   // la consulta ve que es una fecha futura y lo avisa.
   manana: 'manana', 'pasado manana': 'pasado_manana' };
+const FUTURE_WORDS = Object.freeze(['manana', 'pasado_manana']);
 export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').replace(/[¿?¡!.,]/g, '').trim(); return WORD_ALIASES[k] || null; }
 // Lunes = inicio de la semana (Lima). 0 = lunes … 6 = domingo.
 const weekdayIdx = (d) => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
 // { desde, hasta } en fechas de Lima para una palabra de fecha, o null si no es una. «esta semana» = lunes a hoy; «este mes» = día 1 a hoy.
-export function dateWordRange(word, nowMs = Date.now()) {
-  const w = DATE_WORDS.includes(word) ? word : dateWord(word); if (!w) return null;
+// future: «mañana» / «pasado mañana» SOLO cuentan si se pide (consultas de ventas y resúmenes, que avisan que es futura). Sin future
+// (sugerencias de compra, ventas bajo costo, period()) no son palabra de fecha: queda la ventana de siempre (seguimiento PR #984).
+export function dateWordRange(word, nowMs = Date.now(), { future = false } = {}) {
+  const w = DATE_WORDS.includes(word) ? word : dateWord(word); if (!w || (!future && FUTURE_WORDS.includes(w))) return null;
   const today = limaToday(nowMs), mon = addDays(today, -weekdayIdx(today));
   if (w === 'hoy') return { desde: today, hasta: today };
   if (w === 'ayer') { const y = addDays(today, -1); return { desde: y, hasta: y }; }
@@ -104,13 +107,13 @@ export function limaCalendarLine(nowMs = Date.now()) {
     + ' Si corrigen la fecha («era antier»), llama consultar de nuevo con el periodo NUEVO; no repitas el de antes.';
 }
 // Fecha de un campo: AAAA-MM-DD tal cual, o una palabra de fecha (lado: 'desde' o 'hasta' de su rango). Si no, null.
-function dateArg(v, side, nowMs) { if (DATE.test(v || '')) return v; const r = dateWordRange(v, nowMs); return r ? r[side] : null; }
+function dateArg(v, side, nowMs, future = false) { if (DATE.test(v || '')) return v; const r = dateWordRange(v, nowMs, { future }); return r ? r[side] : null; }
 // Período en fechas de Lima. Por defecto: hoy. «periodo» (palabra de fecha) manda sobre desde/hasta. Máximo 92 días.
 // «fecha» (AAAA-MM-DD): un solo día exacto de Lima; va después de «periodo» y antes de desde/hasta.
 // rawRange: el rango pedido ANTES del tope de 92 días (periodCheck lo usa para avisar del recorte y de fechas futuras).
-function rawRange(args, nowMs) {
-  const today = limaToday(nowMs), f = DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null, w = dateWordRange(args?.periodo, nowMs) || f;
-  let hasta = w ? w.hasta : dateArg(args?.hasta, 'hasta', nowMs) || today, desde = w ? w.desde : dateArg(args?.desde, 'desde', nowMs) || (dateWordRange(args?.hasta, nowMs)?.desde ?? hasta);
+function rawRange(args, nowMs, future = false) {
+  const o = { future }, today = limaToday(nowMs), f = DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null, w = dateWordRange(args?.periodo, nowMs, o) || f;
+  let hasta = w ? w.hasta : dateArg(args?.hasta, 'hasta', nowMs, future) || today, desde = w ? w.desde : dateArg(args?.desde, 'desde', nowMs, future) || (dateWordRange(args?.hasta, nowMs, o)?.desde ?? hasta);
   if (desde > hasta) [desde, hasta] = [hasta, desde];
   return { desde, hasta };
 }
@@ -125,6 +128,7 @@ export function isRealDate(d) { if (!DATE.test(d || '')) return false; const t =
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 // «24 de octubre de 2026» (sin el año si se pide sin año).
 export function fechaLarga(d, conAnio = true) { const [y, m, dd] = d.split('-').map(Number); return dd + ' de ' + MESES[m - 1] + (conAnio ? ' de ' + y : ''); }
+const futureNote = (cual, today) => cual + ' (hoy es ' + fechaLarga(today) + ' en Lima): todavía no hay ventas.';
 function badDateText(d) {
   const [y, m, dd] = d.split('-').map(Number);
   if (m < 1 || m > 12 || dd < 1) return 'La fecha ' + d + ' no existe en el calendario. Dime otra fecha.';
@@ -136,14 +140,14 @@ function badDateText(d) {
 // - período entero en el futuro («mañana», 2026-10-24) → { aviso, fecha_futura: true } (antes «mañana» se volvía hoy en silencio)
 // - si no: { p, avisos, pedido } con p ya recortado: termina en el futuro → hasta hoy; más de 92 días → los 92 más recientes (con aviso).
 export function periodCheck(args, nowMs) {
-  const today = limaToday(nowMs), word = dateWordRange(args?.periodo, nowMs);
+  const today = limaToday(nowMs), word = dateWordRange(args?.periodo, nowMs, { future: true });
   const used = word ? [] : DATE.test(args?.fecha || '') ? [args.fecha] : [args?.desde, args?.hasta].filter((v) => DATE.test(v || ''));
   const bad = used.find((v) => !isRealDate(v));
   if (bad) return { fecha_invalida: true, aviso: badDateText(bad) };
-  const raw = rawRange(args, nowMs), avisos = [];
+  const raw = rawRange(args, nowMs, true), avisos = [];
   if (raw.desde > today) {
     const cual = raw.desde === raw.hasta ? 'El ' + fechaLarga(raw.desde) + ' es una fecha futura' : 'El período del ' + fechaLarga(raw.desde) + ' al ' + fechaLarga(raw.hasta) + ' es futuro';
-    return { fecha_futura: true, desde: raw.desde, hasta: raw.hasta, aviso: cual + ' (hoy es ' + fechaLarga(today) + ' en Lima): todavía no hay ventas.' };
+    return { fecha_futura: true, desde: raw.desde, hasta: raw.hasta, aviso: futureNote(cual, today) };
   }
   let hasta = raw.hasta;
   if (hasta > today) { avisos.push('El período pedido termina en una fecha futura (' + raw.hasta + '): conté hasta hoy (' + today + ').'); hasta = today; }
@@ -197,15 +201,20 @@ const mkPeriod = limaBounds;
 // Mes: el mes del día pedido; si es el mes en curso va hasta hoy y se compara con los MISMOS días del mes anterior (1 al N).
 export function summaryPeriods(tipo, args, nowMs) {
   // «periodo» (o una palabra en hasta/desde): el día de referencia es el ÚLTIMO de su rango en Lima («ayer», «mes_pasado» -> su último día).
-  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs) || (DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null)
-    || dateWordRange(args?.hasta, nowMs) || dateWordRange(args?.desde, nowMs);
+  const o = { future: true }, today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs, o) || (DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null)
+    || dateWordRange(args?.hasta, nowMs, o) || dateWordRange(args?.desde, nowMs, o);
   const raw = String(args?.hasta || args?.desde || '');
   let ref = w ? w.hasta : DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
+  // (seguimiento PR #984) fecha futura: el período sigue quedando en hoy (forma de siempre), pero va «futuro» con el aviso y summaryQuery
+  // contesta con él en vez del resumen de hoy. Día: después de hoy. Mes: un mes después del actual (un día futuro del mes en curso = este mes).
+  const futuro = (tipo === 'resumen_dia' ? ref > today : ref.slice(0, 7) > today.slice(0, 7)) && isRealDate(ref)
+    ? { desde: ref, aviso: tipo === 'resumen_dia' ? futureNote('El ' + fechaLarga(ref) + ' es una fecha futura', today)
+      : futureNote(MESES[Number(ref.slice(5, 7)) - 1].replace(/^./, (c) => c.toUpperCase()) + ' de ' + ref.slice(0, 4) + ' es un mes futuro', today) } : null;
   if (ref > today) ref = today;
-  if (tipo === 'resumen_dia') return { actual: mkPeriod(ref, ref), anterior: mkPeriod(addDays(ref, -1), addDays(ref, -1)), en_curso: ref === today };
+  if (tipo === 'resumen_dia') return { actual: mkPeriod(ref, ref), anterior: mkPeriod(addDays(ref, -1), addDays(ref, -1)), en_curso: ref === today, futuro };
   const ym = ref.slice(0, 7), end = monthEnd(ym), enCurso = today.slice(0, 7) === ym, hasta = enCurso ? today : end;
   const pym = prevMonth(ym), pEnd = monthEnd(pym), day = Number(hasta.slice(8, 10)), pHasta = enCurso ? (pym + '-' + pad2(Math.min(day, Number(pEnd.slice(8, 10))))) : pEnd;
-  return { actual: mkPeriod(ym + '-01', hasta), anterior: mkPeriod(pym + '-01', pHasta), en_curso: enCurso };
+  return { actual: mkPeriod(ym + '-01', hasta), anterior: mkPeriod(pym + '-01', pHasta), en_curso: enCurso, futuro };
 }
 // Productos ante el modelo: SOLO «producto #código» (un nombre puede llevar el de un cliente, p. ej. «Encargo Sra. …»). El nombre se pone
 // únicamente en la tabla de la pantalla del Admin (mismo criterio que «Ventas bajo costo», PR #930). Código raro: sin código.
@@ -574,7 +583,8 @@ export function purchasePlan(products, sold, dias, rules = SUGGEST_RULES) {
 // Compatibilidad: solo la lista de compras.
 export function purchaseSuggestions(products, sold, dias, rules = SUGGEST_RULES) { return purchasePlan(products, sold, dias, rules).sugerencias; }
 function suggestPeriod(args, nowMs) {
-  if (dateWordRange(args?.periodo, nowMs) || DATE.test(args?.desde || '') || DATE.test(args?.hasta || '') || dateWord(args?.desde) || dateWord(args?.hasta)) return period(args, nowMs); // fecha o palabra de fecha: la de period()
+  // (seguimiento PR #984) dateWordRange sin future: «para mañana» no es fecha aquí, queda la ventana de 30 días de siempre.
+  if (dateWordRange(args?.periodo, nowMs) || DATE.test(args?.desde || '') || DATE.test(args?.hasta || '') || dateWordRange(args?.desde, nowMs) || dateWordRange(args?.hasta, nowMs)) return period(args, nowMs); // fecha o palabra de fecha: la de period()
   const hasta = limaToday(nowMs); return period({ desde: addDays(hasta, -(SUGGEST_RULES.diasVentas - 1)), hasta }, nowMs);
 }
 // Devuelve { tipo, titulo, columnas, filas, texto, resumen } o { error }.
@@ -785,6 +795,7 @@ async function cajaAbierta(reader, base) {
 // SOLO totales, conteos y «producto #código» (sin nombres de producto ni datos de clientes). Nada aquí escribe en la base.
 async function summaryQuery(reader, tipo, args, nowMs, base) {
   const per = summaryPeriods(tipo, args, nowMs);
+  if (per.futuro) return { ...base, columnas: [], filas: [], texto: per.futuro.aviso, resumen: { desde: per.futuro.desde, fecha_futura: true, aviso: per.futuro.aviso } };
   if (typeof reader.periodSummary !== 'function') return { error: 'no_summary' };
   const [cur, prev] = await reader.periodSummary([per.actual, per.anterior]);
   const names = new Map((await reader.products()).map((x) => [String(x.id), x.nombre]));
