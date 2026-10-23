@@ -1,0 +1,163 @@
+{
+ "caso": "OCR-015",
+ "modelo": "gpt-6.1-sol (ohmyagent)",
+ "arnes": "rutas reales de la rama en Node + BD simulada; cliente del aparato en Chromium (Playwright)",
+ "chat": {
+  "OCR-015": {
+   "status": 200,
+   "ms": 5059,
+   "reply": "Admin, la segunda fila dice 3 UND y aclaraste que UND significa paquete: son **3 paquetes, no 48**. Mi cálculo anterior suponía que eran cajas.",
+   "proposals": [],
+   "dropped": [],
+   "invoice_memory": true
+  }
+ },
+ "aparato": {},
+ "log_servidor": [
+  {
+   "caso": "OCR-015",
+   "ruta": "/auth/assistant/chat",
+   "rol": "owner",
+   "sesion": "cadena-014",
+   "status": 200,
+   "ms": 5052,
+   "pedido": {
+    "history": [
+     {
+      "role": "user",
+      "content": "Lee esta factura de compra [Foto leída] factura o boleta de compra: 3 productos, 17 unidades, 3 sin producto en inventario, total S/ 322.40, comprobante F001-004530, fecha 2026-10-20.",
+      "firmado": true
+     },
+     {
+      "role": "assistant",
+      "content": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+      "firmado": true
+     },
+     {
+      "role": "user",
+      "content": "la segunda fila son 16x6x32g, cuantos paquetes son",
+      "firmado": true
+     },
+     {
+      "role": "assistant",
+      "content": "Admin, «16×6×32 g» parece indicar 16 paquetes de 6 piezas de 32 g por caja; si son 3 cajas, serían **48 paquetes**. ¿Las 3 unidades de esa fila son cajas?",
+      "firmado": true
+     }
+    ],
+    "invoice_memory": "[token 1798 chars]",
+    "text": "UND en esa boleta es paquete",
+    "context": "[contexto 994 chars]"
+   },
+   "respuesta": {
+    "ok": true,
+    "mode": "ohmyagent",
+    "role": "owner",
+    "server_now": 1792770966982,
+    "reply": "Admin, la segunda fila dice 3 UND y aclaraste que UND significa paquete: son **3 paquetes, no 48**. Mi cálculo anterior suponía que eran cajas.",
+    "cut": false,
+    "turns": [
+     {
+      "role": "user",
+      "content": "UND en esa boleta es paquete"
+     },
+     {
+      "role": "assistant",
+      "content": "Admin, la segunda fila dice 3 UND y aclaraste que UND significa paquete: son **3 paquetes, no 48**. Mi cálculo anterior suponía que eran cajas."
+     }
+    ],
+    "invoice_memory": "[token 2076 chars]",
+    "proposals": [],
+    "denied": [],
+    "dropped": [],
+    "left": {
+     "hoy": 147,
+     "fotosHoy": 29
+    },
+    "memoria": {
+     "max_turnos": 40,
+     "max_bytes": 48000,
+     "recortados": 0,
+     "resumen_necesario": false,
+     "resumen_usado": false
+    },
+    "payload_bytes": [
+     18541
+    ],
+    "timings": {
+     "ms_gates": 2,
+     "ms_model1": 5047,
+     "ms_db": 0,
+     "ms_total": 5051,
+     "provider": "ohmyagent",
+     "model": "gpt-6.1-sol",
+     "attempts": 1,
+     "fallback": false,
+     "db_stmts": 0
+    },
+    "usage": {
+     "prompt_tokens": 4372,
+     "completion_tokens": 98
+    }
+   },
+   "model_calls": [
+    {
+     "url": "https://ohhmyagent.com/v1/chat/completions",
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7429
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"p1\",\"nombre\":\"LECHE GLORIA EVAPORADA 395GR\",\"precio\":4.2,\"stock\":30,\"costo\":3.79},{\"id\":\"p2\",\"nombre\":\"LECHE GLORIA EVAPORADA 48 LATAS X 170GR\",\"precio\":110,\"stock\":2,\"costo\":98.5},{\"id\":\"p3\",\"nombre\":\"WAFER NIK 6 UND\",\"precio\":0.7,\"stock\":20,\"costo\":0.53},{\"id\":\"p4\",\"nombre\":\"GLOBOPOP\",\"precio\":0.3,\"stock\":60,\"costo\":0.19},{\"id\":\"p5\",\"nombre\":\"ENCENDEDOR CLIPPER\",\"precio\":2,\"stock\":20,\"costo\":1.1},{\"id\":\"p6\",\"nombre\":\"GALLETA CHOKO 6 X 32G\",\"precio\":1,\"stock\":18,\"costo\":0.3},{\"id\":\"p7\",\"nombre\":\"Arroz Costeño 1 kg\",\"precio\":4,\"stock\":40,\"costo\":3.4},{\"id\":\"p8\",\"nombre\":\"Azúcar Rubia 1 kg\",\"precio\":4,\"stock\":20,\"costo\":3.4},{\"id\":\"p9\",\"nombre\":\"Aceite Primor 1 L\",\"precio\":11.5,\"stock\":8,\"costo\":9.8},{\"id\":\"p10\",\"nombre\":\"Fideo Don Vittorio Spaghetti 500 g\",\"precio\":3.2,\"stock\":20,\"costo\":2.6},{\"id\":\"p11\",\"nombre\":\"Inca Kola 500 ml\",\"precio\":2.5,\"stock\":36,\"costo\":1.6},{\"id\":\"p12\",\"nombre\":\"Coca-Cola 500 ml\",\"precio\":2.5,\"stock\":48,\"costo\":1.75}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>Lee esta factura de compra [Foto leída] factura o boleta de compra: 3 productos, 17 unidades, 3 sin producto en inventario, total S/ 322.40, comprobante F001-004530, fecha 2026-10-20.</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>la segunda fila son 16x6x32g, cuantos paquetes son</dato_usuario>"
+      },
+      {
+       "role": "assistant",
+       "content": "Admin, «16×6×32 g» parece indicar 16 paquetes de 6 piezas de 32 g por caja; si son 3 cajas, serían **48 paquetes**. ¿Las 3 unidades de esa fila son cajas?"
+      },
+      {
+       "role": "user",
+       "content": "<boleta_recordada>\n{\"facturas\":[{\"proveedor\":\"DISTRIBUIDORA LOS ANDES S.A.C.\",\"documento\":\"F001-004530\",\"fecha\":\"2026-10-20\",\"lineas\":[{\"nombre\":\"LECHE GLORIA 24 LATAS X 395GR\",\"cantidad\":2,\"costo_unitario\":91},{\"nombre\":\"GALLETA CHOKO 16X6X32G\",\"cantidad\":3,\"costo_unitario\":28.8},{\"nombre\":\"GLOBOPOP 30 BLS X 24 UN\",\"cantidad\":12,\"costo_unitario\":4.5}]}],\"lectura\":\"Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.\",\"aclaraciones_del_usuario\":[{\"usuario\":\"la segunda fila son 16x6x32g, cuantos paquetes son\",\"pregunta_previa\":\"Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.\"}]}\n</boleta_recordada>"
+      },
+      {
+       "role": "user",
+       "content": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"la segunda fila son 16x6x32g, cuantos paquetes son\"]}\n</ensenado_por_usuario>"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>UND en esa boleta es paquete</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0fad70cb94f909ab006adb839859908190be254c1b4880f3a8\",\"object\":\"chat.completion\",\"created\":1792770971,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, la segunda fila dice 3 UND y aclaraste que UND significa paquete: son **3 paquetes, no 48**. Mi cálculo anterior suponía que eran cajas.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4372,\"completion_tokens\":98,\"total_tokens\":4470}}"
+     }
+    }
+   ]
+  }
+ ]
+}
