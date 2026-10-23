@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 import { readFile } from 'node:fs/promises';
 
 // Misión 6: sugerencia de compra. Datos sintéticos; sin clientes reales.
@@ -9,7 +10,7 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', dark: boolean) {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(String(e)));
   const writes: string[] = [];
-  page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method())) writes.push(r.method() + ' ' + r.url()); });
+  page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method()) && !isAssistantPing(r)) writes.push(r.method() + ' ' + r.url()); });
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(

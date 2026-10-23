@@ -119,6 +119,10 @@
     </style>
 
 <script defer src="js/modules/caja-movimientos-historial.js"></script>
+<!-- Asistente (encendido salvo que se apague en este aparato: Configuración o ?asistente=0): si el ÚLTIMO ping dijo «dueño», se reserva el alto de la tarjeta de Inicio
+     desde el primer pintado (no mueve nada). Ese dato guardado SOLO reserva espacio; el cargador pregunta al servidor y lo quita si ya no es dueño. -->
+<style>html.na-asst-owner #naMobileWelcome{display:none!important}html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:304px}@media (min-width:380px) and (max-width:699px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:304px}}@media (min-width:700px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:398px}}@media (min-width:1100px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:314px}}</style>
+<script>try{if(localStorage.getItem('na_asistente_off')!=='1'&&localStorage.getItem('na_asistente_acc')==='owner'&&!/[?&]asistente=0\b/.test(location.search))document.documentElement.classList.add('na-asst-owner','na-asst-pre')}catch(e){}</script>
 </head>
 <body>
 <aside class="pwa-update-prompt" id="pwaUpdatePrompt" hidden role="dialog" aria-live="polite" aria-label="Nueva versión disponible">
@@ -1351,6 +1355,8 @@
 <script src="js/adapters/canonical-ui-adapter.js"></script>
 <script src="js/config/pos-permissions.js"></script>
 <script src="js/config/pos-roles-client.js"></script>
+<script src="js/config/pos-employee-toggles.js"></script>
+<script src="js/config/employee-perms-client.js"></script>
 <script src="js/sync/canonical-client.js"></script>
 <script src="js/legacy-inline/inline-01.js"></script>
 <script src="js/modules/ticket/legacy.js"></script>
@@ -1487,7 +1493,9 @@
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
 <script src="js/modules/precios-masivos.js"></script>
+<script src="js/modules/stock-negativo.js"></script>
 <script src="js/config/config-e2.js"></script>
+<script src="js/config/employee-perms-ui.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
 <script src="js/config/pos-annul-client.js"></script>
@@ -1832,5 +1840,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
   });
 }
 </script>
+<!-- Asistente: el servidor decide; se apaga por aparato en Configuración (solo Admin) o con ?asistente=0 -->
+<script src="js/modules/asistente/asistente-loader.js" defer></script>
 </body>
 </html>

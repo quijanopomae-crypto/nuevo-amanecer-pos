@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 // Requiere el HTML y cableado entregados al integrador. Red completamente simulada.
 const fixture = {
@@ -45,7 +46,7 @@ async function setup(page: Page, role: 'owner' | 'empleado', options: { fail?: b
     if (url.hostname === '127.0.0.1') return route.continue();
     if (url.hostname !== 'permissions.test') return route.abort();
     // POST /settings es la sincronización de configuración que dispara saveAppState() de la propia prueba (en CI llega tarde); el módulo nunca la llama.
-    if (request.method() !== 'GET') { if (url.pathname !== '/settings') writes.push(request.method() + ' ' + url.pathname); return route.abort(); }
+    if (request.method() !== 'GET') { if (url.pathname !== '/settings' && !isAssistantPing(request)) writes.push(request.method() + ' ' + url.pathname); return route.abort(); }
     if (url.pathname === '/auth/me') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pos_role: role, owner_pin_set: true, roles_ready: true, device_id: 'TEST-device' }) });
     // La ruta real permite GET a ambos roles; el módulo debe impedir la lectura al empleado.
     if (url.pathname === '/auth/purchases' && !url.search) {
