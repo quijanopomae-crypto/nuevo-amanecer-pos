@@ -2096,16 +2096,34 @@ export async function readLessons(store, auth, nowMs) {
 // (alfa, #957) lo guardado en pos_settings nunca lleva datos de clientes: nombres de la lista de clientes -> «cliente #código»; nombre tras
 // «cliente», «señora», «don»… -> se quita; DNI, RUC, teléfonos y correos con redactText (las mismas máscaras que van al modelo).
 const LESSON_FOLD = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr\w*|pag\w*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev\w*|quier\w*|pid\w*|tom(?:a|ó|o|an|aron)|recog\w*|llam\w*|dij\w*|tien\w*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad\w*|fi[oó]|encarg\w*|reserv\w*|apart\w*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
-// (auditoría 500, P-027) «don»/«doña» de una MARCA («fideo Don Vittorio») no es una persona: se queda si «don X» está en el nombre de un
-// producto del catálogo o va justo después de una palabra de producto («fideo don …», «aceite doña …»). Los clientes de la lista se tapan antes.
-const BRAND_CUE = /^(?:don|do[nñ]a)$/i;
-const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada|marca|producto)\s+$/i;
-function brandDon(cue, name, before, products) {
-  if (!BRAND_CUE.test(cue)) return false;
+const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr[\wÁÉÍÓÚÜÑáéíóúüñ]*|pag[\wÁÉÍÓÚÜÑáéíóúüñ]*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev[\wÁÉÍÓÚÜÑáéíóúüñ]*|quier[\wÁÉÍÓÚÜÑáéíóúüñ]*|pid[\wÁÉÍÓÚÜÑáéíóúüñ]*|tom(?:a|ó|o|an|aron)|recog[\wÁÉÍÓÚÜÑáéíóúüñ]*|llam[\wÁÉÍÓÚÜÑáéíóúüñ]*|dij[\wÁÉÍÓÚÜÑáéíóúüñ]*|tien[\wÁÉÍÓÚÜÑáéíóúüñ]*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad[\wÁÉÍÓÚÜÑáéíóúüñ]*|fi[oó]|encarg[\wÁÉÍÓÚÜÑáéíóúüñ]*|reserv[\wÁÉÍÓÚÜÑáéíóúüñ]*|apart[\wÁÉÍÓÚÜÑáéíóúüñ]*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
+// (auditoría 500, P-027; #988 revisión) Regla COMPARTIDA «don/doña» marca vs persona: la usan las lecciones (sanitizeLesson) y debe reusarla
+// el ocultado de respuestas (#998, maskReplyPeople).
+//   isBrandDon(text, start, end, known) -> true si el tramo text[start,end) («don/doña + nombre») es una MARCA y puede quedarse.
+//   - text: el texto completo; start/end: índices del tramo (empieza en «don»/«doña»); known: productos conocidos ({nombre} o strings).
+//   - Un verbo de deuda o pago cerca (hasta 4 palabras después del tramo o 3 antes: debe, paga, pagó, abonó, fía, le fié, me debe,
+//     cobrar a, prestar…) gana SIEMPRE: es persona.
+//   - Sin ese verbo, es marca si va justo después de una palabra de producto («fideo don …», «aceite doña …») o si «don/doña + primera
+//     palabra» está en el nombre de un producto conocido («Café Don Juan 250g»).
+//   - Nunca cuentan solos: las mayúsculas, un tamaño («2 KG», «X 20»), ni «producto» o «marca» como palabra antes.
+//   Los clientes de la lista se tapan ANTES, sin consultar esta función.
+const BRAND_CUE_RE = /^\s*(?:don|do[nñ]a)(?![a-zñ])/;
+const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada)\s+$/i;
+// sobre texto ya sin tildes y en minúsculas (LESSON_FOLD)
+const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|ara|aron|ar|ado)|fi(?:o|e|a|an|aron|amos|aste|ara|ar)|fiad[oa]s?\s+a|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
+const foldWords = (t) => LESSON_FOLD(t).split(/\s+/).filter(Boolean);
+export function isBrandDon(text, start, end, known = []) {
+  const all = String(text || ''), s = Math.max(0, start | 0), e = Math.max(s, Math.min(all.length, end | 0));
+  const span = LESSON_FOLD(all.slice(s, e));
+  if (!BRAND_CUE_RE.test(span)) return false;
+  const before = all.slice(0, s), after = all.slice(e);
+  if (DEBT_VERB.test(' ' + [...foldWords(before).slice(-3), ...foldWords(span), ...foldWords(after).slice(0, 4)].join(' ') + ' ')) return false;
   if (PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before))) return true;
-  const first = LESSON_FOLD(name).trim().split(/\s+/)[0], key = LESSON_FOLD(cue) + ' ' + first;
-  return first.length >= 3 && (Array.isArray(products) ? products : []).some((p) => p && (' ' + LESSON_FOLD(p.nombre).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(' ' + key + ' '));
+  const w = span.replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' '), key = w[0] + ' ' + (w[1] || '');
+  return (w[1] || '').length >= 3 && (Array.isArray(known) ? known : []).some((p) => {
+    const n = typeof p === 'string' ? p : p && p.nombre;
+    return n && (' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(' ' + key + ' ');
+  });
 }
 export function sanitizeLesson(fact, customers = [], products = []) {
   let out = String(fact || '');
@@ -2120,7 +2138,7 @@ export function sanitizeLesson(fact, customers = [], products = []) {
       for (const i of at.reverse()) out = out.slice(0, i) + (c.code ? 'cliente #' + c.code : 'un cliente') + out.slice(i + alt.length);
     }
   }
-  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || brandDon(cue, name, all.slice(0, at), products) ? m : cue + ' ');
+  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || isBrandDon(all, at, at + m.length, products) ? m : cue + ' ');
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
 export async function saveLesson(store, auth, nowMs, fact, customers = [], products = []) {
