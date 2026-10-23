@@ -375,3 +375,90 @@ test('#995 + #998: con el mensaje tapado para el modelo («doña [nombre oculto]
   assert.match(JSON.parse(cap[0]).messages[0].content, /COBROS DE FIADOS/);
   noNames(cap);
 });
+
+// ---------- Segunda revisión del PR #995 ----------
+// «el cliente 5» (sin «#», como enseña la herramienta: «cliente 12 -> cliente_id 12») también es UN cliente; una persona sin código
+// («doña Rosa», «doña [nombre oculto]», «me pagó Rosa … de su deuda») pide el código, nunca el total de la tienda; «cliente #99» que
+// no existe lo dice; dos códigos en la misma pregunta preguntan cuál. «¿cuánto cobré de fiados esta semana?» sigue siendo de la tienda.
+const enc995 = new TextEncoder();
+const sse995 = (m) => {
+  const ch = [];
+  if (m.content) ch.push('data: ' + JSON.stringify({ choices: [{ delta: { content: m.content } }] }) + '\n\n');
+  (m.tool_calls || []).forEach((c, i) => ch.push('data: ' + JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: i, id: c.id, function: c.function }] } }] }) + '\n\n'));
+  ch.push('data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: m.tool_calls ? 'tool_calls' : 'stop' }] }) + '\n\n', 'data: [DONE]\n\n');
+  let i = 0;
+  return new Response(new ReadableStream({ pull(c) { if (i < ch.length) c.enqueue(enc995.encode(ch[i++])); else c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+};
+// Mismo pedido con y sin partes (stream): devuelve la respuesta final y los cuerpos que fueron a la IA.
+async function ask995(text, args, stream) {
+  const cap = [], m = { content: '', tool_calls: [call('consultar', args)] };
+  const f = async (url, init) => { cap.push(String(init.body)); return stream ? sse995(m) : msg(m); };
+  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ context: { products: DATA.products }, text, ...(stream ? { stream: true } : {}) }) }),
+    ENV, { principalId: 'session:x', posRole: 'owner' }, json,
+    { store: createMemoryUsageStore(), resolveRole: async () => 'owner', fetch: f, reader: memoryReader(DATA_CR), audit: async () => {}, mockChunkMs: 0, now: () => NOW });
+  assert.equal(r.status, 200);
+  if (!stream) return { reply: (await r.json()).reply.trim(), cap };
+  const fin = (await r.text()).split('\n\n').filter((b) => /^event: final/m.test(b)).map((b) => JSON.parse(/^data: (.*)$/m.exec(b)[1]))[0];
+  assert.ok(fin, 'stream sin evento final');
+  return { reply: String(fin.reply).trim(), cap };
+}
+const WEEK = { periodo: 'esta_semana' };
+const SALES_ARGS = [{ tipo: 'ventas_periodo', ...WEEK }, { tipo: 'cobros_creditos', ...WEEK }];
+
+test('#995 (2ª) «el cliente 5» sin «#»: con ventas_periodo o cobros_creditos sin cliente_id da SOLO lo de cliente #5 (con y sin partes)', async () => {
+  const want = 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.';
+  for (const text of ['¿cuánto me pagó el cliente 5 de su deuda esta semana?', '¿cuánto me pagó el cliente nro. 5 de su deuda esta semana?', '¿cuánto me pagó el cliente N° 5 de su deuda esta semana?'])
+    for (const args of SALES_ARGS) for (const stream of [false, true]) {
+      const { reply, cap } = await ask995(text, args, stream);
+      assert.equal(reply, want, text + ' ' + JSON.stringify(args) + ' stream=' + stream);
+      noNames(cap);
+    }
+  const m = JSON.parse(mockAssistantReply({ role: 'owner', ctx: { products: [] }, text: '¿cuánto me pagó el cliente 5 de su deuda esta semana?' }).calls[0].arguments);
+  assert.deepEqual([m.tipo, m.cliente_id], ['cobros_creditos', '5']);
+});
+
+test('#995 (2ª) «cliente nuevo», «clientes», «cliente frecuente» no son códigos: siguen siendo el total de la tienda', async () => {
+  for (const text of ['¿cuánto cobré de fiados esta semana a los clientes?', '¿cuánto cobré de fiados esta semana? hoy vino un cliente nuevo', '¿cuánto me pagaron de fiados esta semana los clientes frecuentes?'])
+    for (const stream of [false, true]) {
+      const { reply } = await ask995(text, { tipo: 'cobros_creditos', ...WEEK }, stream);
+      assert.equal(reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', text + ' stream=' + stream);
+    }
+});
+
+test('#995 (2ª) una persona sin código («doña Rosa», «doña [nombre oculto]», «me pagó Rosa … de su deuda») pide el código, nunca el total de la tienda', async () => {
+  for (const text of ['¿cuánto me pagó doña Rosa de su deuda esta semana?', '¿cuánto me pagó doña [nombre oculto] de su deuda esta semana?', '¿cuánto me pagó Rosa de su deuda esta semana?', '¿cuánto me abonó el señor de su fiado esta semana?'])
+    for (const args of SALES_ARGS) for (const stream of [false, true]) {
+      const { reply, cap } = await ask995(text, args, stream);
+      assert.ok(!/S\/ \d/.test(reply), 'nunca un monto: ' + text + ' -> ' + reply);
+      assert.match(reply, /código del cliente/, text + ' stream=' + stream);
+      noNames(cap);
+    }
+  // Lo general sigue con el total de la tienda (también con una persona nombrada en otra frase).
+  for (const text of ['¿cuánto cobré de fiados esta semana?', 'ya vino doña Rosa. ¿cuánto cobré de fiados esta semana?', '¿cuánto me pagaron de fiados esta semana?'])
+    for (const args of SALES_ARGS) for (const stream of [false, true]) {
+      const { reply } = await ask995(text, args, stream);
+      assert.equal(reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', text + ' ' + JSON.stringify(args) + ' stream=' + stream);
+    }
+});
+
+test('#995 (2ª) «cliente #99» que no existe: «No encontré cliente #99», no «No hubo cobros»', async () => {
+  const r = await q({ tipo: 'cobros_creditos', ...WEEK, cliente_id: '99' }, DATA_CR);
+  assert.match(r.texto, /^No encontré cliente #99/); assert.ok(!/No hubo cobros/.test(r.texto));
+  assert.equal(r.resumen.cliente_encontrado, false);
+  for (const stream of [false, true]) {
+    const { reply } = await ask995('¿cuánto me pagó cliente #99 de su deuda esta semana?', { tipo: 'cobros_creditos', ...WEEK }, stream);
+    assert.match(reply, /^No encontré cliente #99/, 'stream=' + stream);
+  }
+  // Existe sin créditos (cliente #7 tiene uno saldado; uno sin ningún crédito): «No hubo cobros».
+  const sinCred = await q({ tipo: 'cobros_creditos', ...WEEK, cliente_id: '8' }, { ...DATA_CR, customers: [...DATA_CR.customers, { id: '8', nombre: 'X' }] });
+  assert.match(sinCred.texto, /^No hubo cobros de fiados de cliente #8/);
+});
+
+test('#995 (2ª) «cliente #5 o cliente #9» en cobros: pregunta cuál, no elige el primero', async () => {
+  for (const text of ['¿cuánto me pagó cliente #5 o cliente #9 de su deuda esta semana?', '¿cuánto me pagó el cliente 5 o el cliente 9 de su deuda esta semana?'])
+    for (const args of [...SALES_ARGS, { tipo: 'cobros_creditos', ...WEEK, cliente_id: 'C-0001' }]) for (const stream of [false, true]) {
+      const { reply } = await ask995(text, args, stream);
+      assert.ok(!/S\/ \d/.test(reply), text + ' -> ' + reply);
+      assert.match(reply, /cuál/i); assert.match(reply, /cliente #5/); assert.match(reply, /cliente #9/);
+    }
+});
