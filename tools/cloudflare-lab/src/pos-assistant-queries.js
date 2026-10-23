@@ -1131,7 +1131,7 @@ async function customerDebtQuery(reader, args, base) {
 // frecuente» y «clientes» no son códigos. Devuelve los códigos tal como se escribieron (quien llama los valida con customerCode).
 // (#995, punto 2) Sin «#», un número con unidad no es un código: «cliente 2 kilos», «cliente 5kg», «cliente 1.5 kg», «cliente 3 soles».
 const CODE_UNIT = '(?:kgs?|g|grs?|kilos?|gramos?|ml|l|lts?|litros?|cc|oz|und|unid|unidades|bot|botellas?|pqt|paquetes?|sob|sobres?|soles?|bolsas?|sacos?|cajas?|docenas?|latas?)';
-const CODE_UNIT_IN = new RegExp('^\\d+(?:[.,]\\d+)?' + CODE_UNIT + '$', 'i'), CODE_UNIT_AFTER = new RegExp('^(?:[.,]\\d+)?\\s*' + CODE_UNIT + '(?![\\p{L}\\d])', 'iu');
+const CODE_UNIT_IN = new RegExp('^\\d+(?:[.,]\\d+)?' + CODE_UNIT + '$', 'i'), CODE_UNIT_AFTER = new RegExp('^(?:[.,]\\d+)?\\s*(?:' + CODE_UNIT + '(?![\\p{L}\\d])|s\\/\\.?|%)', 'iu'); // (#995) «cliente 5 S/», «5 s/.», «5%» tampoco
 // (#995, punto 3) «cliente #5 o el #9», «cliente #5, #9 y #11»: los «#N» que siguen en la misma lista también son códigos.
 const CODE_MORE = /^\s*(?:,|\by\b|\bo\b|\be\b|\bu\b)\s*(?:(?:el|al|del|la|a)\s+)?(?:cliente\s*)?#\s*([A-Za-z0-9_-]{1,40})/iu;
 export function clientCodesInText(text) {
@@ -1139,7 +1139,7 @@ export function clientCodesInText(text) {
   let m;
   while ((m = re.exec(src))) {
     let end = m.index + m[0].length;
-    if (m[1] !== '#' && (!/\d/.test(m[2]) || CODE_UNIT_IN.test(m[2]) || CODE_UNIT_AFTER.test(src.slice(end)))) continue;
+    if (m[1] !== '#' && (!/\d/.test(m[2]) || CODE_UNIT_IN.test(m[2]) || CODE_UNIT_AFTER.test(src.slice(end)) || (/^\d+s$/i.test(m[2]) && src[end] === '/'))) continue;
     out.push(m[2]);
     for (let k; (k = CODE_MORE.exec(src.slice(end)));) { out.push(k[1]); end += k[0].length; }
     re.lastIndex = end;

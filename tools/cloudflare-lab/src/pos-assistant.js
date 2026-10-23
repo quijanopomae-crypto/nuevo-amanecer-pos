@@ -126,6 +126,9 @@ const PAYER_GLUE = new Set(['me', 'le', 'nos', 'te', 'ya', 'ha', 'han', 'hoy', '
 const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'donde', 'quien', 'quienes', 'fue', 'fueron', 'ha', 'han', 'hoy', 'ayer', 'anteayer', 'antier',
   'semana', 'mes', 'ano', 'dia', 'dias', 'pasada', 'pasado', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'fiado', 'fiados', 'fiada', 'deuda',
   'deudas', 'credito', 'creditos', 'cuenta', 'saldo', 'total', 'nombre', 'oculto', 'algo', 'nada', 'cobre', 'cobro', 'cobros', 'pagos', 'abonos', 'yape', 'plin', 'efectivo',
+  // (bloqueo tras la base) palabras comunes que no son nombres («¿me pagó alguien?», «mis clientes», «la vecina», «cada uno»): camino de antes.
+  'alguien', 'nadie', 'mi', 'mis', 'tu', 'tus', 'su', 'sus', 'nuestro', 'nuestros', 'nuestra', 'nuestras', 'ellos', 'ellas', 'varios', 'varias', 'cada', 'uno', 'una',
+  'entre', 'ambos', 'ambas', 'todos', 'todas', 'gente', 'vecina', 'vecinas', 'vecino', 'vecinos', 'solo', 'recien', 'clientes', 'cliente',
   'tarjeta', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre', 'burbuja', 'oye', 'oiga', 'hola', 'buenas', 'buenos', 'dime', 'digame', 'mira', 'pues', 'bueno', 'entonces', 'gracias', 'porfa', 'favor']);
 const payerStop = (f) => !f || /\d/.test(f) || PAYER_STOP.has(f) || PAYER_HON.has(f) || PAYER_VERBS.has(f) || NAME_NOT.has(f) || NAME_UNIT.has(f) || NAME_STOP_VERB.has(f) || DEBT_VERB.test(' ' + f + ' ');
 function personTokens(text) {
