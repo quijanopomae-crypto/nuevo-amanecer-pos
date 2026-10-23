@@ -29,3 +29,6 @@ body.dark .pl-field input,body.dark .pl-field select,body.dark .pl-btn:not(.prim
 body.dark .pl-bad{color:#fca5a5}
 body.dark .pl-good{color:#6ee7b7}
 @media (max-width:600px){.pl-overlay{padding:0}.pl-box{border-radius:0;min-height:100%}.pl-table{font-size:12px}}
+.pl-inc{width:48px;text-align:center}.pl-inc input{width:22px;height:22px}.pl-log{margin:0;padding-left:18px;font-size:14px;overflow-wrap:anywhere}[data-pl-undo][hidden]{display:none}
+.pl-table-wrap{max-width:100%;overflow-x:auto}.pl-table-wrap .pl-table{min-width:720px}
+.pl-blocked td{opacity:.75}.pl-why{display:block;margin-top:4px;font-size:12px;font-weight:700;color:#b45309}body.dark .pl-why{color:#fbbf24}

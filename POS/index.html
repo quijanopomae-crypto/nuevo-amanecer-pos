@@ -475,12 +475,15 @@
     <p class="pm-status" data-pm-status role="status" aria-live="polite"></p>
     <div data-pm-main hidden>
       <div class="pm-controls">
+        <label>Buscar<input type="search" data-pm-search aria-label="Buscar producto" placeholder="Nombre del producto"></label>
         <label>Categoría<select data-pm-category aria-label="Categoría"><option value="">Todas las categorías</option></select></label>
         <label>Tipo de cambio<select data-pm-mode aria-label="Tipo de cambio"><option value="porcentaje">Subir o bajar %</option><option value="monto">Sumar o restar S/</option><option value="margen">Margen sobre costo (recargo) %</option></select></label>
         <label>Valor<input type="number" step="0.01" inputmode="decimal" data-pm-value aria-label="Valor" placeholder="Ej. 10 o -5"></label>
         <button type="button" data-pm-apply disabled>Aplicar</button>
       </div>
       <div data-pm-content></div>
+      <button type="button" class="pm-undo" data-pm-undo hidden>Deshacer último lote</button>
+      <div class="pm-log-box" data-pm-log></div>
     </div>
   </div>
 </div>
