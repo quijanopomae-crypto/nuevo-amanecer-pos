@@ -156,7 +156,8 @@ test('permiso: Admin todo; nivel 3 + «cambios» solo negocio y ticket; nadie m�
   assert.equal(toolAllowed('owner', TOOL), true);
   assert.equal(toolAllowed(COSTS_ROLE, TOOL), true); assert.ok(COSTS_CAPABILITIES.herramientas.includes(TOOL)); assert.equal(levelCan(COSTS_ROLE, 'cambios'), true);
   assert.ok(!COSTS_CAPABILITIES.herramientas.includes('proponer_configuracion'));
-  const l3c = toolsForRole(COSTS_ROLE).find((t) => t.function.name === TOOL); assert.deepEqual([...l3c.function.parameters.properties.ajuste.enum], [...CONFIG_KEY_NAMES]);
+  const l3c = toolsForRole(COSTS_ROLE).find((t) => t.function.name === TOOL); assert.deepEqual([...l3c.function.parameters.properties.ajuste.enum], CONFIG_KEY_NAMES.filter((k) => k !== 'avisos'), 'avisos: solo el Admin (auditoría 500)');
+  assert.equal(toProposal({ name: TOOL, arguments: JSON.stringify({ ajuste: 'avisos', valor: false }) }, COSTS_ROLE, { products: [] }, 1).dropped, 'config_admin_only');
   for (const k of ADMIN_ONLY) assert.equal(toProposal({ name: TOOL, arguments: JSON.stringify({ ajuste: k, valor: 1 }) }, COSTS_ROLE, { products: [] }, 1).dropped, 'forbidden_role', k);
   assert.equal(employeeToolGuard(COSTS_ROLE)?.({ name: TOOL, arguments: JSON.stringify({ ajuste: 'modo', valor: 'noche' }) }), 'forbidden_role');
   assert.ok(!employeeToolGuard(COSTS_ROLE)?.({ name: TOOL, arguments: JSON.stringify({ ajuste: 'ticket_pie', valor: 'x' }) }));
@@ -192,8 +193,8 @@ test('nivel 3 + «costos y cambios»: aplica negocio/ticket con un toque y la bi
   const logged = h.audit.filter((a) => a.tool === 'asistente.config');
   assert.equal(logged.length, 1); assert.ok(logged[0].device_id === EMP.principalId && logged[0].role === COSTS_ROLE);
   // la tarjeta del empleado no la aplica otro aparato
-  const h2 = harness({ role: COSTS_ROLE, auth: EMP, args: { ajuste: 'avisos', valor: false } });
-  const c2 = cardOf(await h2.chat());
+  const h2 = harness({ role: COSTS_ROLE, auth: EMP, args: { ajuste: 'ticket_pie', valor: 'Pie nuevo' } });
+  const c2 = cardOf(await h2.chat('Cambia el pie del ticket'));
   const other = await h2.confirm(c2, OWNER); assert.equal(other.status, 403); assert.equal(other.body.error, 'other_device');
   // claves de #972 (solo Admin): sin tarjeta y sin leer la base
   for (const [ajuste, valor] of [['modo', 'noche'], ['stock_minimo', 8], ['stock_avisos', false], ['impresion_automatica', true]]) {
@@ -208,11 +209,11 @@ test('nivel 3 + «costos y cambios»: aplica negocio/ticket con un toque y la bi
 });
 
 test('empleado que pierde el permiso antes de «Confirmar»: 403, nada se guarda', async () => {
-  const h = harness({ role: COSTS_ROLE, auth: EMP, args: { ajuste: 'avisos', valor: false } });
-  const card = cardOf(await h.chat());
+  const h = harness({ role: COSTS_ROLE, auth: EMP, args: { ajuste: 'ticket_pie', valor: 'Pie nuevo' } });
+  const card = cardOf(await h.chat('Cambia el pie del ticket')); assert.ok(card?.confirm_token);
   h.deps.resolveRole = async () => 'empleado:completo'; h.db.reads.length = 0;
   const r = await h.confirm(card); assert.equal(r.status, 403); assert.equal(r.body.error, 'forbidden_role');
-  assert.equal(h.db.reads.length, 0); assert.equal(setting(h.db, 'pos.flags').alertsEnabled, true);
+  assert.equal(h.db.reads.length, 0); assert.notEqual(setting(h.db, 'pos.ticket').pie, 'Pie nuevo');
 });
 
 test('borrar todo / reiniciar: configurar_app no lo hace', async () => {
