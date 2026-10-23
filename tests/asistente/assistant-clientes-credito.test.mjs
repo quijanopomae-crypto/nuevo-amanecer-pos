@@ -1049,3 +1049,22 @@ test('#995 (revisión 3a21c3a2) «rosa y elmer pagaron?» sin Rosa: «No encontr
     assert.match(both.reply, /^¿De cuál cliente/, why); assert.equal(both.cap.length, 0, why);
   }
 });
+// (orden del lead, 23-10 20:27) «pago/abono» sin tilde con una palabra que sobra ANTES («rosa pago?», «la rosa abono?») = esa persona pagó;
+// sin «yo», sin «cuánto … de» y sin artículo/posesivo justo antes. Lo del Admin («¿cuánto pago de flete?», «yo pago la luz», «el pago de Yape», «mi pago») queda igual.
+const UNACC_ROSA = ['rosa pago?', 'rosa ya pago?', 'la rosa abono?'];
+test('#995 (orden del lead 20:27) «rosa pago?», «rosa ya pago?», «la rosa abono?» sin tilde: sin Rosa = «No encontré… Rosa» sin IA ni total; con Rosa = cliente #5', async () => {
+  for (const text of UNACC_ROSA) for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = text + ' stream=' + stream + ' ' + args.tipo;
+    const miss = await askP(text, { stream, args, data: noRosa(DATA_CR) });
+    assert.equal(miss.reply, NOT_FOUND_ROSA, why); assert.equal(miss.cap.length, 0, why);
+    const hit = await askP(text, { stream, args });
+    assert.equal(hit.reply, ROSA_REPLY, why); noNamesP(hit.cap, why);
+  }
+});
+test('#995 (orden del lead 20:27) «¿cuánto pago de flete?», «yo pago la luz», «el pago de Yape», «mi pago»: siguen a la IA, sin «No encontré» ni «De qué cliente»', async () => {
+  for (const text of ['¿cuánto pago de flete?', 'yo pago la luz', 'el pago de Yape', 'mi pago', '¿cómo pago con Yape?', '¿dónde registro un pago con tarjeta?', '¿cuánto se paga de IGV?'])
+    for (const stream of [false, true]) for (const data of [DATA_CR, noRosa(DATA_CR)]) {
+      const { reply, cap } = await askP(text, { stream, data, args: { tipo: 'ventas_periodo', ...WEEK } });
+      assert.ok(cap.length >= 1, text); assert.ok(!/No encontré|De qué cliente|De cuál cliente/.test(reply), text + ' -> ' + reply);
+    }
+});
