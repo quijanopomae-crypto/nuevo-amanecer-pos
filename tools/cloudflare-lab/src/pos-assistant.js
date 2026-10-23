@@ -2313,7 +2313,14 @@ export function sanitizeLesson(fact, customers = [], products = []) {
       for (const i of at.reverse()) out = out.slice(0, i) + (c.code ? 'cliente #' + c.code : 'un cliente') + out.slice(i + alt.length);
     }
   }
-  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || isBrandDon(all, at, at + m.length, products) ? m : cue + ' ');
+  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => {
+    if (/#/.test(name) || isBrandDon(all, at, at + m.length, products)) return m;
+    // (alfa) se quita solo el nombre: la palabra que lo sigue se queda («doña Carmen Salas trajo la boleta» -> «doña trajo la boleta»).
+    // Nombre con Mayúscula: termina en la primera palabra en minúscula; en minúscula: en un verbo común (nameStop, como maskReplyPeople).
+    const ws = name.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*/g) || [], lower = !/^\p{Lu}/u.test(ws[0] || '');
+    let n = 1; while (n < ws.length && !(lower ? nameStop(ws[n].trim(), '', true) : !/^\p{Lu}/u.test(ws[n]))) n++;
+    return cue + ' ' + ws.slice(n).join('');
+  });
   out = maskCuedPeople(out, products); // persona nueva sin «don/señora»: «Rosa Quispe me debe 2 kg», «le fié a Juan Pérez»
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
