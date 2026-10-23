@@ -2145,7 +2145,10 @@ const BRAND_CUE_RE = /^\s*(?:don|do[nñ]a)(?![a-zñ])/;
 const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada)\s+$/i;
 // sobre texto ya sin tildes y en minúsculas (LESSON_FOLD)
 const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|ara|aron|ar|ado)|fi(?:o|e|a|an|aron|amos|aste|ara|ar)|fiad[oa]s?\s+a|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
-const foldWords = (t) => LESSON_FOLD(t).split(/\s+/).filter(Boolean);
+// Palabras para la ventana del verbo de deuda o pago: la puntuación («,», «.», «;», «:», «—», «…») no es palabra, y los pronombres átonos
+// («me», «lo», «le»…) tampoco cuentan: «arroz don Pedro, que siempre me lo debe» llega a «debe» dentro de 4 palabras.
+const CLITIC_WORD = /^(?:me|te|se|lo|la|le|los|las|les|nos)$/;
+const foldWords = (t) => LESSON_FOLD(t).replace(/[^a-z0-9ñ]+/g, ' ').split(' ').filter((w) => w && !CLITIC_WORD.test(w));
 export function isBrandDon(text, start, end, known = []) {
   const all = String(text || ''), s = Math.max(0, start | 0), e = Math.max(s, Math.min(all.length, end | 0));
   const span = LESSON_FOLD(all.slice(s, e));
