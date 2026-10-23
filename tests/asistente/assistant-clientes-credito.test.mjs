@@ -283,7 +283,7 @@ test('#995 lector canónico real: cobros vivos con anulación (COMPENSATION) dan
   ev.run('E3', 'o3', promo, 'PAYMENT', cr[0].credit_id, 'IMPORT', -500, 'yape', null, null, '2026-10-21T16:00:00.000Z');
   const rd = canonicalReader(f.env.nuevo_amanecer_lab);
   const pays = (await rd.creditPayments()).filter((x) => x.dia === '2026-10-21');
-  assert.deepEqual(pays.map((x) => x.c), [20, -20, 5]);
+  assert.deepEqual(pays.map((x) => x.c), [2000, -2000, 500]); // céntimos
   assert.ok(pays.every((x) => x.cr === cr[0].credit_id), 'cada cobro trae su crédito');
   assert.equal((await rd.credits())[0].credito, cr[0].credit_id);
   const todo = await runAssistantQuery(rd, { tipo: 'cobros_creditos', fecha: '2026-10-21' }, NOW);
