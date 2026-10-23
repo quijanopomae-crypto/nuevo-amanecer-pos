@@ -317,7 +317,7 @@ export function canonicalReader(db) {
   const salesSqlLimit = (p, build, limit) => salesQuery(p, (from, where) => build(from, where) + ' LIMIT ?4', [limit]);
   return {
     async products() { const rows = await all('products'); const list = rows.map((p) => ({ id: String(p.product_id), nombre: p.name, stock: Number(p.current_stock_quantity), min: Number(p.stock_min_quantity || 0),
-      costo: cents(p.cost_cents), precio: cents(p.price_cents), categoria: p.category ?? null, controla: p.tracks_inventory === 1 || p.tracks_inventory === true })); list.truncated = rows.truncated; return list; },
+      costo: cents(p.cost_cents), precio: cents(p.price_cents), categoria: p.category ?? null, controla: p.tracks_inventory === 1 || p.tracks_inventory === true, unidad: p.unit ?? null })); list.truncated = rows.truncated; return list; },
     // Solo los ids pedidos (control de inventario de una tarjeta): una consulta por tramo de <= 50 ids con parámetros enlazados, sin
     // leer el catálogo. Misma autoridad que la lectura canónica: promoción activa (importados + creados en vivo). Si la consulta
     // falla, lanza (quien llama falla CERRADO). Un id que no vuelve es un producto que no existe.
@@ -326,15 +326,15 @@ export function canonicalReader(db) {
       const c = await ctl();
       for (let i = 0; i < want.length; i += PRODUCT_ID_CHUNK) {
         const part = want.slice(i, i + PRODUCT_ID_CHUNK), marks = part.map((_, k) => '?' + (k + 2)).join(',');
-        const base = `SELECT product_id,name,tracks_inventory FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`;
-        const live = `SELECT product_id,name,tracks_inventory FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`;
+        const base = `SELECT product_id,name,tracks_inventory,unit FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`;
+        const live = `SELECT product_id,name,tracks_inventory,unit FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`;
         let rows;
         if (c.mode === 'ACTIVE') {
           try { rows = (await db.prepare(base + ' UNION ALL ' + live).bind(c.active_promotion_id, ...part).all()).results || []; }
           catch (e) { if (!/no such table: canonical_live_products/i.test(String(e?.message || e))) throw e; rows = null; }
         }
         if (!rows) rows = (await db.prepare(base).bind(c.active_promotion_id, ...part).all()).results || [];
-        for (const r of rows) out.set(String(r.product_id), { id: String(r.product_id), nombre: r.name, controla: r.tracks_inventory === 1 || r.tracks_inventory === true });
+        for (const r of rows) out.set(String(r.product_id), { id: String(r.product_id), nombre: r.name, controla: r.tracks_inventory === 1 || r.tracks_inventory === true, unidad: r.unit ?? null });
       }
       return out;
     },
