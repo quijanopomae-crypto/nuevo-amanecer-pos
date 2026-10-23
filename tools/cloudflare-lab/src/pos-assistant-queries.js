@@ -497,13 +497,18 @@ function productTerms(text) {
     sizes.push((volume ? 'vol:' : 'mass:') + Math.round(Number(q.replace(',', '.')) * (big ? 1000 : 1) * 1000) / 1000);
     return ' ';
   });
-  const words = rest.split(/[^a-z0-9]+/).filter((w) => w && !FILLER.has(w) && (w.length >= 3 || /^\d+$/.test(w))).map(stem);
+  const words = rest.split(/[^a-z0-9]+/).filter((w) => w && !FILLER.has(w) && (w.length >= 3 || /^\d+$/.test(w)));
   return [...new Set([...words, ...sizes])];
 }
 export function matchProducts(list, text) {
   const words = productTerms(text);
   if (!words.length) return [];
-  return list.filter((p) => { const terms = new Set(productTerms(p.nombre)); return words.every((w) => terms.has(w)); });
+  return list.filter((p) => {
+    // Singular candidates come only from an actual plural suffix, never by appending letters.
+    const forms = (w) => [w, ...(w.length >= 4 && w.endsWith('s') ? [w.slice(0, -1)] : []), ...(w.length >= 5 && w.endsWith('es') ? [w.slice(0, -2)] : [])];
+    const terms = new Set(productTerms(p.nombre).flatMap(forms));
+    return words.every((w) => forms(w).some((f) => terms.has(f)));
+  });
 }
 // The user's explicit stock constraints survive omitted model arguments. No writes or historical reconstruction.
 export function stockQueryArgs(query, text, nowMs = Date.now()) {
@@ -513,7 +518,10 @@ export function stockQueryArgs(query, text, nowMs = Date.now()) {
   else if (/\b(?:en|stock|existencias?)\s+(?:cero|0)\b/.test(t)) q.estado_stock = 'cero';
   if (q.estado_stock && !q.producto && !q.categoria) q.tipo = 'bajo_stock';
   const category = t.match(/\bcategoria\s+([a-z0-9][a-z0-9 ]{0,60})/);
-  if (category) { q.categoria = category[1].trim(); q.producto = null; }
+  if (category && !q.categoria) {
+    q.categoria = category[1].replace(/\s+(?:con|sin)\s+(?:el\s+)?(?:stock|existencias?)\b.*$/, '').trim();
+    q.producto = null;
+  }
   if (q.categoria) q.tipo = 'stock_producto';
   const date = t.match(/\b\d{4}-\d{2}-\d{2}\b/);
   if (/\b(?:ayer|anteayer|antier|anterior|pasad[oa]|historico)\b/.test(t) || (date && date[0] !== limaToday(nowMs))) q.historico = true;

@@ -85,3 +85,16 @@ test('salvedades de cobertura e histórico sobreviven al filtro de empleado sin 
   const historic = employeeQueryResult(await runAssistantQuery({ products: async () => list }, { tipo: 'stock_producto', periodo: 'ayer' }));
   assert.match(JSON.stringify(historic.resumen), /Kardex/);
 });
+test('categoría combinada con filtro conserva la categoría validada y delimita inferencia', () => {
+  const text = 'Muéstrame la categoría galletas con stock en cero';
+  const supplied = stockQueryArgs({ tipo: 'stock_producto', categoria: 'galletas', estado_stock: 'cero' }, text);
+  assert.equal(supplied.categoria, 'galletas'); assert.equal(supplied.estado_stock, 'cero');
+  const inferred = stockQueryArgs({ tipo: 'stock_producto' }, text);
+  assert.equal(inferred.categoria, 'galletas'); assert.equal(inferred.estado_stock, 'cero');
+});
+test('plural en es conserva panes frente a Pan sin prefijos parciales', () => {
+  assert.deepEqual(names(['Pan', 'Panela', 'Pantalón'], 'panes'), ['Pan']);
+});
+test('plural no añade una e a nombres singulares distintos', () => {
+  assert.deepEqual(names(['Pane', 'Panela'], 'pan'), []);
+});
