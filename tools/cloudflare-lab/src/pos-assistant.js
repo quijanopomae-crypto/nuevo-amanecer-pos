@@ -3080,8 +3080,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const priceCall = (c) => role === 'owner' && c?.name === 'proponer_cambio_precio';
   if (result.calls.some(priceCall) && !sysProducts) sysProducts = await loadProducts();
   result.calls.forEach((c, i) => { const p = toProposal(c, role, priceCall(c) ? priceCtx(ctx, sysProducts) : ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
-  arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
   if (role === 'owner') keepCorrectedPrice(proposals, parsed.text); // «11.90… no, mejor 11.50»: queda la del último precio
+  arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
   // Configuración sin el permiso «cambios»: 403 antes de leer nada de la base y sin segunda llamada al modelo.
   if (dropped.some((d) => d.dropped === 'config_forbidden')) { if (emit) { emit.drop(); emit.reset(); } return json(CONFIG_FORBIDDEN, 403); }
