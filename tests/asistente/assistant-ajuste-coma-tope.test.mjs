@@ -76,3 +76,91 @@ test('INV-057: con 5 tarjetas pasan las 5 y sigue la frase de #987', async () =>
   assert.equal(r.body.reply.split('\n')[0], 'Listo. Son 5 productos; cada uno se aplica aparte con su «Aplicar».');
   assert.doesNotMatch(r.body.reply, /le muestro la lista/);
 });
+
+// ---------- INV-057 (revisión de #996): la conversación completa, sin depender de que el modelo repita las mismas tarjetas ----------
+// Un solo almacén y el historial firmado que devuelve cada respuesta; el aparato manda stock 999 (viejo): el servidor usa SU stock.
+function convo(role = 'owner') {
+  const store = PA.createMemoryUsageStore(); let history = [];
+  return {
+    store,
+    setRole(r) { role = r; },
+    async say(text, calls = [], content = '') {
+      const sent = [];
+      const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text, history, context: { products: P.map(({ controla, min, ...p }) => ({ ...p, stock: 999 })) } }) }), ENV,
+        { principalId: 'session:o', posRole: role }, (d, s = 200) => new Response(JSON.stringify(d), { status: s }),
+        { store, resolveRole: async () => role, verifyApproval: async () => true, reader, audit: async () => {}, readBusinessName: async () => 'Bodega',
+          fetch: async (_u, init) => { sent.push(JSON.parse(init.body)); return new Response(JSON.stringify({ choices: [{ message: { content, tool_calls: sent.length === 1 ? calls : [] } }] })); } });
+      const body = await r.json();
+      if (Array.isArray(body.turns)) history = [...history, ...body.turns.map(({ role: rr, content: c, sig, n, iat }) => ({ role: rr, content: c, sig, n, iat }))];
+      return { status: r.status, body, sent };
+    }
+  };
+}
+const ids = (r) => r.body.proposals.map((p) => p.product_id);
+const range = (a, b) => P.slice(a - 1, b).map((p) => p.id);
+
+test('INV-057: pedido masivo -> pregunta; «sí» -> lista en texto + primeras 5; «siguientes» de 5 en 5 hasta el final; sin volver al modelo', async () => {
+  const c = convo();
+  const q = await c.say('sumale 10 a todo el stock', sumAll(19), 'Listo, preparé 19 tarjetas.');
+  assert.equal(q.body.reply, 'Son 19 productos; ¿le muestro la lista para revisarla antes?');
+  assert.equal(q.body.proposals.length, 0);
+
+  const yes = await c.say('sí');
+  assert.equal(yes.status, 200);
+  assert.equal(yes.sent.length, 0, 'sin llamada al modelo');
+  const lines = yes.body.reply.split('\n');
+  assert.equal(lines[0], 'Esta es la lista (19 productos):');
+  assert.equal(lines.length, 21, yes.body.reply);
+  assert.equal(lines[1], '1. Arroz Costeño 750 g: stock 10 → 20 (+10)', 'stock del servidor, no el 999 del aparato');
+  assert.equal(lines[3], '3. Mantequilla Laive 200 g: stock 4 → 14 (+10)');
+  assert.equal(lines[19], '19. Huevos x15: stock 28 → 38 (+10)');
+  assert.equal(lines[20], 'Le preparo los primeros 5 para aplicar; dígame "siguientes" para los demás.');
+  assert.doesNotMatch(yes.body.reply, /999|se aplica aparte|Sin tarjeta/);
+  assert.deepEqual(ids(yes), range(1, 5));
+  assert.ok(yes.body.proposals.every((p) => p.type === 'ajuste' && p.needsConfirm && p.confirm_token && p.stock_actual !== 999 && p.cantidad === 10));
+  assert.equal(yes.body.proposals[2].stock_actual, 4); assert.equal(yes.body.proposals[2].stock_despues, 14);
+
+  const b2 = await c.say('siguientes');
+  assert.equal(b2.sent.length, 0);
+  assert.deepEqual(ids(b2), range(6, 10));
+  assert.equal(b2.body.reply, 'Aquí van los productos 6 a 10 de 19. Dígame "siguientes" para los demás.');
+  const b3 = await c.say('dame los siguientes');
+  assert.deepEqual(ids(b3), range(11, 15));
+  assert.equal(b3.body.reply, 'Aquí van los productos 11 a 15 de 19. Dígame "siguientes" para los demás.');
+  const b4 = await c.say('Siguientes.');
+  assert.deepEqual(ids(b4), range(16, 19));
+  assert.equal(b4.body.reply, 'Aquí van los productos 16 a 19 de 19. Ya no quedan más.');
+  assert.ok(b4.body.proposals.every((p) => p.confirm_token));
+
+  // Terminado: la lista ya no está; otro «siguientes» va al modelo como cualquier mensaje.
+  const after = await c.say('siguientes', [], 'No hay más tarjetas pendientes.');
+  assert.equal(after.sent.length, 1); assert.equal(after.body.proposals.length, 0);
+  assert.deepEqual(Object.keys(c.store._map.get(await PA.bulkKey({ principalId: 'session:o' })).value), []);
+});
+
+test('INV-057: «sí» sin la pregunta antes, o con otro rol, no saca la lista guardada', async () => {
+  const c = convo();
+  await c.say('sumale 10 a todo el stock', sumAll(8), 'Listo.');
+  const other = await c.say('cuanto arroz hay', [], 'Hay 10.');
+  assert.equal(other.sent.length, 1);
+  const yes = await c.say('si', [], 'Ok.');
+  assert.equal(yes.sent.length, 1, 'la última respuesta no era la pregunta: va al modelo'); assert.equal(yes.body.proposals.length, 0);
+
+  const e = convo();
+  await e.say('sumale 10 a todo el stock', sumAll(8), 'Listo.');
+  e.setRole('empleado:completo'); // mismo aparato, ahora sin permiso de ajustes: el historial del Admin no vale y no sale ninguna tarjeta
+  const emp = await e.say('sí', [], 'Ok.');
+  assert.equal(emp.status, 200, JSON.stringify(emp.body)); assert.equal(emp.sent.length, 1, 'va al modelo'); assert.equal(emp.body.proposals.length, 0);
+  assert.doesNotMatch(String(emp.body.reply), /Esta es la lista|stock \d/);
+});
+
+test('INV-057: si no se puede leer el stock del servidor, no hay tarjetas y la lista sigue guardada', async () => {
+  const c = convo();
+  await c.say('sumale 10 a todo el stock', sumAll(7), 'Listo.');
+  const save = reader.products; reader.products = async () => { throw new Error('base caída'); };
+  try {
+    const r = await c.say('dale');
+    assert.equal(r.sent.length, 0); assert.equal(r.body.proposals.length, 0);
+    assert.equal(r.body.reply, PA.BULK_READ_FAILED_TEXT);
+  } finally { reader.products = save; }
+});
