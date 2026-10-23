@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
 import { assistantChatRoute, buildDeepSeekRequest, toolsForRole, toolAllowed, createMemoryUsageStore, readLessons, payloadBytes } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { LEVELS_PATH } from '../../tools/cloudflare-lab/src/pos-assistant-levels-route.js';
+import { getDatabase } from '../../tools/cloudflare-lab/src/database-binding.js';
 import { canonicalReader } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 
 const T = await import('../../tools/cloudflare-lab/src/pos-assistant-tamanos.js').catch(() => ({}));
@@ -157,9 +158,9 @@ test('tarjeta tamano_caja: el Admin aplica con un toque (sin PIN), se escribe un
   assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_product_revisions WHERE product_id=?', prod.product_id).n, 1, 'un solo cambio');
   const audit = (await call('tok-dueno', '/auth/assistant/audit?limit=500', null, 'GET')).body;
   const rows = JSON.stringify(audit);
-  assert.match(rows, /asistente\.caja/); assert.match(rows, /caja:[-\d]+->24/);
+  assert.match(rows, /asistente\.caja/); assert.match(rows, /caja:[-\d.]+->24/);
   // el lector del asistente ya ve el tamaño confirmado
-  const list = await canonicalReader(f.env.DB).products();
+  const list = await canonicalReader(getDatabase(f.env)).products();
   const seenP = list.find((p) => String(p.id) === String(prod.product_id));
   assert.equal(seenP.caja, 24); assert.equal(seenP.precio_caja, 55.5);
 });
