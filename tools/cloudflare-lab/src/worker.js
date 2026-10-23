@@ -30,6 +30,7 @@ import { assistantReviewRoute, REVIEW_PATH as ASSISTANT_REVIEW_PATH } from './po
 import { assistantBoletaRoute, BOLETA_PATH as ASSISTANT_BOLETA_PATH } from './pos-assistant-boleta.js';
 import { belowCostRoute, BELOW_COST_PATH as ASSISTANT_BELOW_COST_PATH } from './pos-assistant-below-cost.js';
 import { featureDecision, employeeFeatureGrant, handleEmployeePerms, EMPLOYEE_PERMS_PATH } from './pos-employee-perms.js';
+import { assistantProductoFotoRoute, PRODUCTO_FOTO_PATH as ASSISTANT_PRODUCTO_FOTO_PATH } from './pos-assistant-producto-foto.js';
 import { handleRoles, ownerGate, posRoleFor, ROLE_PATHS, flagSaleDiscount, flagReview } from './pos-roles.js';
 
 const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
@@ -167,6 +168,13 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return cors(auth);
         return cors(await assistantBoletaRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // «Foto de producto» (solo Admin): foto de la etiqueta -> JSON para revisar; solo PRELLENA «Nuevo producto». No guarda nada. Misma bandera.
+      if (url.pathname === ASSISTANT_PRODUCTO_FOTO_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await assistantProductoFotoRoute(request, env, auth, json, { db: getDatabase(env) }));
       }
       // Registro del aparato dueño: además necesita ASSISTANT_OWNER_BOOTSTRAP=1 (la ruta responde 404 sin esa bandera).
       // Proveedor del asistente (solo dueño): estado de las claves (sin mostrarlas), «Probar» y cambio con tarjeta Confirmar.
