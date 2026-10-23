@@ -1834,7 +1834,7 @@ const ARRIVAL_RE = /\b(?:me\s+llegaron|me\s+llego|llegaron|llego|compre|compramo
 const NOT_PURCHASE_RE = /\b(?:devoluc\w*|devolvi\w*|merma|vencid\w*|da[nñ]ad\w*|rot[oa]s?|conteo|cont[eé]|me\s+devolvieron)\b/;
 const COST_ASK_RE = /\b(?:actualiz\w*|cambi\w*|pon\w*|corrig\w*|modific\w*|sube\w*|subir|baja\w*|bajar|guarda\w*)\s+(?:(?:el|los|su|sus|tambien\s+el|tambien\s+los)\s+)?costos?\b|\bcostos?\s+nuevos?\b|\bnuevos?\s+costos?\b/;
 const NAME_STOP = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'con', 'para', 'por', 'en', 'y', 'e',
-  'unidad', 'unidades', 'und', 'unid', 'uni', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'saco', 'sacos', 'kilo', 'kilos', 'kg', 'docena', 'docenas', 'botella', 'botellas', 'lata', 'latas', 'frasco', 'frascos', 'sobre', 'sobres', 'blister', 'blisters']);
+  'unidad', 'unidades', 'und', 'unid', 'uni', 'suelto', 'sueltos', 'suelta', 'sueltas', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'saco', 'sacos', 'kilo', 'kilos', 'kg', 'docena', 'docenas', 'botella', 'botellas', 'lata', 'latas', 'frasco', 'frascos', 'sobre', 'sobres', 'blister', 'blisters']);
 export function isArrivalText(text) { const t = foldText(text); return ARRIVAL_RE.test(t) && !NOT_PURCHASE_RE.test(t); }
 export function asksCostChange(text) { return COST_ASK_RE.test(foldText(text)); }
 function nameWords(v) { return foldText(v).replace(/(\d)([a-zñ])/g, '$1 $2').replace(/[^a-z0-9ñ]+/g, ' ').split(' ').filter((w) => w.length >= 3 && !NAME_STOP.has(w)).map((w) => w.length > 4 ? w.replace(/(?:es|s)$/, '') : w); }
@@ -1869,20 +1869,30 @@ const NAME_CUT_RE = /\s+(?:(?:a|en|por|x)\s+(?:s\/\.?\s*)?\d|(?:a\s+)?s\/\.?\s*\
 const NAME_FILLER_RE = /^(?:(?:un|una|unos|unas)\s+)?productos?\s+nuevos?(?:\s+que\s+no\s+(?:tengo|tenia|tenía|tenemos|hay|est[aá]))?\s*[,:;-]?\s*/i;
 // Renglón que solo repite la cantidad para otras filas («12 de cada uno», «10 c/u»): no es un producto.
 const ONLY_FILLER_RE = /^(?:de\s+)?(?:cada\s+(?:un[oa]|cosa|producto)|c\/u|c\.u\.?|todo|todos|todas|cada\s+uno\s+de\s+ellos)$/i;
+// (UNI-067) Renglón que es solo un empaque («2 cajas», «1 paquete») y renglón que empieza por sueltos o unidades («3 sueltos de primor»).
+const PACK_ONLY_RE = /^(?:cajas?|paquetes?|packs?|bolsas?|sacos?|docenas?|displays?|blisters?|fardos?|six\s*packs?)$/i;
+const LOOSE_LEAD_RE = /^(sueltos?|sueltas?|unidades|unidad|und|unid)\s+(?:de\s+|del\s+)?(.+)$/i;
 // Renglones «N nombre [a X cada uno | a X en total]» después de «me llegaron», «compré», etc.
 export function parseArrivalItems(text) {
   const raw = String(text ?? '').replace(/[\x00-\x1f\x7f]+/g, ' '), t = foldText(raw);
   const m = ARRIVAL_RE.exec(t); if (!m) return [];
   let body = raw.slice(m.index + m[0].length).replace(/^\s*(?:hoy|ayer|esta\s+mañana)?\s*[:,-]?\s*/i, '');
   const out = [];
+  let pack = null; // (UNI-067) «2 cajas» sin producto: es la 1.ª mitad de «2 cajas y 3 sueltos de primor», no un renglón aparte
   for (const part of body.split(/\s*(?:(?<!\d),|,(?=\s)|[;\n]|\s+y\s+|\s+e\s+|\s+mas\s+|\s+más\s+)\s*(?=\d)/i)) {
+    const prev = pack; pack = null;
     const r = /^(\d+(?:[.,]\d+)?)\s+(.+?)(?:\s+(?:a|en|por|pagu[eé]|me\s+cost[oó]|cost[oó])\s+(?:s\/\.?\s*)?(\d+(?:[.,]\d+)?)\s*(?:soles?)?\s*(cada\s+un[oa]|c\/u|c\.u\.?|la\s+unidad|por\s+unidad|el\s+total|en\s+total|total|todo)?)?\s*[.!?]*\s*$/i.exec(part.trim());
     if (!r) continue;
     const cantidad = qty(String(r[1]).replace(',', '.'));
     const nombre = cleanText(r[2].replace(NAME_CUT_RE, '').replace(/\s+(?:de|del)\s+(?:la\s+|el\s+)?(?:distribuidora|proveedor|tienda|mercado|almac[eé]n)\b.*$/i, '').replace(/^(?:de|del)\s+/i, '').replace(NAME_FILLER_RE, '').replace(/[\s,;:.-]+$/, ''), 80);
+    if (cantidad && PACK_ONLY_RE.test(nombre)) { pack = cleanText(r[1] + ' ' + nombre, 30); continue; }
     if (!cantidad || !nombre || ONLY_FILLER_RE.test(nombre) || !nameWords(nombre).length) continue;
     let costo = r[3] != null ? money(String(r[3]).replace(',', '.')) : null;
     if (costo != null && r[4] && /total|todo/i.test(r[4])) costo = money(costo / cantidad);
+    const loose = prev ? LOOSE_LEAD_RE.exec(nombre) : null;
+    // Mezcla de cajas y sueltos del MISMO producto: un solo renglón. El total depende de cuántas trae la caja (no se adivina):
+    // la fila lleva «(2 cajas y 3 sueltos)» a la vista y nunca se vincula sola a un producto con la cantidad suelta.
+    if (loose && nameWords(loose[2]).length) { out.push({ nombre: cleanText(loose[2] + ' (' + prev + ' y ' + r[1] + ' ' + loose[1] + ')', 80), cantidad, costo_unitario: costo, mixta: true }); continue; }
     out.push({ nombre, cantidad, costo_unitario: costo });
     if (out.length >= 30) break;
   }
@@ -1910,7 +1920,12 @@ export function costIsStated(cost, cantidad, nums, packs = []) {
   const c = Number(cost), q = Number(cantidad), near = (a) => Math.abs(a - c) < 0.006;
   return nums.some((n) => near(n) || near(n / 100) || (q > 0 && near(n / q)) || packs.some((k) => near(n / k)));
 }
-const packSizes = (name) => [...foldText(name).matchAll(/\b(?:caja|paquete|pack|bolsa|six|x)\s*(?:de\s+|x\s*)?(\d+)\b/g)].map((m) => Number(m[1])).filter((k) => k >= 2);
+// (UNI-037) Tamaño por peso o volumen del nombre («AZUCAR RUBIA X 50KG», «X 2.5KG», «X 20LT», «X 500GR»): costo por kilo o litro
+// = lo que costó el saco / bidón entre su tamaño. Gramos y mililitros cuentan en kilos y litros.
+const WEIGHT_SIZE_RE = /(?:^|[^a-z0-9.,])(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|kilogramos?|lts?|litros?|l|grs?|g|gramos?|ml|cc)(?![a-z])/g;
+const weightSizes = (name) => [...foldText(name).matchAll(WEIGHT_SIZE_RE)].map((m) => { const n = Number(m[1].replace(',', '.')); return /^(?:grs?|g|gramos?|ml|cc)$/.test(m[2]) ? n / 1000 : n; })
+  .filter((k) => Number.isFinite(k) && k > 0 && k !== 1);
+const packSizes = (name) => [...[...foldText(name).matchAll(/\b(?:caja|paquete|pack|bolsa|six|x)\s*(?:de\s+|x\s*)?(\d+)\b/g)].map((m) => Number(m[1])).filter((k) => k >= 2), ...weightSizes(name)];
 // Pone en 0 (marcado «costo») el costo que el modelo puso sin que nadie lo dijera. Devuelve los nombres de esas filas.
 export function clearUnstatedCosts(proposals, texts) {
   const nums = statedNumbers(texts), names = [];
@@ -1937,7 +1952,7 @@ export function arrivalToPurchase(proposals, dropped, text, role, ctx, image = f
   for (const it of items) {
     const have = lineas.find((l) => coveredBy(it, l, ctx));
     if (have) { if (have.costo_unitario == null && it.costo_unitario != null) have.costo_unitario = it.costo_unitario; continue; }
-    const p = uniqueProduct(it.nombre, ctx);
+    const p = it.mixta ? null : uniqueProduct(it.nombre, ctx);
     lineas.push({ product_id: p ? p.id : null, nombre: p ? p.nombre : it.nombre, cantidad: it.cantidad, costo_unitario: it.costo_unitario });
   }
   if (lineas.length <= (compras[0]?.lineas.length || 0) && compras.length <= 1 && !entradas.length) return proposals; // nada que sumar
