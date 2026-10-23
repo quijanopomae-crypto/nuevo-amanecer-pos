@@ -32,6 +32,7 @@ import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_AL
   bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
 import { CONFIG_CARD, CONFIG_DEST, isServerKey, employeeServerKey, CONFIG_ADMIN_ONLY_TEXT, resolveConfigProposals, applyConfigCard, configFillNames, configFillValue } from './pos-assistant-config-route.js';
+import { cutInfo, cutModelMessage, cutUserText, adjustRequests, unattendedRequests, unattendedText, MULTI_ADJUST_RULE, asksNegativeBulk, negativeBulkText, NEGATIVE_BULK_RULE } from './pos-assistant-varios.js';
 import { MEMORY_LIMITS, trimHistory, readNote, noteTurn, readResumenField, cleanResumen, verifyResumen, buildResumen, resumenMessage, resumenSigData } from './pos-assistant-memoria.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
@@ -1651,6 +1652,9 @@ export function systemPrompt(role, ctx, text = '') {
     'Guía: vender = Punto de Venta. Compra = Inventario > Compras > Nueva compra. Movimiento = Inventario > producto > Movimiento. Producto nuevo = Inventario > + Nuevo. Abono = Clientes > ficha > Abonar. Deudas = Clientes > Reporte de deuda.',
     // (lote en vivo 22-10, b) «compré 10 Inka Kola y no aparecen en el stock»
     ...(STOCK_NOT_UP_RE.test(String(text || '')) ? [STOCK_NOT_UP_RULE] : []),
+    // (auditoría 500, AJ-043 / AJ-002) solo cuando el mensaje lo pide, para no sumar bytes a todos los pedidos.
+    ...(toolAllowed(role, 'proponer_ajuste_stock') && adjustRequests(text).length ? [MULTI_ADJUST_RULE] : []),
+    ...(toolAllowed(role, 'proponer_ajuste_stock') && asksNegativeBulk(text) ? [NEGATIVE_BULK_RULE] : []),
     // (lote en vivo 22-10) «¿cómo sé cuánto me deben?» solo explicaba el camino (y a una pantalla «Deudas» que no existe). Solo Admin.
     ...(role === 'owner' ? ['CUÁNTO LE DEBEN: usa consultar deudas_clientes; di el total y cuántos clientes deben (detalle en Clientes > Reporte de deuda).'] : []),
     limaCalendarLine(Date.now()),
@@ -2844,7 +2848,12 @@ const ERR_STATUS = { upstream_busy: 503, upstream_error: 502, upstream_timeout: 
 // role: el del SERVIDOR (sesión autenticada). Sin rol (o cualquier otro): lo más estricto (redactText). Dueño: redactModelOwner.
 export function parseChatBody(body, role = null) {
   if (!body || typeof body !== 'object') return { error: 'bad_request' };
-  const text = cleanFor(role, maskCredentialValues(body.text), ASSISTANT_LIMITS.maxMessageChars); // PIN/clave tapados antes del modelo (SEG 500)
+  // (VE-010) el tope sigue en 1500 (con 1500 la 1.ª llamada del Admin ya ronda 17,7 KB), pero ya no corta en silencio: queda `cut` para avisar al modelo y a la persona.
+  // (SEG 500) PIN/clave se tapan sobre el texto COMPLETO antes de cortar: un PIN justo en el corte nunca queda a medias sin tapar (ni en el modelo ni en el aviso).
+  // Solo se limpia un tramo poco más largo que el tope (un cuerpo enorme no pasa entero por los filtros).
+  const max = ASSISTANT_LIMITS.maxMessageChars, rawText = maskCredentialValues(typeof body.text === 'string' ? body.text : String(body.text ?? ''));
+  const full = cleanFor(role, rawText.slice(0, max + 400), max + 400), text = full.slice(0, max).trim();
+  const cut = text ? cutInfo(full, max, rawText.length) : null;
   let image = null;
   if (body.image != null) {
     if (typeof body.image !== 'string' || body.image.length > ASSISTANT_LIMITS.maxImageChars) return { error: 'image_too_large' };
@@ -2860,7 +2869,7 @@ export function parseChatBody(body, role = null) {
     .map((m) => (m && typeof m === 'object' ? { ...m, raw: typeof m.content === 'string' ? m.content : null, cut: m.cut === true, sig: typeof m.sig === 'string' ? m.sig.slice(0, 128) : null, n: okInt(m.n) ? m.n : null, iat: okInt(m.iat) ? m.iat : null } : m))
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .map((m) => ({ role: m.role, content: cleanFor(role, m.role === 'user' ? maskCredentialValues(m.content) : m.content, ASSISTANT_LIMITS.maxMessageChars), raw: m.raw, cut: m.cut === true, sig: m.sig, n: m.n, iat: m.iat })).filter((m) => m.content);
-  return { text, image, history, context: body.context, stream: body.stream === true, resumen: readResumenField(body.resumen), overflow: Math.max(0, all.length - ASSISTANT_LIMITS.maxHistory), cards: parseCards(body.cards) };
+  return { text, cut, image, history, context: body.context, stream: body.stream === true, resumen: readResumenField(body.resumen), overflow: Math.max(0, all.length - ASSISTANT_LIMITS.maxHistory), cards: parseCards(body.cards) };
 }
 // Estado de las tarjetas que el aparato tiene en pantalla (solo tipo y estado, de listas cerradas). Sin campo = aparato viejo: null.
 export const CARD_TYPES = Object.freeze(['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto']);
@@ -3083,6 +3092,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null, cards: parsed.cards });
+    if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
     result = emit ? await callModelStream(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
@@ -3262,6 +3272,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // (auditoría 500, SEG) varias tarjetas de cambio de producto en una respuesta: el servidor dice cuántas son y que cada una se aplica aparte
   // (no depende del modelo). Si el texto ya cortado era el del tope, sigue marcado como cortado.
   if (!resetAsk) { const was = capped !== null && reply === capped; const r2 = withChangeCount(reply, proposals); if (r2 !== reply) { reply = r2; if (was) capped = reply; } }
+  // (auditoría 500) avisos fijos del servidor, cada uno en su línea (pos-assistant-varios.js): lo que no se atendió nunca se pierde en silencio.
+  // Van DESPUÉS de la frase «Son N productos…» (que se pega a la última frase): así cada aviso queda en su propia línea y CHANGE_COUNT_RE no los toca.
+  if (!resetAsk) reply = await serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader: rd0 });
   tm.ms_db = Math.round(dbMs); tm.db_stmts = dbc.n; tm.ms_total = ms(t0); // antes de la bitácora (su escritura: +1 sentencia)
   const times = timingFields(tm); logTimings(tm);
   // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos. La primera fila lleva los tiempos del pedido (sin migración:
@@ -3288,8 +3301,24 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
   const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner}) : null;
-  return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
+  return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
+}
+
+// (auditoría 500) AJ-002 negativos en masa, AJ-043 varios movimientos sin tarjeta y VE-010 mensaje cortado: una línea aparte por aviso.
+async function serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader }) {
+  const lines = [];
+  const canAdjust = toolAllowed(role, 'proponer_ajuste_stock'), adj = proposals.filter((p) => p.type === 'ajuste');
+  if (canAdjust && asksNegativeBulk(parsed.text)) {
+    let list = null; try { if (reader && typeof reader.products === 'function') list = await reader.products(); } catch { list = null; } // solo lectura
+    lines.push(negativeBulkText(list, adj.map((p) => p.product_id)));
+  } else if (canAdjust && !proposals.some((p) => p.type === 'compra')) {
+    const reqs = adjustRequests(parsed.text);
+    const left = reqs.length ? unattendedRequests(reqs, [...adj.map((p) => p.nombre), ...(noStock || [])]) : [];
+    if (left.length) lines.push(unattendedText(left));
+  }
+  if (parsed.cut) lines.push(cutUserText(parsed.cut));
+  return lines.length ? [reply, ...lines].filter(Boolean).join('\n') : reply;
 }
 
 // Tarjetas de cambio de UN producto cada una (precio, costo, stock, producto nuevo). Con 2 o más, la respuesta lo dice con una frase fija.
