@@ -9,7 +9,8 @@
   'use strict';
   var FEATURE_ID = 'stock-negativo-configurable', PAGE_ID = 'pageAjustesInventario';
   var DECIMAL = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/;
-  var FRACTIONAL_UNITS = /^(kilogramos?|kilos?|kgs?|gramos?|grs?|g|litros?|lts?|l|mililitros?|ml|metros?|m)$/i;
+  // Decimales solo en kg, g, L y mL; UND y demás, enteros.
+  var FRACTIONAL_UNITS = /^(kg|kgs|kilos?|kilogramos?|g|gr|grs|gramos?|l|lt|lts|litros?|ml|mililitros?)$/i;
   function aj() { return root.NA_AJUSTES_INVENTARIO || null; }
   function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
   function available() {
@@ -53,7 +54,12 @@
     extra = String(extra == null ? '' : extra).replace(/\s+/g, ' ').trim();
     return (extra ? n + '. ' + extra : n).slice(0, 300);
   }
-  var inFlight = {}, done = {};
+  // Registro de idempotencia persistido (localStorage), además de la verificación de stock esperado.
+  var DONE_KEY = 'na_stock_negativo_done_v1', MAX_DONE = 200, inFlight = {};
+  function store() { try { return root.localStorage || null; } catch (_) { return null; } }
+  function readDone() { var s = store(); try { var v = s && JSON.parse(s.getItem(DONE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } }
+  function isDone(k) { return readDone().indexOf(k) >= 0; }
+  function markDone(k) { var s = store(); if (!s) return; var v = readDone().filter(function (x) { return x !== k; }); v.push(k); try { s.setItem(DONE_KEY, JSON.stringify(v.slice(-MAX_DONE))); } catch (_) {} }
   function key(sim) { return sim.productId + '|' + sim.before + '|' + sim.after; }
   function products() {
     var c = root.NuevoAmanecerCanonical;
@@ -65,7 +71,7 @@
     if (!available()) return { ok: false, message: 'Sin permiso.' };
     if (!sim || !sim.ok) return { ok: false, message: 'Primero revisa el ajuste.' };
     var k = key(sim);
-    if (done[k]) return { ok: true, duplicate: true, message: 'Este ajuste ya se registró.' };
+    if (isDone(k)) return { ok: true, duplicate: true, message: 'Este ajuste ya se registró.' };
     if (inFlight[k]) return { ok: false, duplicate: true, message: 'Este ajuste ya se está registrando.' };
     var prod = products().find(function (p) { return p && pid(p) === sim.productId; });
     if (!prod) return { ok: false, message: 'Producto no encontrado.' };
@@ -74,7 +80,7 @@
     inFlight[k] = true;
     try {
       var res = await aj().register({ productId: sim.productId, type: 'correccion', direction: 'sumar', quantity: String(sim.delta), note: noteFor(sim, extraNote) });
-      if (res && res.ok) done[k] = true;
+      if (res && res.ok) markDone(k);
       return res || { ok: false, message: 'No se registró el ajuste.' };
     } finally { delete inFlight[k]; }
   }

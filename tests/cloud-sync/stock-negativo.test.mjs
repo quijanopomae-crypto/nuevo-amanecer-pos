@@ -8,12 +8,13 @@ import { PERMISSIONS } from '../../tools/cloudflare-lab/src/pos-permissions.js';
 const AJ = readFileSync('POS/js/modules/ajustes-inventario.js', 'utf8');
 const SN = readFileSync('POS/js/modules/stock-negativo.js', 'utf8');
 const BROWSER_PERMS = readFileSync('POS/js/config/pos-permissions.js', 'utf8');
-function ctx({ locked = false, owner = true } = {}) {
+function memStore(m = new Map()) { return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), map: m }; }
+function ctx({ locked = false, owner = true, localStorage = memStore() } = {}) {
   const c = vm.createContext({ console, productos: [
     { id: 1, name: 'Galleta', stock: -3, unidad: 'unidad', costo: 1.2 },
     { id: 2, name: 'Arroz', stock: -10, unidad: 'kg', costo: 3 },
     { id: 3, name: 'Leche', stock: 5, unidad: 'unidad' },
-    { id: 4, name: 'Servicio', stock: -1, controlInventario: false } ], inventoryMovements: [], saves: 0 });
+    { id: 4, name: 'Servicio', stock: -1, controlInventario: false } ], inventoryMovements: [], saves: 0, localStorage });
   c.NA_ROLES = { isOwner: () => owner };
   c.NA_PERMISSIONS = { canAccessScreen: () => true, featureLocked: id => id === 'stock-negativo-configurable' ? locked : false };
   vm.runInContext(`globalThis.applyInventoryMovement = function (o) { var p = productos.find(function (x) { return String(x.id) === String(o.productId); });
@@ -101,4 +102,20 @@ test('lotes: producto negativo con lotes queda marcado y bloqueado, sin movimien
   const sim = sn.simulate(row, '0'); assert.equal(sim.ok, false); assert.equal(sim.blocked, 'LOTS');
   const forced = await sn.apply({ ok: true, productId: '1', before: -3, after: 0, delta: 3 });
   assert.equal(forced.blocked, 'LOTS'); assert.equal(c.inventoryMovements.length, 0);
+});
+
+test('idempotencia persistida: tras recargar, el mismo ajuste no se repite', async () => {
+  const ls = memStore(), a = ctx({ localStorage: ls });
+  const sim = a.NA_STOCK_NEGATIVO.simulate(a.NA_STOCK_NEGATIVO.negatives(a.productos).find(r => r.id === '1'), '0');
+  assert.equal((await a.NA_STOCK_NEGATIVO.apply(sim)).ok, true);
+  assert.match(ls.getItem('na_stock_negativo_done_v1'), /1\|-3\|0/);
+  const b = ctx({ localStorage: ls }); // otra pestaña / recarga, mismos datos sintéticos (stock -3 otra vez)
+  const r = await b.NA_STOCK_NEGATIVO.apply(sim);
+  assert.equal(r.duplicate, true); assert.equal(b.inventoryMovements.length, 0);
+});
+
+test('unidades: decimales solo kg, g, L, mL; UND y metros enteros', () => {
+  const sn = ctx().NA_STOCK_NEGATIVO;
+  for (const u of ['kg', 'g', 'L', 'mL', 'litros']) assert.equal(sn.simulate({ id: 'x', name: 'x', stock: -1, unit: u }, '0.5').ok, true, u);
+  for (const u of ['unidad', 'UND', 'm', '']) assert.equal(sn.simulate({ id: 'x', name: 'x', stock: -1, unit: u }, '0.5').ok, false, u);
 });
