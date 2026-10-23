@@ -348,12 +348,31 @@
       purchases = []; purchaseState = 'unavailable'; renderPurchases();
     });
   }
+  // CM-082: en la nube el stock del producto ya descuenta las ventas cobradas que siguen en la
+  // cola sin confirmar. Se agregan como filas «sin confirmar» para que el saldo inicial cuadre
+  // también sin conexión. Solo lectura: la cola nunca se modifica.
+  var pendingUnreadable = false;
+  function pendingSales() {
+    var outbox = root.NuevoAmanecerCanonicalSaleOutbox, out = [];
+    pendingUnreadable = false;
+    try {
+      var snap = outbox && typeof outbox.snapshot === 'function' ? outbox.snapshot() : null;
+      (snap && Array.isArray(snap.intents) ? snap.intents : []).forEach(function (intent) {
+        if (!intent || typeof intent.sale_id !== 'string' || !intent.sale_id || !Array.isArray(intent.items)) return;
+        out.push({ sale_id: intent.sale_id, created_at: intent.created_at, document: intent.sale_id + ' (sin confirmar)',
+          items: intent.items.filter(function (item) { return item && typeof item === 'object'; })
+            .map(function (item) { return { product_id: item.product_id, quantity: item.quantity }; }) });
+      });
+    } catch (_) { pendingUnreadable = true; return []; }
+    return out;
+  }
   function sources() {
     var api = root.NuevoAmanecerCanonical, cloud = api && typeof api.enabled === 'function' && api.enabled();
     var snap = cloud && typeof api.snapshot === 'function' ? api.snapshot() : {};
+    var sales = typeof ventas !== 'undefined' ? ventas : root.ventas;
     return {
       products: typeof productos !== 'undefined' ? productos : root.productos,
-      sales: typeof ventas !== 'undefined' ? ventas : root.ventas,
+      sales: cloud ? (Array.isArray(sales) ? sales : []).concat(pendingSales()) : sales,
       movements: cloud ? (snap && snap.inventoryMovements) : (typeof inventoryMovements !== 'undefined' ? inventoryMovements : root.inventoryMovements)
     };
   }
@@ -446,6 +465,7 @@
     if (report.currentStock <= 0 && report.currentStock != null) content.appendChild(element('p', 'kardex-note', 'Sin stock'));
     if (report.currentStock == null) content.appendChild(element('p', 'kardex-note', 'Stock actual no disponible. No se pueden calcular saldos.'));
     if (product._canonicalPendingStock) content.appendChild(element('p', 'kardex-note', 'El stock incluye cambios pendientes, igual que Inventario. El saldo inicial los incluye.'));
+    if (pendingUnreadable) content.appendChild(element('p', 'kardex-note', 'No se pudo leer las ventas sin confirmar. Se muestran solo los movimientos confirmados.'));
     if (report.skipped) content.appendChild(element('p', 'kardex-note', report.skipped + ' registro(s) sin fecha o cantidad válida omitidos del detalle. El saldo inicial se calcula desde el stock disponible.'));
     if (report.rows.length === 1) content.appendChild(element('p', 'kardex-note', 'Sin movimientos registrados en el período.'));
     var table = element('table', 'kardex-table'), head = element('thead'), header = element('tr'), body = element('tbody');

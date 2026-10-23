@@ -27,6 +27,8 @@
   var access = null;
   function isAdmin() { return !adminOff && !!access && (access.role === 'owner' || access.level === 'consultas' || access.level === 'consultas_documentos'); }
   function isOwnerAccess() { return isAdmin() && access.role === 'owner'; }
+  // «Ventas bajo costo»: Admin o nivel 3 con «costos y cambios» (roles.cambios del ping), lo mismo que permite el Worker (seesOwnerData).
+  function canBelowCost() { return isOwnerAccess() || (isAdmin() && access.role === 'empleado' && access.level === 'consultas_documentos' && access.cambios === true); }
   // Foto: solo dueño y solo si el proveedor en uso lee fotos (ping vision:false = sin botón ni chip; Bot 4).
   function canPhoto() { return isOwnerAccess() && !(access && access.vision === false); }
   function pageId() { var a = doc.querySelector('.page.active'); return a ? a.id : null; }
@@ -539,7 +541,8 @@
     if (p.type === 'compra' && p.fueraDeLimite) warn += '<div class="warn">' + (p.fueraDeLimite === 1 ? '1 fila pasa el límite: corrígela en la factura o quítala.' : p.fueraDeLimite + ' filas pasan el límite: corrígelas en la factura o quítalas.') + '</div>';
     if (p.type === 'compra' && p.omitidas && p.omitidas.length) warn += '<div class="warn">No se incluyó porque no lleva control de stock: ' + p.omitidas.map(function (o) { return E(o.nombre); }).join(', ') + '.</div>';
     if (p.type === 'compra' && p.sinProducto) warn += '<div class="warn">' + (p.sinProducto === 1 ? '1 línea no tiene producto registrado: revísala.' : p.sinProducto + ' líneas no tienen producto registrado: revísalas.') + '</div>';
-    if (p.type === 'precio' && p.cambioGrande) warn += '<div class="warn">Cambio grande (más de 50%). Revisa bien.</div>';
+    if (p.type === 'precio' && p.quisoDecir != null) warn += '<div class="warn">¿Quiso decir ' + soles(p.quisoDecir) + '? Si es así, no confirmes y escribe el precio con punto.</div>';
+    else if (p.type === 'precio' && p.cambioGrande) warn += '<div class="warn">Cambio grande (más de 50%). Revisa bien.</div>';
     if ((p.type === 'precio' || p.type === 'producto') && p.bajoCosto) warn += '<div class="warn">El precio queda por debajo del costo.</div>';
     if (p.type === 'ajuste' && p.quedaNegativo) warn += '<div class="warn">El stock quedaría negativo. Revisa la cantidad.</div>';
     if (p.type === 'ajuste' && p.grande) warn += '<div class="warn">Cantidad muy grande. Revisa bien.</div>';
@@ -547,7 +550,7 @@
     if (p.type === 'producto' && p.revisar) warn += '<div class="warn">Precio o costo fuera de lo normal. Revisa bien.</div>';
     var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
       configuracion: p.destino==='servidor'?'Al confirmar se guarda en el servidor. Afecta a toda la tienda.':'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
-      precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
+      precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo ' + (p.deChat ? 'nuevo' : 'de la factura') + '. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
     var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note" data-docnote></div>' : '';
@@ -825,7 +828,9 @@
   }
   // ---------- «Ventas bajo costo» (solo Admin) ----------
   // Solo lectura: el servidor compara lo cobrado con el costo actual y arma el informe. Aquí solo se muestra (texto, sin tablas HTML).
-  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
+  // (auditoría 500, P-051/P-052) «vendiendo a perdida», «vendo algo a pérdida»: verbo de venta y hasta 3 palabras antes de «a pérdida»
+  // (una baja como «pasa 3 leches vencidas a pérdida» NO abre el informe). Mismo patrón que el Worker (BELOW_COST_ASK_RE).
+  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bvend(?:o|es?|en|emos|[ií]|i[oó]|imos|ieron|iendo|ido|er|[ií]a[ns]?|[ií]amos)(?![a-záéíóúñ])(?:\s+[^\s.,;:!?¿¡]+){0,3}?\s+a\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
   function belowRows(m, d) {
     var list = el('div', 'na-asst-below');
     (d.ventas || []).slice(0, 50).forEach(function (g) { if (!g) return; var r = el('div', 'na-asst-below-row');
@@ -971,7 +976,7 @@
     if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
     if (!image && isOwnerAccess() && PRODFOTO_RE.test(text)) { inputEl.value = ''; return prodFotoPick(); }
     if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !isReview(text)) return learnedShow(text);
-    if (!image && isOwnerAccess() && BELOW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return belowCost(text); }
+    if (!image && canBelowCost() && BELOW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return belowCost(text); }
     if (!image && isOwnerAccess() && isReview(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
