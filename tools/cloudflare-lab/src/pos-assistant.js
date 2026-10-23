@@ -2591,7 +2591,8 @@ const NAME_WORD_RE = /^[\p{L}][\p{L}'’-]*/u;
 // (known.customers) se tapa SIEMPRE (también sus apellidos en minúscula); «señora/sr./srta.» siempre es persona. Sin known (o 'strict'): estricto, como antes (así el empleado, que no lo recibe).
 const REPLY_BRAND_CUE = /^(?:don|dona)$/;
 const REPLY_PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada|marca|producto)\s+$/i;
-const REPLY_CATALOG_TOKEN = /(?<![\p{L}\d])\d+(?:[.,]\d+)?\s*(?:G|GR|GRS|KG|ML|L|LT|LTS|CC|OZ|UND|UNID|UN|BOT|PQT|SOB)(?![\p{L}\d])|(?<![\p{L}\d])X\s*\d/u;
+// (revisión #998) la «X n» sola no basta: «DON PEDRO X 2» es una persona (2 para don Pedro); hace falta una medida con unidad (500GR, 1 L…).
+const REPLY_CATALOG_TOKEN = /(?<![\p{L}\d])\d+(?:[.,]\d+)?\s*(?:G|GR|GRS|KG|ML|L|LT|LTS|CC|OZ|UND|UNID|UN|BOT|PQT|SOB)(?![\p{L}\d])/u;
 // (revisión #998) tras «don/doña» + nombre, un verbo de deuda/pago (con o sin tilde, también «le fié») es siempre una persona: se tapa.
 const REPLY_DEBT_VERB = /^(?:deb(?:e|en|ia|ian|era|eria)|adeud\w*|pag(?:o|aba|aron|ara|ue)|abon(?:o|aba|aron|ara|e)|fi(?:o|e|aba|aron|amos|ado|ada))$/;
 const replyWords = (x) => LESSON_FOLD(x).replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' ').filter(Boolean);
@@ -2602,6 +2603,12 @@ const clientKeys = (customers) => (Array.isArray(customers) ? customers : []).ma
 const startsWithWords = (ws, key) => key.length && key.every((k, i) => ws[i] === k);
 const debtAfter = (rest) => { const ws = replyWords(rest); return REPLY_DEBT_VERB.test(ws[0] || '') || (/^(?:le|les|me|nos|te)$/.test(ws[0] || '') && REPLY_DEBT_VERB.test(ws[1] || '')); };
 const isCaps = (w) => /\p{Lu}/u.test(w) && w === w.toUpperCase();
+// (revisión #998) dónde termina el nombre tras «don/doña/señora…»: los apellidos siguen el estilo del primer nombre (en minúscula también,
+// «doña juana pérez»), pero no se tragan un verbo de deuda/pago, una medida («KG», la «X» de «X 2»), palabras vacías ni verbos comunes.
+const NAME_UNIT = new Set(['g', 'gr', 'grs', 'kg', 'kilo', 'kilos', 'ml', 'l', 'lt', 'lts', 'litro', 'litros', 'cc', 'oz', 'und', 'unid', 'un', 'bot', 'pqt', 'sob', 'soles']);
+const NAME_STOP_VERB = new Set(['tiene', 'vino', 'viene', 'esta', 'estuvo', 'quiere', 'dice', 'dijo', 'trajo', 'lleva', 'compra', 'pide', 'hoy', 'ayer', 'manana', 'siempre', 'aun', 'todavia']);
+const nameStop = (w, rest, lower) => { const f = LESSON_FOLD(w);
+  return NAME_NOT.has(w.toLowerCase()) || REPLY_DEBT_VERB.test(f) || NAME_UNIT.has(f) || (f === 'x' && /^[ \t]*\d/.test(rest)) || (lower && (NAME_STOP_VERB.has(f) || /ó$/u.test(w))); };
 export function maskReplyPeople(value, known = null) {
   const s = String(value ?? '');
   if (!REPLY_PEOPLE_GATE.test(s)) return s;
@@ -2614,7 +2621,8 @@ export function maskReplyPeople(value, known = null) {
     const after = m.index + m[0].length, w1 = NAME_WORD_RE.exec(out.slice(after));
     if (!w1 || NAME_NOT.has(w1[0].toLowerCase())) continue;
     let end = after + w1[0].length, k = 0, nx;
-    while (k < 3 && (nx = /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u.exec(out.slice(end))) && !NAME_NOT.has(nx[1].toLowerCase()) && (strict || !REPLY_DEBT_VERB.test(LESSON_FOLD(nx[1])))) { end += nx[0].length; k++; }
+    const lower = !/\p{Lu}/u.test(w1[0]), nextRe = lower ? /^[ \t]+(\p{Ll}[\p{L}'’-]*)/u : /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u;
+    while (k < 3 && (nx = nextRe.exec(out.slice(end))) && !nameStop(nx[1], out.slice(end + nx[0].length), lower)) { end += nx[0].length; k++; }
     if (!strict) {
       const nl = out.lastIndexOf('\n', m.index) + 1, eol = out.indexOf('\n', after), lineEnd = eol < 0 ? out.length : eol;
       const tailWs = replyWords(out.slice(after, lineEnd)), client = keys.filter((key) => startsWithWords(tailWs, key)).reduce((a, key) => Math.max(a, key.length), 0);
@@ -2626,7 +2634,7 @@ export function maskReplyPeople(value, known = null) {
         const before = out.slice(nl, m.index);
         const brand = REPLY_PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before)) // «fideo don …», «aceite doña …» (sanitizeLesson)
           || (first.length >= 3 && prods.some((p) => p.includes(key))) // «don vittorio» en un producto conocido del pedido
-          || (isCaps(m[1]) && isCaps(w1[0]) && REPLY_CATALOG_TOKEN.test(out.slice(end, lineEnd))); // MAYÚSCULAS de catálogo, solo con medida (KG, GR, X 20…)
+          || (isCaps(m[1]) && isCaps(w1[0]) && REPLY_CATALOG_TOKEN.test(out.slice(end, lineEnd))); // MAYÚSCULAS de catálogo, solo con medida con unidad (500GR, 2 KG…; la «X n» sola no)
         if (brand) { HONORIFIC_RE.lastIndex = end; continue; }
       }
     }
