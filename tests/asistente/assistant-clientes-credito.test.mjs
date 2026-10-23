@@ -799,3 +799,35 @@ test('#995 (bloqueo tras la base) «cliente 5%», «cliente 5 S/», «cliente 5 
     assert.equal(reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', 'stream=' + stream);
   }
 });
+
+// (bloqueo en 764d2ee3) Una palabra de la lista fija, un artículo o una palabra de tiempo ENTRE el verbo y el nombre no rompe la cercanía:
+// el nombre se busca igual. Sin Rosa en Clientes: «No encontré a un cliente llamado Rosa», nunca el total; con Rosa: cliente #5.
+const GAP_ROSA = ['¿cuánto me pagó solo Rosa esta semana?', '¿cuánto me pagó solo rosa esta semana?', '¿me pagó recién Rosa?', '¿me pagaron ellos, Rosa?',
+  '¿me pagó entre todos Rosa?', '¿me pagó hoy Rosa?', '¿me pagó ayer Rosa?', '¿me pagó mi Rosa esta semana?', '¿me pagó mañana Rosa?', '¿me pagó anoche Rosa?', '¿me pagó temprano Rosa?'];
+const noRosa = (d) => ({ ...d, customers: d.customers.filter((c) => c.id !== '5') });
+test('#995 (bloqueo en 764d2ee3) «me pagó solo/recién/hoy/ayer/mi/ellos, Rosa»: sin Rosa = «No encontré… Rosa» sin IA ni total; con Rosa = cliente #5 (con y sin partes)', async () => {
+  for (const text of GAP_ROSA) for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = text + ' stream=' + stream + ' ' + args.tipo;
+    const miss = await askP(text, { stream, args, data: noRosa(DATA_CR) });
+    assert.equal(miss.reply, 'No encontré a un cliente llamado Rosa. Revise el nombre en Clientes o dígame su código («cliente #código»).', why);
+    assert.equal(miss.cap.length, 0, why);
+    const hit = await askP(text, { stream, args });
+    assert.equal(hit.reply, ROSA_REPLY, why); noNamesP(hit.cap, why);
+  }
+  for (const data of [DATA_CR, noRosa(DATA_CR)]) for (const stream of [false, true]) {
+    const { reply, cap } = await askP('¿cuánto me pagó la vecina Gumercinda?', { stream, data });
+    assert.match(reply, /^No encontré a un cliente llamado Gumercinda\./, 'stream=' + stream); assert.equal(cap.length, 0);
+  }
+});
+test('#995 (bloqueo en 764d2ee3) «¿cuánto me pagó cada uno, Rosa y Elmer?» sin Rosa: dice que Rosa no está, nunca solo lo de Elmer (con y sin partes)', async () => {
+  for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = 'stream=' + stream + ' ' + args.tipo;
+    const { reply, cap } = await askP('¿cuánto me pagó cada uno, Rosa y Elmer?', { stream, args, data: noRosa(DATA_P) });
+    assert.match(reply, /^No encontré a un cliente llamado Rosa\./, why); assert.ok(!/S\/ \d/.test(reply), why); assert.equal(cap.length, 0, why);
+    const both = await askP('¿cuánto me pagó cada uno, Rosa y Elmer?', { stream, args, data: DATA_P });
+    assert.match(both.reply, /^¿De cuál cliente/, why); assert.equal(both.cap.length, 0, why);
+  }
+  // Sin nombre después siguen con el total de la tienda.
+  for (const text of ['¿me pagó alguien hoy?', '¿cuánto me pagaron mis clientes esta semana?', '¿cuánto me pagó la vecina esta semana?', '¿cuánto me pagó cada uno esta semana?'])
+    for (const stream of [false, true]) assert.equal((await askP(text, { stream })).reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', text);
+});
