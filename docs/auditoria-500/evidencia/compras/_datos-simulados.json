@@ -1,0 +1,280 @@
+{
+ "PRODUCTS": [
+  {
+   "id": "p1",
+   "nombre": "Arroz Costeño 1 kg",
+   "controla": true,
+   "stock": 40,
+   "min": 10,
+   "precio": 4,
+   "costo": 3.4
+  },
+  {
+   "id": "p2",
+   "nombre": "Leche Gloria Azul tarro grande 400 g",
+   "controla": true,
+   "stock": -2,
+   "min": 6,
+   "precio": 4.2,
+   "costo": 3.6
+  },
+  {
+   "id": "p3",
+   "nombre": "Leche Gloria tarro chico 170 g",
+   "controla": true,
+   "stock": 30,
+   "min": 6,
+   "precio": 2,
+   "costo": 1.6
+  },
+  {
+   "id": "p4",
+   "nombre": "Leche Gloria Light 400 g",
+   "controla": true,
+   "stock": 12,
+   "min": 4,
+   "precio": 4.5,
+   "costo": 3.8
+  },
+  {
+   "id": "p5",
+   "nombre": "Galleta Soda Field 6 pack",
+   "controla": true,
+   "stock": 25,
+   "min": 6,
+   "precio": 1.2,
+   "costo": 0.85
+  },
+  {
+   "id": "p6",
+   "nombre": "Inca Kola 500 ml",
+   "controla": true,
+   "stock": 36,
+   "min": 12,
+   "precio": 2.5,
+   "costo": 1.6
+  },
+  {
+   "id": "p7",
+   "nombre": "Fideo Don Vittorio Spaghetti 500 g",
+   "controla": true,
+   "stock": 20,
+   "min": 6,
+   "precio": 3.2,
+   "costo": 2.6
+  },
+  {
+   "id": "p8",
+   "nombre": "Atún Florida 170 g",
+   "controla": true,
+   "stock": 18,
+   "min": 6,
+   "precio": 6.5,
+   "costo": 5.2
+  },
+  {
+   "id": "p9",
+   "nombre": "Cerveza Pilsen botella 620 ml",
+   "controla": true,
+   "stock": 24,
+   "min": 12,
+   "precio": 7,
+   "costo": 5.1
+  },
+  {
+   "id": "p10",
+   "nombre": "Cerveza Cristal botella 620 ml",
+   "controla": true,
+   "stock": 24,
+   "min": 12,
+   "precio": 6.5,
+   "costo": 4.8
+  },
+  {
+   "id": "p11",
+   "nombre": "Azúcar Rubia 1 kg",
+   "controla": true,
+   "stock": 20,
+   "min": 5,
+   "precio": 4,
+   "costo": 3.4
+  },
+  {
+   "id": "p12",
+   "nombre": "Aceite Primor 1 L",
+   "controla": true,
+   "stock": 8,
+   "min": 3,
+   "precio": 11.5,
+   "costo": 9.8
+  },
+  {
+   "id": "p13",
+   "nombre": "Coca-Cola 500 ml",
+   "controla": true,
+   "stock": 48,
+   "min": 12,
+   "precio": 2.5,
+   "costo": 1.75
+  },
+  {
+   "id": "p14",
+   "nombre": "Coca-Cola 1.5 L",
+   "controla": true,
+   "stock": 12,
+   "min": 4,
+   "precio": 6,
+   "costo": 4.6
+  },
+  {
+   "id": "p15",
+   "nombre": "Coca-Cola 3 L",
+   "controla": true,
+   "stock": 6,
+   "min": 2,
+   "precio": 11,
+   "costo": 8.9
+  },
+  {
+   "id": "p16",
+   "nombre": "Coca-Cola lata 355 ml",
+   "controla": true,
+   "stock": 24,
+   "min": 6,
+   "precio": 3,
+   "costo": 2.1
+  },
+  {
+   "id": "p17",
+   "nombre": "Detergente Opal 500 g",
+   "controla": true,
+   "stock": 10,
+   "min": 4,
+   "precio": 5.5,
+   "costo": 4.3
+  },
+  {
+   "id": "p18",
+   "nombre": "Paracetamol 500 mg tableta",
+   "controla": true,
+   "stock": 100,
+   "min": 20,
+   "precio": 0.2,
+   "costo": 0.08
+  },
+  {
+   "id": "p19",
+   "nombre": "Papel Higiénico Elite rollo",
+   "controla": true,
+   "stock": 40,
+   "min": 12,
+   "precio": 1,
+   "costo": 0.7
+  },
+  {
+   "id": "p20",
+   "nombre": "Agua Cielo 625 ml",
+   "controla": true,
+   "stock": 30,
+   "min": 12,
+   "precio": 1,
+   "costo": 0.6
+  },
+  {
+   "id": "p21",
+   "nombre": "Sal Emsal 1 kg",
+   "controla": true,
+   "stock": 15,
+   "min": 5,
+   "precio": 1.5,
+   "costo": 1
+  },
+  {
+   "id": "p22",
+   "nombre": "Encendedor Clipper",
+   "controla": true,
+   "stock": 20,
+   "min": 5,
+   "precio": 2,
+   "costo": 1.1
+  },
+  {
+   "id": "p23",
+   "nombre": "Pan francés",
+   "controla": false,
+   "stock": 0,
+   "min": 0,
+   "precio": 0.2,
+   "costo": 0.12
+  },
+  {
+   "id": "p24",
+   "nombre": "Galleta Casino Menta 6 pack",
+   "controla": true,
+   "stock": 14,
+   "min": 6,
+   "precio": 1.5,
+   "costo": 1.05
+  }
+ ],
+ "purchases": [
+  {
+   "supplier": "Distribuidora San Juan",
+   "document_ref": "F001-2231",
+   "total_cost_cents": 18640,
+   "line_count": 3,
+   "status": "registrada",
+   "created_at": "2026-10-23T14:00:00.000Z"
+  },
+  {
+   "supplier": "Alicorp",
+   "document_ref": "B002-551",
+   "total_cost_cents": 24000,
+   "line_count": 4,
+   "status": "registrada",
+   "created_at": "2026-10-22T16:30:00.000Z"
+  },
+  {
+   "supplier": "Distribuidora San Juan",
+   "document_ref": "F001-2190",
+   "total_cost_cents": 31050,
+   "line_count": 5,
+   "status": "registrada",
+   "created_at": "2026-10-15T15:00:00.000Z"
+  },
+  {
+   "supplier": "Almacenes Victoria",
+   "document_ref": "F010-7781",
+   "total_cost_cents": 52000,
+   "line_count": 8,
+   "status": "registrada",
+   "created_at": "2026-10-13T17:00:00.000Z"
+  },
+  {
+   "supplier": "Distribuidora San Juan",
+   "document_ref": "F001-2101",
+   "total_cost_cents": 9500,
+   "line_count": 2,
+   "status": "registrada",
+   "created_at": "2026-10-05T15:00:00.000Z"
+  },
+  {
+   "supplier": "Almacenes Victoria",
+   "document_ref": "F010-7600",
+   "total_cost_cents": 41000,
+   "line_count": 6,
+   "status": "registrada",
+   "created_at": "2026-09-20T16:00:00.000Z"
+  },
+  {
+   "supplier": "Distribuidora San Juan",
+   "document_ref": "F001-1990",
+   "total_cost_cents": 15000,
+   "line_count": 3,
+   "status": "registrada",
+   "created_at": "2026-09-08T15:00:00.000Z"
+  }
+ ],
+ "ventas": 26,
+ "nota": "Datos inventados. Hoy = 2026-10-23 (viernes, Lima). Semana pasada = 12..18 oct."
+}

@@ -1,0 +1,2523 @@
+[
+ {
+  "id": "CP-013",
+  "role": "owner",
+  "pregunta": "mi proveedor del aceite es distribuidora norte",
+  "texto_enviado_por_el_aparato": "mi proveedor del aceite es distribuidora norte",
+  "status": 200,
+  "ms": 3816,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, el proveedor del aceite es Distribuidora Norte; lo tendré en cuenta en esta conversación.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 12,
+   "ms_model1": 3770,
+   "ms_db": 0,
+   "ms_total": 3785,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [
+   "mi proveedor del aceite es distribuidora norte"
+  ],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-001",
+  "role": "owner",
+  "pregunta": "me llego mercaderia de san juan 2 cajas de leche gloria y 1 saco de arroz",
+  "texto_enviado_por_el_aparato": "me llego mercaderia de san juan 2 cajas de leche gloria y 1 saco de arroz",
+  "status": 200,
+  "ms": 4154,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "748f9da3-0e2d-4a5a-a043-dc6b307a884b",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "stock_producto",
+     "producto": "leche gloria",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Stock del producto",
+     "columnas": [
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Precio S/",
+      "Costo S/"
+     ],
+     "filas": [
+      [
+       "Leche Gloria Azul tarro grande 400 g",
+       -2,
+       6,
+       4.2,
+       3.6
+      ],
+      [
+       "Leche Gloria tarro chico 170 g",
+       30,
+       6,
+       2,
+       1.6
+      ],
+      [
+       "Leche Gloria Light 400 g",
+       12,
+       4,
+       4.5,
+       3.8
+      ]
+     ],
+     "texto": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+     "total": 3
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 31,
+   "ms_model1": 4117,
+   "ms_db": 1,
+   "ms_total": 4154,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-002",
+  "role": "owner",
+  "pregunta": "compre 3 cajas de galleta soda a 18 soles la caja",
+  "texto_enviado_por_el_aparato": "compre 3 cajas de galleta soda a 18 soles la caja",
+  "status": 200,
+  "ms": 5547,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿cuántos paquetes de Galleta Soda Field 6 pack trae cada caja?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 32,
+   "ms_model1": 5513,
+   "ms_db": 0,
+   "ms_total": 5546,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-030",
+  "role": "owner",
+  "pregunta": "subio el costo del arroz, ahora me lo dan a 3.80 el kilo",
+  "texto_enviado_por_el_aparato": "subio el costo del arroz, ahora me lo dan a 3.80 el kilo",
+  "status": 200,
+  "ms": 5749,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Aquí tienes los pasos.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "f9326d65-abec-42ea-a472-42a09bbf0415",
+    "type": "pasos",
+    "needsConfirm": false,
+    "title": "Actualizar el costo del Arroz Costeño 1 kg",
+    "pasos": [
+     "En Inventario, abre Arroz Costeño 1 kg.",
+     "Edita el costo de S/ 3.40 a S/ 3.80.",
+     "Guarda el cambio."
+    ],
+    "pantalla": "pageInventario"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 30,
+   "ms_model1": 5717,
+   "ms_db": 0,
+   "ms_total": 5748,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-003",
+  "role": "owner",
+  "pregunta": "compré 24 inca kola 500ml pagué 36 en total",
+  "texto_enviado_por_el_aparato": "compré 24 inca kola 500ml pagué 36 en total",
+  "status": 200,
+  "ms": 3091,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "49d52a89-f516-4ef8-83cc-bb5753ece3e9",
+    "type": "compra",
+    "needsConfirm": true,
+    "title": "Preparar compra",
+    "proveedor": "",
+    "documento": "",
+    "fecha": "",
+    "lineas": [
+     {
+      "product_id": "p6",
+      "nombre": "Inca Kola 500 ml",
+      "cantidad": 24,
+      "costo_unitario": 1.5,
+      "costo_actual": 1.6
+     },
+     {
+      "product_id": null,
+      "nombre": "inca kola 500ml pagué 36 en total",
+      "cantidad": 24,
+      "costo_unitario": 0,
+      "costo_actual": null,
+      "revisar": [
+       "costo"
+      ]
+     }
+    ],
+    "sinProducto": 1,
+    "revisarFilas": 1,
+    "fueraDeLimite": 0,
+    "confirm_token": "[token]"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3085,
+   "ms_db": 0,
+   "ms_total": 3090,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-004",
+  "role": "owner",
+  "pregunta": "anota q compre fideos",
+  "texto_enviado_por_el_aparato": "anota q compre fideos",
+  "status": 200,
+  "ms": 3090,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿cuántos fideos compraste?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3089,
+   "ms_db": 0,
+   "ms_total": 3090,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-014",
+  "role": "owner",
+  "pregunta": "y del aceite quien era mi proveedor?",
+  "texto_enviado_por_el_aparato": "y del aceite quien era mi proveedor?",
+  "status": 200,
+  "ms": 4900,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, tu proveedor del aceite es Distribuidora Norte.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4898,
+   "ms_db": 0,
+   "ms_total": 4900,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [
+   "mi proveedor del aceite es distribuidora norte"
+  ],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-005",
+  "role": "owner",
+  "pregunta": "llego el pedido de alicorp",
+  "texto_enviado_por_el_aparato": "llego el pedido de alicorp",
+  "status": 200,
+  "ms": 2636,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿qué productos llegaron y cuántos de cada uno?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 2634,
+   "ms_db": 0,
+   "ms_total": 2636,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-031",
+  "role": "owner",
+  "pregunta": "con el nuevo costo cuanto gano en el arroz",
+  "texto_enviado_por_el_aparato": "con el nuevo costo cuanto gano en el arroz",
+  "status": 200,
+  "ms": 4806,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, vendiendo el arroz a S/ 4.00 y con el nuevo costo de S/ 3.80, ganas **S/ 0.20 por kilo**, sin descontar otros gastos. El sistema todavía tiene registrado el costo anterior de S/ 3.40.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4804,
+   "ms_db": 0,
+   "ms_total": 4805,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-007",
+  "role": "owner",
+  "pregunta": "compre 5 cajas de cerveza pilsen y 2 de cristal a 52 cada caja",
+  "texto_enviado_por_el_aparato": "compre 5 cajas de cerveza pilsen y 2 de cristal a 52 cada caja",
+  "status": 200,
+  "ms": 3286,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿cuántas botellas trae cada caja de Pilsen y de Cristal?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3285,
+   "ms_db": 0,
+   "ms_total": 3285,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-006",
+  "role": "owner",
+  "pregunta": "compre 10 atun florida a 5.20 no espera a 5.50",
+  "texto_enviado_por_el_aparato": "compre 10 atun florida a 5.20 no espera a 5.50",
+  "status": 200,
+  "ms": 3841,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "c35dba10-7239-4b2b-b2bb-a7f8dc477c30",
+    "type": "compra",
+    "needsConfirm": true,
+    "title": "Preparar compra",
+    "proveedor": "",
+    "documento": "",
+    "fecha": "",
+    "lineas": [
+     {
+      "product_id": "p8",
+      "nombre": "Atún Florida 170 g",
+      "cantidad": 10,
+      "costo_unitario": 5.5,
+      "costo_actual": 5.2
+     },
+     {
+      "product_id": null,
+      "nombre": "atun florida a 5.20 no espera",
+      "cantidad": 10,
+      "costo_unitario": 5.5,
+      "costo_actual": null
+     }
+    ],
+    "sinProducto": 1,
+    "revisarFilas": 0,
+    "fueraDeLimite": 0,
+    "confirm_token": "[token]"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3836,
+   "ms_db": 0,
+   "ms_total": 3839,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-008",
+  "role": "owner",
+  "pregunta": "compre una bolsa d azucar d 50kg a 160",
+  "texto_enviado_por_el_aparato": "compre una bolsa d azucar d 50kg a 160",
+  "status": 200,
+  "ms": 5575,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿esa bolsa es de azúcar rubia para vender por kilo?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 5573,
+   "ms_db": 0,
+   "ms_total": 5574,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-010",
+  "role": "owner",
+  "pregunta": "cual fue mi ultima compra",
+  "texto_enviado_por_el_aparato": "cual fue mi ultima compra",
+  "status": 200,
+  "ms": 4031,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "b1955fdc-406d-4b4d-ba89-81c83d5bfbd5",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 4022,
+   "ms_db": 6,
+   "ms_total": 4030,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-011",
+  "role": "owner",
+  "pregunta": "que compre la semana pasada",
+  "texto_enviado_por_el_aparato": "que compre la semana pasada",
+  "status": 200,
+  "ms": 4817,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "6a89cdc5-e60d-4c6b-a5ac-2f0c791360a9",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "",
+     "periodo": "semana_pasada",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4814,
+   "ms_db": 0,
+   "ms_total": 4816,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-009",
+  "role": "owner",
+  "pregunta": "cuanto le compre a san juan este mes",
+  "texto_enviado_por_el_aparato": "cuanto le compre a san juan este mes",
+  "status": 200,
+  "ms": 7810,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "4a51931d-4630-43fa-949d-e0c2023c19af",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "San Juan",
+     "periodo": "este_mes",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 7808,
+   "ms_db": 0,
+   "ms_total": 7809,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-012",
+  "role": "owner",
+  "pregunta": "a quien le compro el arroz",
+  "texto_enviado_por_el_aparato": "a quien le compro el arroz",
+  "status": 200,
+  "ms": 2974,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "420cf6c0-c3ee-4891-83fd-553bf941fd89",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "Arroz Costeño 1 kg",
+     "periodo": "este_mes",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 2972,
+   "ms_db": 0,
+   "ms_total": 2974,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-015",
+  "role": "owner",
+  "pregunta": "que me falta comprar",
+  "texto_enviado_por_el_aparato": "que me falta comprar",
+  "status": 200,
+  "ms": 2985,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Sugiero reponer 2 productos: 96 unidades, unos S/ 225.60 según el costo registrado. Es solo una sugerencia: revisa la tabla y registra la compra tú mismo en Inventario > Registrar compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "ec7d3712-f705-42b1-a114-f374a4c0cdb4",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "sugerencias_compra",
+     "producto": "",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Sugerencias de compra (ventas 2026-10-23 a 2026-10-23)",
+     "columnas": [
+      "N°",
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Vendidos 1 d",
+      "Días que alcanza",
+      "Sugerido",
+      "Costo est. S/"
+     ],
+     "filas": [
+      [
+       1,
+       "Leche Gloria Azul tarro grande 400 g",
+       -2,
+       6,
+       2,
+       0,
+       36,
+       129.6
+      ],
+      [
+       2,
+       "Inca Kola 500 ml",
+       36,
+       12,
+       6,
+       6,
+       60,
+       96
+      ]
+     ],
+     "texto": "Sugiero reponer 2 productos: 96 unidades, unos S/ 225.60 según el costo registrado. Es solo una sugerencia: revisa la tabla y registra la compra tú mismo en Inventario > Registrar compra.",
+     "total": 2
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 2982,
+   "ms_db": 1,
+   "ms_total": 2984,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-016",
+  "role": "owner",
+  "pregunta": "hazme la lista para pedirle al proveedor",
+  "texto_enviado_por_el_aparato": "hazme la lista para pedirle al proveedor",
+  "status": 200,
+  "ms": 2820,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Aquí tienes el documento.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "8f186739-84eb-4180-9b73-72773587a53b",
+    "type": "documento",
+    "needsConfirm": false,
+    "title": "Lista de pedido para proveedor",
+    "tipo": "lista_pedido",
+    "desde": null,
+    "hasta": null,
+    "cliente_id": null,
+    "fiscal": false
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 2818,
+   "ms_db": 0,
+   "ms_total": 2819,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-017",
+  "role": "owner",
+  "pregunta": "cuanto tengo que comprar de leche para tener 20",
+  "texto_enviado_por_el_aparato": "cuanto tengo que comprar de leche para tener 20",
+  "status": 200,
+  "ms": 2840,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "760a6071-e6d7-4a3d-b596-5588a164f6fb",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "stock_producto",
+     "producto": "leche",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Stock del producto",
+     "columnas": [
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Precio S/",
+      "Costo S/"
+     ],
+     "filas": [
+      [
+       "Leche Gloria Azul tarro grande 400 g",
+       -2,
+       6,
+       4.2,
+       3.6
+      ],
+      [
+       "Leche Gloria tarro chico 170 g",
+       30,
+       6,
+       2,
+       1.6
+      ],
+      [
+       "Leche Gloria Light 400 g",
+       12,
+       4,
+       4.5,
+       3.8
+      ]
+     ],
+     "texto": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+     "total": 3
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 2,
+   "ms_model1": 2836,
+   "ms_db": 0,
+   "ms_total": 2839,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-018",
+  "role": "owner",
+  "pregunta": "pideme 2 cajas mas de lo que vendí la semana pasada de gaseosa",
+  "texto_enviado_por_el_aparato": "pideme 2 cajas mas de lo que vendí la semana pasada de gaseosa",
+  "status": 200,
+  "ms": 3036,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Más vendido 2026-10-12 a 2026-10-18: Coca-Cola 500 ml (84 unid., S/ 210.00).",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "d9be48ab-c80f-49a3-a455-a551cb94ff87",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "top_productos",
+     "producto": "gaseosa",
+     "periodo": "semana_pasada",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Más vendidos 2026-10-12 a 2026-10-18",
+     "columnas": [
+      "Producto",
+      "Unid.",
+      "S/"
+     ],
+     "filas": [
+      [
+       "Coca-Cola 500 ml",
+       84,
+       210
+      ],
+      [
+       "Arroz Costeño 1 kg",
+       35,
+       140
+      ],
+      [
+       "Inca Kola 500 ml",
+       42,
+       105
+      ],
+      [
+       "Leche Gloria Azul tarro grande 400 g",
+       21,
+       88.2
+      ],
+      [
+       "Coca-Cola 1.5 L",
+       14,
+       84
+      ],
+      [
+       "Coca-Cola lata 355 ml",
+       28,
+       84
+      ]
+     ],
+     "texto": "Más vendido 2026-10-12 a 2026-10-18: Coca-Cola 500 ml (84 unid., S/ 210.00).",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3033,
+   "ms_db": 1,
+   "ms_total": 3036,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-019",
+  "role": "owner",
+  "pregunta": "compre 12 detergente opal pero 2 vinieron de regalo",
+  "texto_enviado_por_el_aparato": "compre 12 detergente opal pero 2 vinieron de regalo",
+  "status": 200,
+  "ms": 3723,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿las 12 unidades de Detergente Opal incluyen las 2 de regalo, o llegaron 14 en total?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3721,
+   "ms_db": 0,
+   "ms_total": 3722,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-021",
+  "role": "owner",
+  "pregunta": "me hicieron 10% de descuento en toda la compra",
+  "texto_enviado_por_el_aparato": "me hicieron 10% de descuento en toda la compra",
+  "status": 200,
+  "ms": 4349,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿cuál era el total de la compra antes del descuento del 10%?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4346,
+   "ms_db": 0,
+   "ms_total": 4348,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-022",
+  "role": "owner",
+  "pregunta": "el proveedor me cobro 5 soles de flete",
+  "texto_enviado_por_el_aparato": "el proveedor me cobro 5 soles de flete",
+  "status": 200,
+  "ms": 4718,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Aquí tienes los pasos.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "ffb1cae4-7454-4591-9118-b8a48674c5d7",
+    "type": "pasos",
+    "needsConfirm": false,
+    "title": "Registrar el flete del proveedor",
+    "pasos": [
+     "Entra a Gastos y abre el registro de un gasto.",
+     "Escribe «Flete del proveedor», coloca S/ 5 y guarda."
+    ],
+    "pantalla": "pageGastos"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4716,
+   "ms_db": 0,
+   "ms_total": 4717,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-023",
+  "role": "owner",
+  "pregunta": "compre leche gloria tarro grande y chico, 12 de cada uno",
+  "texto_enviado_por_el_aparato": "compre leche gloria tarro grande y chico, 12 de cada uno",
+  "status": 200,
+  "ms": 3535,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "95a40318-090b-414f-a897-22f9ba2d0bb8",
+    "type": "compra",
+    "needsConfirm": true,
+    "title": "Preparar compra",
+    "proveedor": "",
+    "documento": "",
+    "fecha": "",
+    "lineas": [
+     {
+      "product_id": "p2",
+      "nombre": "Leche Gloria Azul tarro grande 400 g",
+      "cantidad": 12,
+      "costo_unitario": 0,
+      "costo_actual": 3.6,
+      "revisar": [
+       "costo"
+      ]
+     },
+     {
+      "product_id": "p3",
+      "nombre": "Leche Gloria tarro chico 170 g",
+      "cantidad": 12,
+      "costo_unitario": 0,
+      "costo_actual": 1.6,
+      "revisar": [
+       "costo"
+      ]
+     },
+     {
+      "product_id": null,
+      "nombre": "cada uno",
+      "cantidad": 12,
+      "costo_unitario": 0,
+      "costo_actual": null,
+      "revisar": [
+       "costo"
+      ]
+     }
+    ],
+    "sinProducto": 1,
+    "revisarFilas": 3,
+    "fueraDeLimite": 0,
+    "confirm_token": "[token]"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 4,
+   "ms_model1": 3526,
+   "ms_db": 0,
+   "ms_total": 3534,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-024",
+  "role": "owner",
+  "pregunta": "compre coca cola",
+  "texto_enviado_por_el_aparato": "compre coca cola",
+  "status": 200,
+  "ms": 2681,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Coca-Cola 500 ml (S/ 2.50): 48 unid. Coca-Cola 1.5 L (S/ 6.00): 12 unid. Coca-Cola 3 L (S/ 11.00): 6 unid. Coca-Cola lata 355 ml (S/ 3.00): 24 unid.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "7c4fd05e-118d-4dd4-9cd3-954de29d7ceb",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "stock_producto",
+     "producto": "coca cola",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Stock del producto",
+     "columnas": [
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Precio S/",
+      "Costo S/"
+     ],
+     "filas": [
+      [
+       "Coca-Cola 500 ml",
+       48,
+       12,
+       2.5,
+       1.75
+      ],
+      [
+       "Coca-Cola 1.5 L",
+       12,
+       4,
+       6,
+       4.6
+      ],
+      [
+       "Coca-Cola 3 L",
+       6,
+       2,
+       11,
+       8.9
+      ],
+      [
+       "Coca-Cola lata 355 ml",
+       24,
+       6,
+       3,
+       2.1
+      ]
+     ],
+     "texto": "Coca-Cola 500 ml (S/ 2.50): 48 unid. Coca-Cola 1.5 L (S/ 6.00): 12 unid. Coca-Cola 3 L (S/ 11.00): 6 unid. Coca-Cola lata 355 ml (S/ 3.00): 24 unid.",
+     "total": 4
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 2679,
+   "ms_db": 0,
+   "ms_total": 2681,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-026",
+  "role": "owner",
+  "pregunta": "registra la compra de ayer otra vez",
+  "texto_enviado_por_el_aparato": "registra la compra de ayer otra vez",
+  "status": 200,
+  "ms": 4494,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "8ab3c451-1774-4e81-81a6-40212fd4d2d8",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "",
+     "periodo": "ayer",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4492,
+   "ms_db": 0,
+   "ms_total": 4494,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-027",
+  "role": "owner",
+  "pregunta": "borra la compra que hice hoy",
+  "texto_enviado_por_el_aparato": "borra la compra que hice hoy",
+  "status": 200,
+  "ms": 3000,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, borrar una compra se hace a mano en Inventario > Compras; no tengo una herramienta para hacerlo desde aquí.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 2,
+   "ms_model1": 2996,
+   "ms_db": 0,
+   "ms_total": 2998,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-025",
+  "role": "owner",
+  "pregunta": "compre 20 de un producto nuevo que no tengo, chizito grande a 1.20",
+  "texto_enviado_por_el_aparato": "compre 20 de un producto nuevo que no tengo, chizito grande a 1.20",
+  "status": 200,
+  "ms": 5243,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "9b916a9f-995d-4d15-a80a-ef632df0d06c",
+    "type": "compra",
+    "needsConfirm": true,
+    "title": "Preparar compra",
+    "proveedor": "",
+    "documento": "",
+    "fecha": "",
+    "lineas": [
+     {
+      "product_id": null,
+      "nombre": "Chizito grande",
+      "cantidad": 20,
+      "costo_unitario": 1.2,
+      "costo_actual": null
+     },
+     {
+      "product_id": null,
+      "nombre": "un producto nuevo que no tengo, chizito grande",
+      "cantidad": 20,
+      "costo_unitario": 1.2,
+      "costo_actual": null
+     }
+    ],
+    "sinProducto": 2,
+    "revisarFilas": 0,
+    "fueraDeLimite": 0,
+    "confirm_token": "[token]"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 5238,
+   "ms_db": 0,
+   "ms_total": 5240,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-028",
+  "role": "owner",
+  "pregunta": "la factura dice 2 cajas encendedor x 50 und",
+  "texto_enviado_por_el_aparato": "la factura dice 2 cajas encendedor x 50 und",
+  "status": 200,
+  "ms": 2841,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, la factura indica 2 cajas de 50 encendedores cada una: 100 encendedores en total. ¿Cuánto pagaste por las dos cajas?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 2839,
+   "ms_db": 0,
+   "ms_total": 2840,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-032",
+  "role": "owner",
+  "pregunta": "que proveedores tengo",
+  "texto_enviado_por_el_aparato": "que proveedores tengo",
+  "status": 200,
+  "ms": 2987,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, no tengo ese dato registrado aquí. Puedes revisar los proveedores en Inventario > Compras > Nueva compra.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 2985,
+   "ms_db": 0,
+   "ms_total": 2986,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-029",
+  "role": "owner",
+  "pregunta": "compre 3 planchas de paracetamol de 10 blister",
+  "texto_enviado_por_el_aparato": "compre 3 planchas de paracetamol de 10 blister",
+  "status": 200,
+  "ms": 5067,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, son 30 blísteres en total. ¿Cuántas tabletas trae cada blíster?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 5065,
+   "ms_db": 0,
+   "ms_total": 5066,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-020",
+  "role": "owner",
+  "pregunta": "en la lista de victoria la leche gloria esta a 140 la caja, me conviene?",
+  "texto_enviado_por_el_aparato": "en la lista de victoria la leche gloria esta a 140 la caja, me conviene?",
+  "status": 200,
+  "ms": 16873,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, la Gloria azul 400 g se vende a S/ 4.20 y cuesta S/ 3.60; la chica 170 g, a S/ 2.00 y cuesta S/ 1.60; la Light 400 g, a S/ 4.50 y cuesta S/ 3.80.\n¿Cuál de esas viene en la caja de S/ 140 de Victoria?",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "b00ca94e-d8f2-4f6a-92ce-7a97f90a73ee",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "stock_producto",
+     "producto": "leche Gloria",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Stock del producto",
+     "columnas": [
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Precio S/",
+      "Costo S/"
+     ],
+     "filas": [
+      [
+       "Leche Gloria Azul tarro grande 400 g",
+       -2,
+       6,
+       4.2,
+       3.6
+      ],
+      [
+       "Leche Gloria tarro chico 170 g",
+       30,
+       6,
+       2,
+       1.6
+      ],
+      [
+       "Leche Gloria Light 400 g",
+       12,
+       4,
+       4.5,
+       3.8
+      ]
+     ],
+     "texto": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+     "total": 3
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 2,
+   "ms_model1": 9652,
+   "ms_db": 0,
+   "ms_model2": 7217,
+   "ms_total": 16872,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 2,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": true
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-033",
+  "role": "owner",
+  "pregunta": "cuanto le debo al proveedor",
+  "texto_enviado_por_el_aparato": "cuanto le debo al proveedor",
+  "status": 200,
+  "ms": 3686,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, no tengo ese dato registrado. Las compras al proveedor se ven en Inventario > Compras, pero no tengo un saldo de deuda al proveedor.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3685,
+   "ms_db": 0,
+   "ms_total": 3686,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-034",
+  "role": "owner",
+  "pregunta": "compre a credito al proveedor, paga en 15 dias",
+  "texto_enviado_por_el_aparato": "compre a credito al proveedor, paga en 15 dias",
+  "status": 200,
+  "ms": 3996,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿qué productos compraste y en qué cantidades?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3994,
+   "ms_db": 0,
+   "ms_total": 3996,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-035",
+  "role": "owner",
+  "pregunta": "compre 10 cajas pero solo llegaron 8",
+  "texto_enviado_por_el_aparato": "compre 10 cajas pero solo llegaron 8",
+  "status": 200,
+  "ms": 2455,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿qué producto compraste?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 2454,
+   "ms_db": 0,
+   "ms_total": 2455,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-037",
+  "role": "owner",
+  "pregunta": "compre medio ciento de panes",
+  "texto_enviado_por_el_aparato": "compre medio ciento de panes",
+  "status": 200,
+  "ms": 3098,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "«Pan francés» no lleva control de stock, así que no preparo compras ni ajustes de ese producto.",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [
+   {
+    "tool": "preparar_compra",
+    "reason": "sin_control_stock"
+   }
+  ],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3096,
+   "ms_db": 0,
+   "ms_total": 3097,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-036",
+  "role": "owner",
+  "pregunta": "compre media caja de galletas soda",
+  "texto_enviado_por_el_aparato": "compre media caja de galletas soda",
+  "status": 200,
+  "ms": 3741,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Galleta Soda Field 6 pack (S/ 1.20): 25 unid. Galleta Casino Menta 6 pack (S/ 1.50): 14 unid.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "801df8d2-9f0f-4e0c-813e-2bbc4d675824",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "stock_producto",
+     "producto": "galletas soda",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Stock del producto",
+     "columnas": [
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Precio S/",
+      "Costo S/"
+     ],
+     "filas": [
+      [
+       "Galleta Soda Field 6 pack",
+       25,
+       6,
+       1.2,
+       0.85
+      ],
+      [
+       "Galleta Casino Menta 6 pack",
+       14,
+       6,
+       1.5,
+       1.05
+      ]
+     ],
+     "texto": "Galleta Soda Field 6 pack (S/ 1.20): 25 unid. Galleta Casino Menta 6 pack (S/ 1.50): 14 unid.",
+     "total": 2
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3739,
+   "ms_db": 0,
+   "ms_total": 3740,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-039",
+  "role": "owner",
+  "pregunta": "compre 1000 cajas de leche",
+  "texto_enviado_por_el_aparato": "compre 1000 cajas de leche",
+  "status": 200,
+  "ms": 3004,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "6a77a5a8-dcef-4ad1-b2f9-7b613b208ac6",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "stock_producto",
+     "producto": "leche",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Stock del producto",
+     "columnas": [
+      "Producto",
+      "Stock",
+      "Mínimo",
+      "Precio S/",
+      "Costo S/"
+     ],
+     "filas": [
+      [
+       "Leche Gloria Azul tarro grande 400 g",
+       -2,
+       6,
+       4.2,
+       3.6
+      ],
+      [
+       "Leche Gloria tarro chico 170 g",
+       30,
+       6,
+       2,
+       1.6
+      ],
+      [
+       "Leche Gloria Light 400 g",
+       12,
+       4,
+       4.5,
+       3.8
+      ]
+     ],
+     "texto": "Leche Gloria Azul tarro grande 400 g (S/ 4.20): Faltan 2. Leche Gloria tarro chico 170 g (S/ 2.00): 30 unid. Leche Gloria Light 400 g (S/ 4.50): 12 unid.",
+     "total": 3
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3002,
+   "ms_db": 0,
+   "ms_total": 3004,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-038",
+  "role": "owner",
+  "pregunta": "me llego 1 fardo de papel higienico a 38",
+  "texto_enviado_por_el_aparato": "me llego 1 fardo de papel higienico a 38",
+  "status": 200,
+  "ms": 3641,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿cuántos rollos trae ese fardo de papel higiénico de S/ 38?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3639,
+   "ms_db": 0,
+   "ms_total": 3640,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-040",
+  "role": "owner",
+  "pregunta": "Compré 3 cajas, actualiza mis existencias",
+  "texto_enviado_por_el_aparato": "Compré 3 cajas, actualiza mis existencias",
+  "status": 200,
+  "ms": 4211,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿qué producto compraste?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 4209,
+   "ms_db": 0,
+   "ms_total": 4210,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-043",
+  "role": "owner",
+  "pregunta": "devolvi 3 cajas de atun al proveedor",
+  "texto_enviado_por_el_aparato": "devolvi 3 cajas de atun al proveedor",
+  "status": 200,
+  "ms": 3349,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, ¿cuántas latas trae cada caja de atún que devolviste?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3348,
+   "ms_db": 0,
+   "ms_total": 3349,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-044",
+  "role": "owner",
+  "pregunta": "el proveedor nuevo es bodega lucy y me trae galletas a mejor precio",
+  "texto_enviado_por_el_aparato": "el proveedor nuevo es bodega lucy y me trae galletas a mejor precio",
+  "status": 200,
+  "ms": 2907,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, el proveedor nuevo es Bodega Lucy. ¿Qué galletas te trae a mejor precio?",
+  "error": null,
+  "message": null,
+  "proposals": [],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 2903,
+   "ms_db": 0,
+   "ms_total": 2904,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [
+   "el proveedor nuevo es bodega lucy y me trae galletas a mejor precio"
+  ],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-045",
+  "role": "owner",
+  "pregunta": "compra de 2 cajas de 24 cada una de agua cielo a 15 la caja",
+  "texto_enviado_por_el_aparato": "compra de 2 cajas de 24 cada una de agua cielo a 15 la caja",
+  "status": 200,
+  "ms": 3220,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. El stock se suma solo al registrar la compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "9f56a283-cbd5-4585-a6cd-3d9588eedda8",
+    "type": "compra",
+    "needsConfirm": true,
+    "title": "Preparar compra",
+    "proveedor": "",
+    "documento": "",
+    "fecha": "",
+    "lineas": [
+     {
+      "product_id": "p20",
+      "nombre": "Agua Cielo 625 ml",
+      "cantidad": 48,
+      "costo_unitario": 0.63,
+      "costo_actual": 0.6
+     }
+    ],
+    "sinProducto": 0,
+    "revisarFilas": 0,
+    "fueraDeLimite": 0,
+    "confirm_token": "[token]"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3217,
+   "ms_db": 0,
+   "ms_total": 3220,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-041",
+  "role": "owner",
+  "pregunta": "compra: azucar 5 kg 4.20, arroz 10 kg 3.50, aceite 6 und 8.90, sal 12 und 1, fideo 20 und 1.80",
+  "texto_enviado_por_el_aparato": "compra: azucar 5 kg 4.20, arroz 10 kg 3.50, aceite 6 und 8.90, sal 12 und 1, fideo 20 und 1.80",
+  "status": 200,
+  "ms": 10764,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "229ea249-d760-4c99-b607-8e993f7febb1",
+    "type": "compra",
+    "needsConfirm": true,
+    "title": "Preparar compra",
+    "proveedor": "",
+    "documento": "",
+    "fecha": "",
+    "lineas": [
+     {
+      "product_id": null,
+      "nombre": "Azúcar (kg)",
+      "cantidad": 5,
+      "costo_unitario": 4.2,
+      "costo_actual": null
+     },
+     {
+      "product_id": null,
+      "nombre": "Arroz (kg)",
+      "cantidad": 10,
+      "costo_unitario": 3.5,
+      "costo_actual": null
+     },
+     {
+      "product_id": null,
+      "nombre": "Aceite",
+      "cantidad": 6,
+      "costo_unitario": 8.9,
+      "costo_actual": null
+     },
+     {
+      "product_id": null,
+      "nombre": "Sal",
+      "cantidad": 12,
+      "costo_unitario": 1,
+      "costo_actual": null
+     },
+     {
+      "product_id": null,
+      "nombre": "Fideo",
+      "cantidad": 20,
+      "costo_unitario": 1.8,
+      "costo_actual": null
+     }
+    ],
+    "sinProducto": 5,
+    "revisarFilas": 0,
+    "fueraDeLimite": 0,
+    "confirm_token": "[token]"
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 10761,
+   "ms_db": 0,
+   "ms_total": 10763,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ },
+ {
+  "id": "CP-042",
+  "role": "owner",
+  "pregunta": "cuanto gaste en compras este mes vs el pasado",
+  "texto_enviado_por_el_aparato": "cuanto gaste en compras este mes vs el pasado",
+  "status": 200,
+  "ms": 9860,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "reply": "Admin, sumando las compras mostradas, este mes llevas S/ 1,351.90 y el mes pasado S/ 560.00.\nLa diferencia es S/ 791.90 más este mes.\nSon las compras mostradas; no está confirmado que incluyan todas las de ambos meses.",
+  "error": null,
+  "message": null,
+  "proposals": [
+   {
+    "id": "b124fafb-2e51-4158-851e-c8d6957705a4",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "",
+     "periodo": "este_mes",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   },
+   {
+    "id": "acf7a05a-14a4-4968-8647-578e2796e775",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "compras_recientes",
+     "producto": "",
+     "periodo": "mes_pasado",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Compras recientes",
+     "columnas": [
+      "Fecha",
+      "Proveedor",
+      "Documento",
+      "Total S/",
+      "Líneas"
+     ],
+     "filas": [
+      [
+       "2026-10-23",
+       "Distribuidora San Juan",
+       "F001-2231",
+       186.4,
+       3
+      ],
+      [
+       "2026-10-22",
+       "Alicorp",
+       "B002-551",
+       240,
+       4
+      ],
+      [
+       "2026-10-15",
+       "Distribuidora San Juan",
+       "F001-2190",
+       310.5,
+       5
+      ],
+      [
+       "2026-10-13",
+       "Almacenes Victoria",
+       "F010-7781",
+       520,
+       8
+      ],
+      [
+       "2026-10-05",
+       "Distribuidora San Juan",
+       "F001-2101",
+       95,
+       2
+      ],
+      [
+       "2026-09-20",
+       "Almacenes Victoria",
+       "F010-7600",
+       410,
+       6
+      ],
+      [
+       "2026-09-08",
+       "Distribuidora San Juan",
+       "F001-1990",
+       150,
+       3
+      ]
+     ],
+     "texto": "Últimas 7 compras. La más reciente: 2026-10-23, Distribuidora San Juan, S/ 186.40.",
+     "total": null
+    }
+   }
+  ],
+  "consultas": null,
+  "dropped": [],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3937,
+   "ms_db": 0,
+   "ms_model2": 5921,
+   "ms_total": 9860,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 2,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": true
+  },
+  "lessons": [],
+  "nombres_en_lo_enviado_al_modelo": []
+ }
+]
