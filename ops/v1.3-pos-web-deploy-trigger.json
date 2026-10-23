@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 201: #901 #903 (reemplazado por 841746db con OK del dueño) #912 #1009 #1012, merge bab9cb2f. Candados cerrados (edicion-masiva-precios, precio-por-margen, etc.). Solo web: pos-permissions.js solo agrega pantalla/rol de dueño para funciones con candado (el Worker 77 falla cerrado sin ellas). Respaldo D1 run 40007559977. Rollback Web 200 (e06bb59b).",
-  "retry_attempt": 201,
-  "retry_reason": "OK del dueño 2026-10-23: 'Sí, reemplaza la #903 con copia antes' + publicar la cadena #901->#903->#912->#1009->#1012.",
-  "requested_at_utc": "2026-10-23T20:30:00Z",
-  "approved_base": "bab9cb2f2e13409defd994b59d89576fcfb9b8fe"
+  "note": "Web 202: #1002 (parte web del asistente) sobre Web 201; Worker 78 ya publicado (run 40021567006) con #1001 #988 #998 #1005 #1002. Respaldo run 40021422369. Rollback Web 201 (dc9ce271).",
+  "retry_attempt": 202,
+  "retry_reason": "OK del dueño 2026-10-23: 'ok aprobado' + 'Apruebo la #1002, publica todo con respaldo'.",
+  "requested_at_utc": "2026-10-23T20:50:00Z",
+  "approved_base": "2356dc12fc030869a6feab12136bb5ef7377391b"
 }
