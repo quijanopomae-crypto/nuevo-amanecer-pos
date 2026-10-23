@@ -889,3 +889,12 @@ test('#995 (red de seguridad) con Rosa en Clientes, «Rosa» nunca llega a la IA
       for (const b of cap) assert.ok(!/Rosa|Huam|Carmen|Quispe/i.test(b), 'llegó un nombre a la IA (' + why + '): ' + b.slice(0, 400));
     }
 });
+
+// (decisión del lead) «¿me pagó el?» sin tilde al final de la oración = «él»; «el cliente 5» sigue siendo el código 5.
+test('#995 (decisión del lead) «¿me pagó el?» sin tilde pregunta de qué cliente; «el cliente 5» sigue siendo el código (con y sin partes)', async () => {
+  for (const text of ['¿me pagó el?', '¿cuánto me pagó el?', '¿y me abonó el?']) for (const stream of [false, true]) {
+    const { reply, cap } = await askP(text, { stream });
+    assert.equal(reply, '¿De qué cliente? Escríbame su nombre.', text + ' stream=' + stream); assert.equal(cap.length, 0, text);
+  }
+  for (const stream of [false, true]) assert.equal((await askP('¿cuánto me pagó el cliente 5 esta semana?', { stream })).reply, ROSA_REPLY);
+});
