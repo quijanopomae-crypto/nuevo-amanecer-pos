@@ -540,11 +540,11 @@ const DATA_P = { ...DATA_CR, customers: [...DATA_CR.customers, { id: '9', nombre
   payments: [...DATA_CR.payments, { credit_id: 'CR9', payment_timestamp: '2026-10-22T18:00:00.000Z', amount_cents: 300 }] };
 const ENV_DEMO = { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, ASSISTANT_DEMO: '1' };
 // Pedido completo: devuelve lo que se ve (reply), el cuerpo final, los turnos que vuelven como historial y TODO lo que fue a la IA.
-async function askP(text, { args = { tipo: 'cobros_creditos', ...WEEK }, stream = false, data = DATA_CR, role = 'owner', history, resumen, reader, env = ENV } = {}) {
+async function askP(text, { args = { tipo: 'cobros_creditos', ...WEEK }, stream = false, data = DATA_CR, role = 'owner', history, resumen, reader, env = ENV, products = DATA.products } = {}) {
   const cap = [], m = { content: '', tool_calls: [call('consultar', args)] };
   const f = async (url, init) => { cap.push(String(init.body)); return stream ? sse995(m) : msg(m); };
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ context: { products: DATA.products }, text, ...(history ? { history } : {}), ...(resumen ? { resumen } : {}), ...(stream ? { stream: true } : {}) }) }),
+    body: JSON.stringify({ context: { products }, text, ...(history ? { history } : {}), ...(resumen ? { resumen } : {}), ...(stream ? { stream: true } : {}) }) }),
     env, { principalId: 'session:x', posRole: role }, json,
     { store: createMemoryUsageStore(), resolveRole: async () => role, fetch: f, reader: reader || memoryReader(data), audit: async () => {}, mockChunkMs: 0, now: () => NOW });
   let body;
@@ -897,4 +897,98 @@ test('#995 (decisión del lead) «¿me pagó el?» sin tilde pregunta de qué cl
     assert.equal(reply, '¿De qué cliente? Escríbame su nombre.', text + ' stream=' + stream); assert.equal(cap.length, 0, text);
   }
   for (const stream of [false, true]) assert.equal((await askP('¿cuánto me pagó el cliente 5 esta semana?', { stream })).reply, ROSA_REPLY);
+});
+
+// ===== (diseño final del lead, bloqueo en 70c85976) =====
+const STORE29 = 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.';
+const NOT_FOUND_ROSA = 'No encontré a un cliente llamado Rosa. Revise el nombre en Clientes o dígame su código («cliente #código»).';
+const QUIEN = '¿De qué cliente? Escríbame su nombre.';
+// Lo que va a la IA sin el system (el system lleva el catálogo): mensajes del usuario y del asistente.
+const userSide = (cap) => cap.map((b) => (JSON.parse(b).messages || []).filter((m) => m.role !== 'system').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n'));
+const HIST = [{ role: 'user', content: 'Rosa Huamán me debe 80 soles y Carmen Quispe 20' }, { role: 'assistant', content: 'Anotado lo de Rosa y Elmer Paz.' }];
+const RESUMEN = 'Se habló de la deuda de Rosa, de Elmer y de Carmen Quispe.';
+
+// (1) Siempre se tapa en el servidor: se lee Clientes en cada pedido y ningún nombre de la lista va a la IA, sea cual sea la pregunta.
+test('#995 (final 1) se tapa SIEMPRE: «¿cuánto me debe Rosa?», «¿Rosa tiene deuda?», «anota que Rosa llevó…», «Rosa quiere arroz…» sin Rosa a la IA (con y sin partes, historial y resumen)', async () => {
+  for (const role of ['owner', 'empleado:completo+costos']) for (const text of ['¿cuánto me debe Rosa?', '¿Rosa tiene deuda?', 'anota que Rosa llevó 2 kilos de arroz', 'Rosa quiere arroz, ¿cuánto cuesta?'])
+    for (const stream of [false, true]) for (const extra of [{}, { history: HIST, resumen: RESUMEN }]) {
+      const why = role + ' ' + text + ' stream=' + stream + ' hist=' + !!extra.history;
+      const { cap } = await askP(text, { stream, role, data: DATA_P, args: { tipo: 'deudas_clientes' }, ...extra });
+      assert.ok(cap.length >= 1, why);
+      for (const b of userSide(cap)) assert.ok(!/Rosa|Huam|Carmen|Quispe|Elmer|Paz\b/i.test(b), 'llegó un nombre a la IA (' + why + '): ' + b.slice(0, 300));
+    }
+});
+// Marcas: un cliente que se llama como una marca no tapa la marca del catálogo («leche Gloria», «Inca Kola», «cerveza Pilsen», «fideo Don Vittorio»).
+const BRAND_PRODUCTS = [{ id: 'P1', nombre: 'Arroz 1 kg', precio: 4, stock: 50 }, { id: 'P2', nombre: 'Leche Gloria UHT 1L', precio: 5, stock: 20 },
+  { id: 'P3', nombre: 'Inca Kola 1.5L', precio: 7, stock: 10 }, { id: 'P4', nombre: 'Cerveza Pilsen lata 355ml', precio: 4.5, stock: 30 }, { id: 'P5', nombre: 'Fideo Don Vittorio 500g', precio: 3.2, stock: 15 }];
+const BRAND_DATA = { ...DATA_CR, products: BRAND_PRODUCTS, customers: [...DATA_CR.customers, { id: '21', nombre: 'Gloria Ramos' }, { id: '22', nombre: 'Inca Mamani' },
+  { id: '23', nombre: 'Pilsen Torres' }, { id: '24', nombre: 'Vittorio Paz' }] };
+test('#995 (final 1) marcas: «leche Gloria», «Inca Kola», «cerveza Pilsen», «fideo Don Vittorio» quedan aunque haya clientes Gloria/Inca/Pilsen/Vittorio; la persona sí se tapa', async () => {
+  for (const stream of [false, true]) for (const products of [BRAND_PRODUCTS, DATA.products]) {
+    for (const [text, brand] of [['¿cuánto cuesta la leche Gloria?', /leche Gloria/], ['véndeme 2 Inca Kola', /Inca Kola/], ['¿hay cerveza Pilsen?', /cerveza Pilsen/], ['¿a cuánto el fideo Don Vittorio?', /fideo Don Vittorio/]]) {
+      const { cap } = await askP(text, { stream, data: BRAND_DATA, products, args: { tipo: 'stock_bajo' } });
+      assert.ok(cap.length >= 1 && userSide(cap).every((b) => brand.test(b)), text + ' stream=' + stream + ' -> ' + userSide(cap)[0]);
+    }
+    for (const text of ['¿Gloria me debe algo?', '¿cuánto le fié a Inca Mamani?', 'Pilsen Torres quiere arroz', '¿Vittorio Paz tiene deuda?']) {
+      const { cap } = await askP(text, { stream, data: BRAND_DATA, products, args: { tipo: 'deudas_clientes' } });
+      for (const b of userSide(cap)) assert.ok(!/Gloria|Inca|Pilsen|Vittorio/i.test(b), text + ' stream=' + stream + ' -> ' + b.slice(0, 300));
+    }
+  }
+});
+
+// (2) Pregunta de cobros: se busca un cliente en TODO el mensaje; si no hay, toda palabra que sobra (fuera de las conocidas) = «No encontré…».
+const PREP_ROSA = ['¿me pagó por fin Rosa?', '¿me pagó de una vez Rosa?', '¿me pagó con Yape Rosa?', '¿me pagaron hoy los de Rosa?', '¿me pagó la del puesto, Rosa?',
+  '¿cuánto me pagó la vecina de al lado, Rosa?', '¿cuánto me pagó la tía Rosa?', '¿me pagó la casera Rosa?', '¿me pagó la señora Rosa?'];
+test('#995 (final 2) «por fin», «con Yape», «los de», «la del puesto», «de al lado», «la tía / casera / señora» Rosa: sin Rosa = «No encontré… Rosa» sin IA; con Rosa = cliente #5', async () => {
+  for (const text of PREP_ROSA) for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = text + ' stream=' + stream + ' ' + args.tipo;
+    const miss = await askP(text, { stream, args, data: noRosa(DATA_CR) });
+    assert.equal(miss.reply, NOT_FOUND_ROSA, why); assert.equal(miss.cap.length, 0, why);
+    const hit = await askP(text, { stream, args });
+    assert.equal(hit.reply, ROSA_REPLY, why); noNamesP(hit.cap, why);
+  }
+});
+test('#995 (final 2) otra oración: «Hablé con Rosa. ¿Cuánto me pagó?», «Vino Rosa hoy. ¿Cuánto me pagó…?» = cliente #5; sin Rosa ni total ni nombre a la IA; «Rosa, ¿cuánto me pagaron hoy?» sin total equivocado', async () => {
+  for (const text of ['Hablé con Rosa. ¿Cuánto me pagó?', 'Vino Rosa hoy. ¿Cuánto me pagó esta semana?', 'Rosa, ¿cuánto me pagaron hoy?']) for (const stream of [false, true]) {
+    const why = text + ' stream=' + stream;
+    const hit = await askP(text, { stream });
+    if (!text.startsWith('Rosa,')) assert.equal(hit.reply, ROSA_REPLY, why);
+    assert.ok(hit.reply !== STORE29 && !/S\/ 29\.00/.test(hit.reply), why + ' -> ' + hit.reply); noNamesP(hit.cap, why);
+    const miss = await askP(text, { stream, data: noRosa(DATA_CR) });
+    assert.ok(!/S\/ \d/.test(miss.reply), why + ' (sin Rosa) -> ' + miss.reply);
+    for (const b of userSide(miss.cap)) assert.ok(!/Rosa/.test(b), why + ' (sin Rosa) llegó Rosa: ' + b.slice(0, 200));
+  }
+  for (const text of ['¿a ver cuánto me pagaron esta semana?', '¿al final cuánto me pagaron esta semana?', '¿ya hoy en la tarde me pagaron?', '¿cuánto me pagaron con Yape esta semana?'])
+    for (const stream of [false, true]) assert.equal((await askP(text, { stream })).reply, STORE29, text);
+});
+
+// (3) Verbos por raíz: pag…/abon… con cualquier terminación (pagarán, paguen, pagaría, pagase, abonarán); «página» y «paquete» no.
+test('#995 (final 3) «pagarán», «paguen», «pagaría», «abonarán»…: Rosa y Elmer = cuál, sin nombres a la IA; «¿cuánto me pagarán?» con historial no manda nombres', async () => {
+  for (const stream of [false, true]) for (const extra of [{}, { history: HIST, resumen: RESUMEN }]) {
+    const why = 'stream=' + stream + ' hist=' + !!extra.history;
+    const two = await askP('¿cuánto me pagarán Rosa y Elmer?', { stream, data: DATA_P, ...extra });
+    assert.equal(two.reply, '¿De cuál cliente quiere los cobros: Rosa Huamán o Elmer Paz? Pregunte por uno a la vez.', why); assert.equal(two.cap.length, 0, why);
+    const gen = await askP('¿cuánto me pagarán?', { stream, data: DATA_P, ...extra });
+    noNamesP(gen.cap, why);
+    for (const text of ['¿cuándo me paguen Rosa?', '¿Rosa me pagaría mañana?', '¿me abonarán Rosa?', '¿Rosa me pagase hoy?']) {
+      const miss = await askP(text, { stream, data: noRosa(DATA_CR), ...extra });
+      assert.equal(miss.reply, NOT_FOUND_ROSA, text + ' ' + why); assert.equal(miss.cap.length, 0, text + ' ' + why);
+    }
+  }
+});
+test('#995 (final 3) «paquete», «página» y «pagué la luz» no son preguntas de cobros: la IA contesta, sin «No encontré» ni «De qué cliente»', async () => {
+  for (const text of ['¿cuánto cuesta el paquete?', '¿en qué página veo las ventas?', '¿cuánto pagué de luz este mes?']) for (const stream of [false, true]) {
+    const { reply, cap } = await askP(text, { stream, args: { tipo: 'ventas_periodo', ...WEEK } });
+    assert.ok(cap.length >= 1, text); assert.ok(!/No encontré|De qué cliente|De cuál cliente/.test(reply), text + ' -> ' + reply);
+  }
+});
+
+// (4) Singular sin nombre: «¿me pagó?» pregunta de qué cliente; plural «me pagaron» = total; palabras de alfa («alguien», «cada uno») = total.
+test('#995 (final 4) «¿me pagó?», «¿cuánto me pagó?», «¿me pagó el hoy?» = «¿De qué cliente?» sin IA; «me pagaron», «alguien», «cada uno» = total', async () => {
+  for (const text of ['¿me pagó?', '¿cuánto me pagó?', '¿cuánto me pagó hoy?', '¿me pagó el hoy?', '¿me abonó esta semana?']) for (const stream of [false, true]) {
+    const { reply, cap } = await askP(text, { stream });
+    assert.equal(reply, QUIEN, text + ' stream=' + stream); assert.equal(cap.length, 0, text);
+  }
+  for (const text of ['¿me pagaron?', '¿cuánto me pagaron hoy?', '¿me pagó alguien hoy?', '¿cuánto me pagó cada uno esta semana?', '¿me abonaron esta semana?'])
+    for (const stream of [false, true]) assert.equal((await askP(text, { stream })).reply, STORE29, text + ' stream=' + stream);
 });
