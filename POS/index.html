@@ -102,6 +102,7 @@
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/precios-masivos.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
     <script>
@@ -461,6 +462,25 @@
     </div>
     <p class="sc-status" data-sc-status role="status" aria-live="polite"></p>
     <div data-sc-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageEdicionPrecios" aria-labelledby="edicionPreciosTitle">
+  <div class="pm-shell">
+    <header>
+      <h1 id="edicionPreciosTitle">Edición masiva de precios</h1>
+      <p class="pm-description">Cambia el precio de venta de muchos productos a la vez. Revisa la vista previa antes de aplicar. No cambia el stock ni las ventas.</p>
+    </header>
+    <p class="pm-status" data-pm-status role="status" aria-live="polite"></p>
+    <div data-pm-main hidden>
+      <div class="pm-controls">
+        <label>Categoría<select data-pm-category aria-label="Categoría"><option value="">Todas las categorías</option></select></label>
+        <label>Tipo de cambio<select data-pm-mode aria-label="Tipo de cambio"><option value="porcentaje">Subir o bajar %</option><option value="monto">Sumar o restar S/</option></select></label>
+        <label>Valor<input type="number" step="0.01" inputmode="decimal" data-pm-value aria-label="Valor" placeholder="Ej. 10 o -5"></label>
+        <button type="button" data-pm-apply disabled>Aplicar</button>
+      </div>
+      <div data-pm-content></div>
+    </div>
   </div>
 </div>
 
@@ -1472,6 +1492,7 @@
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/precios-masivos.js"></script>
 <script src="js/modules/stock-negativo.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/employee-perms-ui.js"></script>
