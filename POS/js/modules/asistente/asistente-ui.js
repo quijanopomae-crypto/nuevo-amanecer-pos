@@ -277,7 +277,7 @@
         // propuesta y manual; el servidor contesta 200 replay:true y no guarda nada otra vez). Un 409/403 del reintento se muestra tal cual.
         if (d.bodyError && d.status == null) { var be = new Error('network'); be.bodyError = true; throw be; }
         var out = d.ok ? d : { ok: false, error: d.error, status: d.status, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null,
-          confirmed: d.confirmed === true, operation_id: d.operation_id, type: d.type, proposal: d.error === 'already_confirmed_same_session' && d.proposal && typeof d.proposal === 'object' ? d.proposal : undefined };
+          confirmed: d.confirmed === true, operation_id: d.operation_id, type: d.type, proposal: (d.error === 'already_confirmed_same_session' || d.error === 'stock_changed') && d.proposal && typeof d.proposal === 'object' ? d.proposal : undefined };
         try { Object.defineProperty(out, 'sentBody', { value: body, enumerable: false, configurable: true }); } catch (_) {}
         return out; }
       catch (e) { lastErr = e; if (i === 0) await new Promise(function (r) { setTimeout(r, 600); }); }
@@ -677,6 +677,9 @@
         var f = C.confirmFailureView(r, { editable: need ? need.names : [], type: p.type }) || { kind: 'other', rows: [], button: 'Confirmar', again: true };
         c.dataset.fail = f.kind;
         // (Bot 4 sobre 58200f60) nada que arreglar en la tarjeta: aviso claro y solo «Cancelar» (ningún botón que no lleve a ningún lado)
+        // (VE-009) stock cambiado: aviso del servidor en la tarjeta vieja (sin Confirmar) y la tarjeta NUEVA firmada justo debajo.
+        if (f.kind === 'stale') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (no) no.hidden = true; if (again) { again.hidden = !f.again; again.disabled = false; }
+          if (r.fresh) { var nc = addCard(r.fresh, prompt, c); if (nc) revealCard(nc, [nc]); } return; }
         if (f.kind === 'blocked') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (again) again.hidden = true; no.hidden = false; no.disabled = false; no.textContent = 'Cancelar'; return; }
         if (f.kind === 'review' || f.kind === 'limit') markRows(f.rows, f.kind === 'limit');
         if (f.kind === 'fields' && p.type === 'configuracion') { if (need) need.flag(f.fields, f.msg); res.textContent = f.msg; } // RUC: el aviso del servidor junto al campo y en la tarjeta
@@ -965,6 +968,13 @@
   function drainQueue() { if (!queued || busy || !panelEl) return; var t = queued; queued = null; if (queuedNote) { queuedNote.remove(); queuedNote = null; } setTimeout(function () { if (!busy && panelEl) send(t); else if (panelEl) queueMsg(t); }, 0); }
   // Solo «sigue / continúa / más…» usa la cabecera de la tabla cortada anterior; otra pregunta empieza limpia (sin arrastrar la anterior).
   var CONT_RE = /^\s*(?:y\s+)?(?:sigue|siga|seguí|segui|continúa|continua|continúe|continue|contin[uú]a\s+por\s+favor|más|mas|el\s+resto|lo\s+que\s+falta|los\s+dem[aá]s|dale)(?:[\s,.!¡?¿]|$)/i;
+  function restButton(rest) {
+    var w = el('div', 'na-asst-rest'), b = el('button', 'na-asst-retry'); b.type = 'button';
+    b.textContent = 'Enviar el resto (' + rest.length + ' caracteres)';
+    b.onclick = function () { w.remove(); send(rest); }; // una sola vez
+    w.appendChild(b); msgsEl.appendChild(w); return w;
+  }
+  // fin restButton
   async function send(text, image) {
     if (busy) { if (!image) queueMsg(text); return; }
     text = String(text || '').trim(); if (!text && !image) return;
@@ -1064,6 +1074,8 @@
       cardAnchor = bubble; // tarjetas de ESTA respuesta, debajo de ella (addCard corre el ancla)
       (d.proposals || []).forEach(function (x) { addCard(x, text); });
       cardAnchor = null;
+      // (#986) mensaje más largo que el tope del servidor: botón para mandar lo que no se leyó (sin el campo, nada)
+      { var rest = C.cutRest ? C.cutRest(body.text, d.texto_cortado) : null; if (rest) restButton(rest); }
       if (stick) { var top = bubble.getBoundingClientRect().top - msgsEl.getBoundingClientRect().top + msgsEl.scrollTop - 12, end = msgsEl.scrollHeight - msgsEl.clientHeight;
         msgsEl.scrollTop = Math.max(0, Math.min(end, top)); if (end > top + 1) showNew(); else if (newBtn) newBtn.hidden = true; } else if (d.proposals && d.proposals.length) showNew();
       setState('hablando', Math.min(4000, 900 + d.reply.length * 25));
@@ -1214,15 +1226,25 @@
     var txt = '<div class="na-asst-hero-t"><span class="h-pill">' + SPARK + (emp ? 'Asistente' : 'Asistente inteligente') + '</span><h2>' + (emp ? 'Asistente' : 'Asistente Nuevo Amanecer') + '</h2><p>' +
       (emp ? (docs ? 'Puedo ayudarte con stock, precios de venta y listas para imprimir.' : 'Puedo ayudarte con stock y precios de venta.') : 'Puedo ayudarte con stock, compras, precios y documentos.') + '</p></div>';
     if (mode === 'offline') heroEl.innerHTML = txt + vis + '<p class="h-off" role="status">Asistente no disponible sin internet. El resto de Inicio funciona normal.</p>';
-    else heroEl.innerHTML = txt + vis + '<form class="h-in" autocomplete="off"><span class="h-wave">' + WAVE + '</span><input type="text" enterkeyhint="send" maxlength="500" aria-label="Pregúntale al asistente" placeholder="¿Qué deseas hacer hoy?"><button type="submit" class="h-send" aria-label="Enviar">' + SEND + '</button></form>' +
+    else heroEl.innerHTML = txt + vis + '<form class="h-in" autocomplete="off"><span class="h-wave">' + WAVE + '</span><input type="text" enterkeyhint="send" maxlength="500" aria-label="Pregúntale al asistente" placeholder="¿Qué deseas hacer hoy?"><button type="submit" class="h-send" aria-label="Enviar">' + SEND + '</button></form>' + '<p class="h-lim" role="status" aria-live="polite" hidden></p>' +
       '<div class="h-chips">' + chips.map(function (c) { return '<button type="button" class="h-chip"' + (c[3] ? ' aria-label="' + C.esc(c[0]) + '"' : '') + (c[1] ? ' data-hero-q="' + C.esc(c[1]) + '"' : '') + (c[2] ? ' data-hero-photo="1"' : '') + '>' +
         (c[3] ? '<span class="hl">' + C.esc(c[0]) + '</span><span class="hs" aria-hidden="true">' + C.esc(c[3]) + '</span>' : C.esc(c[0])) + '</button>'; }).join('') + '</div>';
     heroEl.classList.toggle('emp', emp); heroEl.classList.toggle('off', mode === 'offline');
     if (!emp) { var ch = heroEl.querySelector('.na-asst-char'); if (ch) { ch.dataset.state = state; ch.dataset.paused = rootEl ? rootEl.dataset.paused || '0' : '0'; } }
     var form = heroEl.querySelector('.h-in');
-    if (form) form.onsubmit = function (e) { e.preventDefault(); var inp = form.querySelector('input'), q = inp.value.trim(); if (!q || !isAdmin() || !panelEl) return; inp.value = ''; openPanel(); send(q); };
+    var lim = heroEl.querySelector('.h-lim'); if (form && lim) wireLimit(form.querySelector('input'), heroEl.querySelector('.h-lim'));
+    if (form) form.onsubmit = function (e) { e.preventDefault(); var inp = form.querySelector('input'), q = inp.value.trim(); if (!q || !isAdmin() || !panelEl) return; inp.value = ''; if (lim) { lim.hidden = true; lim.textContent = ''; } openPanel(); send(q); };
     heroEl.onclick = function (e) { var b = e.target.closest('.h-chip'); if (!b || !isAdmin() || !panelEl) return; openPanel(); if (b.dataset.heroQ) send(b.dataset.heroQ); else if (b.dataset.heroPhoto && fileEl) fileEl.click(); };
   }
+
+  // Campo con maxlength: contador cerca del tope y aviso al llegar o al pegar algo que no entra (antes se cortaba en silencio).
+  function wireLimit(inp, note) {
+    if (!inp || !note) return; var max = Number(inp.getAttribute('maxlength')) || C.INPUT_MAX, pasted = null;
+    inp.addEventListener('paste', function (e) { var t = e && e.clipboardData && e.clipboardData.getData ? String(e.clipboardData.getData('text') || '') : '';
+      var lost = C.pastedOverflow(String(inp.value || '').length, (inp.selectionEnd || 0) - (inp.selectionStart || 0), t.length, max); pasted = lost > 0 ? C.pasteLostNote(lost, max) : null; });
+    inp.addEventListener('input', function () { var t = pasted || C.inputLimitNote(String(inp.value || '').length, max); pasted = null; note.textContent = t || ''; note.hidden = !t; });
+  }
+  // fin wireLimit
 
   // ---------- Configuración > Aparatos: nivel del asistente por aparato de empleado ----------
   // Se agrega DEBAJO de la lista de aparatos que ya existe (no se toca config-g.js). Guarda solo (sin botón Guardar),

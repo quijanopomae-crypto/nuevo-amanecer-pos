@@ -8,6 +8,7 @@
   var PATTERNS = [
     // (auditoría 500, OCR-023) «pin» + espacio + palabra de solo letras («CHUPETIN PIN POP», «pin pon») es nombre de producto: no se tapa.
     [/\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\b(\s*(?:es|era|de|:|=)?\s*)([^\s,.;]{3,})/gi, function (m, k, sep, val) {
+      if (HELD.test(val)) return m; // una marca ya tapada («[clave oculta]» → «[oculto]»+carácter mientras corren los patrones)
       return /^pin$/i.test(k) && /^[ \t]+$/.test(sep) && !/\d/.test(val) && !/^(?:es|era|de|actual|nuevo|nueva|secreto)$/i.test(val) ? m : k + sep + '[oculto]'; }],
     [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[correo oculto]'],
     [/\b(?:RUC\s*(?:N[°º.]?\s*)?[:#-]?\s*)?(?:10|15|17|20)\d{9}\b/gi, '[RUC oculto]'],
@@ -18,16 +19,32 @@
     [/(?<![0-9.,])(?:DNI\s*[:#-]?\s*)?(?:\d{2}\.\d{3}\.\d{3}|\d{4}[ .]\d{4}|\d{2} \d{3} \d{3})(?![0-9]|[.,]\d)/gi, '[DNI oculto]'],
     [/(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}[ \t]{0,3}(?:[(\[{][ \t]{0,2}(?:at|arroba)[ \t]{0,2}[)\]}]|[ \t]arroba[ \t]|[ \t]@[ \t]?|@[ \t])[ \t]{0,3}(?:[A-Za-z0-9-]{1,63}[ \t]{0,3}(?:\.|[(\[{][ \t]{0,2}(?:dot|punto)[ \t]{0,2}[)\]}]|[ \t](?:dot|punto)[ \t])[ \t]{0,3}){1,8}[A-Za-z]{2,24}\b/gi, '[correo oculto]']
   ];
-  function redactText(v) { var s = String(v == null ? '' : v); PATTERNS.forEach(function (p) { s = s.replace(p[0], p[1]); }); return s; }
+  // (igual que #994 en el servidor) Las marcas que ya puso otro filtro («[clave oculta]», «[nombre oculto]», «[correo oculto]»…) llevan
+  // «clave» u «oculto» dentro: los patrones las volvían a tapar a medias («la clave es [clave oculta]» → «la clave es [oculto] oculta]»).
+  // Mientras corren los patrones cada marca entera se cambia por «[oculto]» + un carácter privado que dice cuál era (\uF8E0–\uF8E9);
+  // «[oculto]» ya no se vuelve a tapar, y al final vuelve a ser la marca. Si un patrón se llevara el «[oculto]», el carácter suelto se quita.
+  // Lo de afuera nunca trae esos caracteres (se cambian por un espacio antes). Una clave real al lado de una marca se sigue tapando.
+  var MASK_HOLDERS = ['[clave oculta]', '[nombre oculto]', '[correo oculto]', '[teléfono oculto]', '[imagen omitida]', '[mensaje anterior omitido]', '[texto largo omitido]', '[dato del dueño]', '[dato del Admin]'];
+  var MASK_HOLD_RE = new RegExp(MASK_HOLDERS.map(function (x) { return x.replace(/[[\]]/g, '\\$&'); }).join('|'), 'g');
+  function maskHoldShield(v) {
+    var s = /[\uF8E0-\uF8E9]/.test(v) ? v.replace(/[\uF8E0-\uF8E9]/g, ' ') : v;
+    return s.indexOf('[') >= 0 ? s.replace(MASK_HOLD_RE, function (m) { return '[oculto]' + String.fromCharCode(0xF8E0 + MASK_HOLDERS.indexOf(m)); }) : s;
+  }
+  function maskHoldRestore(v) {
+    if (!/[\uF8E0-\uF8E9]/.test(v)) return v;
+    return v.replace(/\[oculto\]([\uF8E0-\uF8E9])/g, function (_m, c) { return MASK_HOLDERS[c.charCodeAt(0) - 0xF8E0]; }).replace(/[\uF8E0-\uF8E9]/g, '');
+  }
+  var HELD = /^\[oculto\][\uF8E0-\uF8E9]?$/;
+  function redactText(v) { var s = maskHoldShield(String(v == null ? '' : v)); PATTERNS.forEach(function (p) { s = s.replace(p[0], p[1]); }); return maskHoldRestore(s); }
   // (Bot 2 sobre 6280deae) contexto del DUEÑO: RUC de empresa (20/15/17) y 8 dígitos junto a «código», «cód.», «EAN» o «barra(s)» van exactos.
   // RUC 10 y 8 dígitos sueltos, tapados. El servidor vuelve a filtrar según el rol de SU sesión (esto solo es lo que manda el aparato).
   var CODE_LABEL = /(?:^|[^a-záéíóúñü])(?:c[óo]d(?:igos?)?\.?|ean(?:-?(?:13|8))?|barras?)(?![a-záéíóúñü])[^\n\d]{0,24}$/i;
-  function redactOwnerContext(v) { var s = String(v == null ? '' : v);
+  function redactOwnerContext(v) { var s = maskHoldShield(String(v == null ? '' : v));
     PATTERNS.forEach(function (p, i) {
       if (i === 2) s = s.replace(p[0], function (m) { return /^(?:20|15|17)/.test(m.replace(/^\D+/, '')) ? m : '[RUC oculto]'; });
       else if (i === 4) s = s.replace(p[0], function (m, off, str) { return /^\d/.test(m) && CODE_LABEL.test(str.slice(Math.max(0, off - 48), off)) ? m : '[DNI oculto]'; });
       else s = s.replace(p[0], p[1]); });
-    return s; }
+    return maskHoldRestore(s); }
   // (Bot 2 sobre 6280deae) Tarjeta de compra: un campo que el servidor dejó vacío (tenía algo tapado) se completa a mano. Borde de alerta,
   // «Complete este dato», foco en el primero y «Confirmar» apagado hasta llenarlos. Solo createElement / textContent. Lo escrito queda en
   // state (fuera de la propuesta firmada) y lo usa fillPurchase; nunca se escribe una máscara.
@@ -707,7 +724,7 @@
     network: [MSG.offline, true], offline: [MSG.offline, true], timeout: [MSG.slow, true], upstream_timeout: [MSG.slow, true],
     upstream_error: [MSG.again, true], stock_check_unavailable: ['No pude revisar el inventario ahora. Toca «Reintentar» en un momento.', true], HTTP_503: [MSG.again, true], HTTP_502: [MSG.again, true], HTTP_500: [MSG.again, true],
     confirm_expired: [MSG.expired], HTTP_410: [MSG.expired], proposal_changed: [MSG.changed], proposal_id_mismatch: [MSG.changed], HTTP_409: [MSG.changed],
-    product_missing: ['Ese producto ya no está en el inventario.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
+    product_missing: ['Ese producto ya no está en el inventario.'], stock_changed: ['El stock cambió desde que preparé la tarjeta. Pídela de nuevo.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
     review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], fields_required: ['Complete los datos marcados y vuelva a confirmar.'], manual_not_allowed: ['Esa tarjeta no se puede cambiar así. Toque «Pedir de nuevo».'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
     empty_after_review: ['Quitaste todas las filas. Pide la compra de nuevo.'], other_device: ['Esta propuesta es de otro aparato. Pídela aquí otra vez.'],
     image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
@@ -753,6 +770,8 @@
     if (code === 'over_limit' && !(r.rows || []).some(function (n) { return Number.isInteger(n) && n >= 0; })) return blocked(type === 'compra' ? null : (r.msg && !looksTechnical(r.msg) ? r.msg : null));
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
     if (code === 'revision_conflict' || code === 'config_sin_datos' || code === 'config_invalid' || code === 'config_forbidden') return { kind: 'config', rows: [], button: null, again: true, msg: r.msg || friendlyError(code).msg };
+    // (VE-009) stock cambiado: la tarjeta vieja queda sin botón; con tarjeta nueva no hace falta «Pedir de nuevo» (ya está debajo).
+    if (code === 'stock_changed') return { kind: 'stale', rows: [], button: null, again: !r.fresh, cancelOnly: false, msg: r.msg || FRIENDLY.stock_changed[0] };
     if (code === 'already_confirmed') return { kind: 'elsewhere', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : FRIENDLY.already_confirmed[0] };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
     if (code === 'other_device') return { kind: 'elsewhere', rows: [], button: null, again: true, msg: r.msg || FRIENDLY.other_device[0] };
@@ -819,6 +838,14 @@
     });
     return { filas: rows, total: Math.round(cents) / 100, sinCosto: sinCosto };
   }
+  // Tarjeta nueva de un 409 stock_changed: solo si es un objeto del MISMO tipo y producto que la vieja, con token firmado y otro id.
+  // El servidor la vuelve a revisar al confirmar (token propio); esto solo evita dibujar algo que no corresponde a esta tarjeta.
+  function staleCountFresh(old, fresh) {
+    if (!old || !fresh || typeof fresh !== 'object' || Array.isArray(fresh)) return null;
+    if (fresh.type !== old.type || typeof fresh.confirm_token !== 'string' || !fresh.confirm_token || !fresh.id || fresh.id === old.id) return null;
+    if (String(fresh.product_id == null ? '' : fresh.product_id) !== String(old.product_id == null ? '' : old.product_id)) return null;
+    return fresh;
+  }
   function createGate(deps) {
     var items = Object.create(null);
     function forget(it) { if (!it) return; wipeManual(it.p); wipeManual(it.applied); if (it.sent && it.sent.manual && typeof it.sent.manual === 'object') Object.keys(it.sent.manual).forEach(function (k) { delete it.sent.manual[k]; }); delete items[it.key]; it.state = 'forgotten'; it.p = null; it.applied = null; it.review = null; it.sent = null; it.onRetry = null; }
@@ -862,6 +889,11 @@
         if (c && !c.ok && isServerConfig(it.p) && ['revision_conflict', 'config_sin_datos', 'config_invalid', 'config_forbidden'].indexOf(c.error) >= 0) {
           it.state = 'denied'; if (c.error === 'revision_conflict' && deps.reloadSettings) { try { Promise.resolve(deps.reloadSettings(it.p)).catch(function () {}); } catch (_) {} }
           return { ok: false, code: c.error, msg: c.error === 'revision_conflict' ? CONFIG_CONFLICT_MSG : friendlyError(c.error, c.message).msg }; }
+        // (VE-009, #983) 409 stock_changed: la corrección de conteo se armó con un stock viejo. La tarjeta vieja ya no se aplica; se muestra el
+        // aviso del servidor («cambió de 12 a 10… Revisa la tarjeta nueva.») y la tarjeta NUEVA firmada que devuelve (fresh), si es del mismo
+        // producto y tipo y trae su token. Sin tarjeta nueva (ya llegó al número contado, o pasa el límite) solo el aviso.
+        if (c && !c.ok && c.error === 'stock_changed') { it.state = 'denied'; var fr = staleCountFresh(it.p, c.proposal);
+          return { ok: false, code: 'stock_changed', fresh: fr, msg: c.message && !looksTechnical(c.message) ? c.message : FRIENDLY.stock_changed[0] }; }
         if (c && !c.ok && c.error === 'already_confirmed') { it.state = 'denied'; return { ok: false, code: 'already_confirmed', msg: it.p.type === 'compra' ? FRIENDLY.already_confirmed[0] : 'Este cambio ya se confirmó en otra sesión.' }; }
         if (c && !c.ok && c.error === 'other_device') { it.state = 'denied'; return { ok: false, code: 'other_device', msg: c.confirmed ? OTHER_DEVICE_DONE_MSG : FRIENDLY.other_device[0] }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
@@ -1213,12 +1245,28 @@
     } else if (redactText(u.content) !== u.content || redactText(a.content) !== a.content || !u.sig) h.splice(h.length - 2, 2);
   }
 
+  // Tope del campo de Inicio (maxlength="500"): contador cerca del tope y aviso al llegar; lo pegado que no entra se cuenta (antes se cortaba en silencio).
+  var INPUT_MAX = 500;
+  function inputLimitNote(len, max) { max = max || INPUT_MAX; len = Number(len) || 0;
+    if (len >= max) return 'Llegaste al máximo de ' + max + ' caracteres: lo que escribas o pegues de más no entra. Manda el resto en otro mensaje.';
+    return len >= Math.ceil(max * 0.9) ? len + '/' + max : null; }
+  function pastedOverflow(curLen, selLen, pasteLen, max) { max = max || INPUT_MAX; var room = Math.max(0, max - (Number(curLen) || 0) + (Number(selLen) || 0)); return Math.max(0, (Number(pasteLen) || 0) - room); }
+  function pasteLostNote(lost, max) { return 'No entró todo lo que pegaste: quedaron fuera ' + lost + ' caracteres (máximo ' + (max || INPUT_MAX) + '). Mándalos en otro mensaje.'; }
+  // Respuesta con «texto_cortado» (#986: { leidos, faltan }): el resto exacto de lo que se mandó (body.text). A la defensiva: sin el campo,
+  // o con números raros, null (sin botón).
+  function cutRest(sent, tc) {
+    var s = String(sent == null ? '' : sent); if (!tc || typeof tc !== 'object' || Array.isArray(tc)) return null;
+    var ok = function (n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n > 0 && n < s.length; };
+    var rest = ok(tc.leidos) ? s.slice(tc.leidos) : ok(tc.faltan) ? s.slice(s.length - tc.faltan) : '';
+    rest = rest.trim(); return rest || null;
+  }
+
   function configurationIntent(text, previous) {
     var t = String(text || '').trim().toLowerCase();
     if (/\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/.test(t)) return true;
     return !!previous && /^(?:s[ií]|no|hazlo|apl[ií]calo|normal|chico|grande|muy grande|azul|verde|naranja|celeste|simple|claro|noche|auto|\d{1,6}%?)[.!]?$/i.test(t);
   }
-  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { configurationIntent: configurationIntent, INPUT_MAX: INPUT_MAX, inputLimitNote: inputLimitNote, pastedOverflow: pastedOverflow, pasteLostNote: pasteLostNote, cutRest: cutRest, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, staleCountFresh: staleCountFresh, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
