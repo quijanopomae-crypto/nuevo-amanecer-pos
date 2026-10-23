@@ -322,3 +322,23 @@ test('alfa) empleado: con el known del Admin no recibe costos ni ganancias (ni h
     assert.doesNotMatch(r.bodies[0] + r.raw, /"(?:costo\w*|ganancia\w*|margen\w*|utilidad\w*|cost\w*)"\s*:/i);
   }
 });
+
+// (segunda revisión, BLOCK) marca del catálogo al empezar la frase, antes de «debe/pagó»: en la base llegaba entera. Hacia atrás también
+// se mira el catálogo con mayúscula («Pilsen debe…», «Inca Kola me debe…»); una persona real antes de «debe/pagó» se sigue tapando.
+const BRAND_DEBT = ['Pilsen debe subir de precio', 'Gloria me debe mandar 2 cajas', 'Alicorp me debe una factura', 'Inca Kola me debe 2 cajas',
+  'Sublime me debe el bonificado', 'Alicorp ya pagó la nota de crédito', 'Pilsen pagó la promoción', 'Inca Kola debe venir el lunes'];
+test('revisión 2) marca del catálogo antes de «debe/pagó» queda entera; la persona sigue tapada (regla compartida)', () => {
+  for (const text of BRAND_DEBT) assert.equal(A.maskCuedPeople(text, DATA.products), text, text);
+  for (const [text, want] of [['Rosa Quispe ya pagó', '[nombre oculto] ya pagó'], ['oscar me debe 10', '[nombre oculto] me debe 10'],
+    ['Rosa Quispe me debe 2 kg', '[nombre oculto] me debe 2 kg'], ['Gloria y Rosa Quispe me deben', 'Gloria y [nombre oculto] me deben'],
+    ['Rosa Quispe y Pilsen me deben', '[nombre oculto] y Pilsen me deben']]) assert.equal(A.maskCuedPeople(text, DATA.products), want, text);
+});
+test('revisión 2) marca del catálogo antes de «debe/pagó» llega entera al modelo, Admin y empleado (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const role of ['owner', EMP]) for (const stream of [true, false]) for (const text of BRAND_DEBT) {
+    const r = await chat(text, { role, stream });
+    assert.equal(r.bodies.length, 1, role + ' stream=' + stream + ' ' + text + ': ' + r.raw.slice(0, 200));
+    assert.doesNotMatch(r.lastUser, /\[nombre oculto\]/, role + ' stream=' + stream + ': ' + r.lastUser);
+    assert.ok(r.lastUser.includes(text), role + ' stream=' + stream + ': ' + r.lastUser);
+  }
+});
