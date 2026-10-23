@@ -847,3 +847,18 @@ test('#995 (decisión del lead) «me pagó ella / él»: «¿De qué cliente? Es
     assert.equal((await askP('¿cuánto me pagó el cliente 5 esta semana?', { stream })).reply, ROSA_REPLY);
   }
 });
+
+// (bloqueo en b4072c52) Sin tope de palabras entre el verbo y el nombre (hasta el inicio o el fin de la oración; la coma no corta) y «en», «a»,
+// «la», «tarde», «noche», «mañana», «nomás» se saltan y nunca son nombres. Sin Rosa: «No encontré… Rosa», sin IA ni total; con Rosa: cliente #5.
+const FAR_ROSA = ['¿me pagó ya hoy temprano solo la Rosa?', '¿me pagó ya hoy temprano solo la rosa?', '¿me pagó hoy en la mañana Rosa?', '¿me pagó ayer a la tarde Rosa?',
+  '¿me pagó recién nomás Rosa?', '¿me pagó anoche en la noche, ya tarde, Rosa?', '¿Rosa ya hoy en la tarde temprano me pagó?'];
+test('#995 (bloqueo en b4072c52) 5 o más palabras entre el verbo y el nombre: sin Rosa = «No encontré… Rosa» sin IA; con Rosa = cliente #5 (con y sin partes)', async () => {
+  for (const text of FAR_ROSA) for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = text + ' stream=' + stream + ' ' + args.tipo;
+    const miss = await askP(text, { stream, args, data: noRosa(DATA_CR) });
+    assert.equal(miss.reply, 'No encontré a un cliente llamado Rosa. Revise el nombre en Clientes o dígame su código («cliente #código»).', why);
+    assert.equal(miss.cap.length, 0, why);
+    const hit = await askP(text, { stream, args });
+    assert.equal(hit.reply, ROSA_REPLY, why); noNamesP(hit.cap, why);
+  }
+});
