@@ -760,3 +760,42 @@ test('#995 (3ª revisión, punto 2) sin doble nombre: un cliente queda «cliente
     assert.ok(!/\(cliente #/.test(one.reply) && !NAMES_P.test(one.reply), one.reply);
   }
 });
+
+// (revisión tras la base, bloqueo 1) Palabras comunes junto al verbo NO son nombres: en 0b626c24 daban ventas S/ 400 / cobros S/ 50;
+// en 81551029 «No encontré a un cliente llamado Alguien / Mis». Esas palabras (lista fija) siguen el camino de antes; cualquier otra que no
+// esté en Clientes sigue siendo «No encontré…» (decisión del lead: mejor eso que arriesgar el total de la tienda).
+const COMMON_PAY = ['¿me pagó alguien hoy?', '¿cuánto me pagaron mis clientes esta semana?', '¿me pagó alguien de fiado esta semana?', '¿cuánto me pagaron nuestros clientes esta semana?',
+  '¿me pagaron varios esta semana?', '¿cuánto me pagaron ellos esta semana?', '¿solo me pagaron de fiado esta semana?', '¿quién me pagó recién?', '¿cuánto me pagaron entre todos esta semana?',
+  '¿cuánto me pagó cada uno esta semana?', '¿cuánto me pagó la gente esta semana?', '¿cuánto me pagó la vecina esta semana?', '¿cuánto me pagaron ambos esta semana?',
+  '¿cuánto me pagaron sus clientes esta semana?', '¿Alguien me pagó de fiado esta semana?', '¿Mis clientes me pagaron esta semana?'];
+test('#995 (bloqueo tras la base) palabras comunes junto al verbo («alguien», «mis clientes», «la vecina», «cada uno»…) no son nombres: la respuesta de la tienda, nunca «No encontré» (con y sin partes)', async () => {
+  for (const text of COMMON_PAY) for (const data of [DATA_CR, DATA_P]) for (const stream of [false, true]) {
+    const why = text + ' stream=' + stream;
+    const cob = await askP(text, { stream, data });
+    assert.equal(cob.reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ ' + (data === DATA_P ? '32.00 en 4' : '29.00 en 3') + ' cobros.', 'cobros: ' + why);
+    assert.ok(cob.cap.length >= 1, why);
+    const ven = await askP(text, { stream, data, args: { tipo: 'ventas_periodo', ...WEEK } });
+    assert.ok(!/No encontré|De cuál cliente|código del cliente/.test(ven.reply), 'ventas: ' + why + ' -> ' + ven.reply);
+    assert.ok(ven.cap.length >= 1, why);
+  }
+  // Otra palabra que no está en Clientes sigue siendo «No encontré…» (sin IA).
+  for (const stream of [false, true]) {
+    const { reply, cap } = await askP('¿cuánto me pagó pedro esta semana?', { stream });
+    assert.match(reply, /^No encontré a un cliente llamado Pedro\./); assert.equal(cap.length, 0);
+  }
+  // «rosa» en minúscula SÍ está en Clientes: sigue siendo cliente #5.
+  for (const stream of [false, true]) assert.equal((await askP('¿cuánto me pagó rosa esta semana?', { stream })).reply, ROSA_REPLY);
+});
+
+// (bloqueo 2) «cliente 5 S/», «cliente 5 s/.», «cliente 5%» no son el código 5.
+test('#995 (bloqueo tras la base) «cliente 5%», «cliente 5 S/», «cliente 5 s/.» no son códigos; «… el cliente 5% descuento» = total de la tienda', async () => {
+  const { clientCodesInText } = await import('../../tools/cloudflare-lab/src/pos-assistant-queries.js');
+  for (const text of ['el cliente 5 S/ de descuento', 'el cliente 5 s/. de vuelto', 'el cliente 5% descuento', 'el cliente 5 % descuento', 'cliente 5s/ más'])
+    assert.deepEqual(clientCodesInText(text), [], text);
+  assert.deepEqual(clientCodesInText('el cliente 5 y el #9'), ['5', '9']);
+  assert.deepEqual(clientCodesInText('el cliente 5 de su deuda'), ['5']);
+  for (const stream of [false, true]) {
+    const { reply } = await askP('¿cuánto cobré de fiados esta semana? el cliente 5% descuento', { stream });
+    assert.equal(reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', 'stream=' + stream);
+  }
+});
