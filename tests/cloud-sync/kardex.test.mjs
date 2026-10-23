@@ -517,3 +517,62 @@ test('summary cards: 2 columns from 600 to 770 px, 4 from 771 px, no mid-word br
     sheet.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{/g, '').split('}').map(r => r.split('{')[0].trim()).filter(Boolean)
       .forEach(sel => sel.split(/,(?![^(]*\))/).forEach(part => assert.ok(part.trim().includes(scope), part)));
 });
+
+test('CM-082: ventas cobradas en cola sin confirmar cuadran el kardex offline sin tocar la cola', () => {
+  const intent = { sale_id: 'V-009', created_at: '2026-10-15T15:00:00.000Z', items: [{ product_id: 'p1', quantity: 2, unit_price_cents: 100 }, { product_id: 'GENERIC:x', quantity: 1, generic_line: {} }] };
+  const queue = Object.freeze({ version: 1, intents: Object.freeze([Object.freeze(intent)]) });
+  const h = renderHarness({ NA_ROLES: { role: 'owner', isOwner: () => true },
+    productos: [{ ...product, stock: 8 }], ventas: [],
+    NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ inventoryMovements: [move('compra-1', 10, { type: 'COMPRA', fecha: '2026-10-14' })] }) },
+    NuevoAmanecerCanonicalSaleOutbox: { snapshot: () => queue } });
+  assert.equal(h.api.render(), true);
+  h.nodes['[data-kardex-products]'].children[0].click();
+  const content = h.nodes['[data-kardex-content]'];
+  assert.ok(content.textContent.includes('V-009 (sin confirmar)'));
+  assert.equal(queue.intents.length, 1);
+  const pending = [{ sale_id: 'V-009', created_at: intent.created_at, items: [{ product_id: 'p1', quantity: 2 }] }];
+  const report = api.buildLedger({ ...product, stock: 8 }, [move('compra-1', 10, { type: 'COMPRA', fecha: '2026-10-14' })], pending, options);
+  assert.equal(report.opening, 0); assert.equal(report.closing, 8);
+  assert.deepEqual(plain(report.rows.filter(r => r.type === 'Venta').map(r => r.delta)), [-2]);
+  // Ya confirmada (movimiento durable con el mismo sale_id): no se cuenta dos veces.
+  const confirmed = api.buildLedger({ ...product, stock: 8 }, [move('compra-1', 10, { type: 'COMPRA', fecha: '2026-10-14' }), move('m-v9', -2, { type: 'VENTA', sale_id: 'V-009' })], pending, options);
+  assert.equal(confirmed.opening, 0); assert.equal(confirmed.closing, 8);
+  assert.equal(confirmed.rows.filter(r => r.type === 'Venta').length, 1);
+});
+
+test('CM-082: kg con decimales (compra 2.75, venta en cola 0.4) cuadran sin redondear a enteros', () => {
+  const pending = [{ sale_id: 'V-010', created_at: '2026-10-15T15:00:00.000Z', items: [{ product_id: 'p1', quantity: 0.4 }] }];
+  const report = api.buildLedger({ ...product, stock: 2.35 }, [move('kg-in', 2.75, { type: 'COMPRA', fecha: '2026-10-14' })], pending, options);
+  assert.equal(report.opening, 0);
+  assert.equal(report.closing, 2.35);
+  assert.deepEqual(plain(report.rows.filter(r => r.type === 'Venta').map(r => r.delta)), [-0.4]);
+});
+
+test('CM-082: si la cola no se puede leer, avisa en el Kardex y sigue mostrando lo confirmado', () => {
+  const h = renderHarness({ NA_ROLES: { role: 'owner', isOwner: () => true },
+    productos: [{ ...product, stock: 10 }], ventas: [],
+    NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ inventoryMovements: [move('compra-1', 10, { type: 'COMPRA', fecha: '2026-10-14' })] }) },
+    NuevoAmanecerCanonicalSaleOutbox: { snapshot: () => { throw new Error('OUTBOX_CORRUPT'); } } });
+  assert.equal(h.api.render(), true);
+  h.nodes['[data-kardex-products]'].children[0].click();
+  const content = h.nodes['[data-kardex-content]'];
+  assert.ok(content.textContent.includes('No se pudo leer las ventas sin confirmar'));
+  assert.equal(renderedTable(content).children.at(-1).children.length, 2);
+});
+
+test('CM-082: ítems vacíos o nulos de la cola se ignoran y no rompen el saldo', () => {
+  const intent = { sale_id: 'V-011', created_at: '2026-10-15T15:00:00.000Z', items: [null, 0, { product_id: 'p1', quantity: 2 }] };
+  const h = renderHarness({ NA_ROLES: { role: 'owner', isOwner: () => true },
+    productos: [{ ...product, stock: 8 }], ventas: [],
+    NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ inventoryMovements: [move('compra-1', 10, { type: 'COMPRA', fecha: '2026-10-14' })] }) },
+    NuevoAmanecerCanonicalSaleOutbox: { snapshot: () => ({ version: 1, intents: [intent] }) } });
+  assert.equal(h.api.render(), true);
+  h.nodes['[data-kardex-products]'].children[0].click();
+  const content = h.nodes['[data-kardex-content]'];
+  assert.ok(content.textContent.includes('V-011 (sin confirmar)'));
+  assert.ok(!content.textContent.includes('No se pudo leer'));
+  const report = api.buildLedger({ ...product, stock: 8 }, [move('compra-1', 10, { type: 'COMPRA', fecha: '2026-10-14' })],
+    [{ sale_id: 'V-011', created_at: intent.created_at, items: [null, undefined, { product_id: 'p1', quantity: 2 }] }], options);
+  assert.equal(report.opening, 0); assert.equal(report.closing, 8);
+  assert.deepEqual(plain(report.rows.filter(r => r.type === 'Venta').map(r => r.delta)), [-2]);
+});
