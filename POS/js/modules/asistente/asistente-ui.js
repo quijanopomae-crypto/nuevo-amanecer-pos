@@ -13,7 +13,11 @@
   if (!doc || !C || root.NA_ASISTENTE) return;
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
+  var configurationTurn = false;
   var history = [], invoiceMemory = null, state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
+  // Memoria de la charla (#946): hasta memoria.max_bytes del servidor; lo viejo se resume (resumen_sugerido -> «resumen»). Solo en memoria,
+  // nunca en el almacenamiento del aparato; se borra con «Nueva conversación». queued: lo escrito mientras se respondía (sale al terminar).
+  var mem = C.memNew ? C.memNew() : null, queued = null, queuedNote = null, shownSigs = {}, turnNo = 0; configurationTurn = false;
   var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -106,7 +110,9 @@
     } catch (_) {}
   }
   // Pausa: pestaña oculta o una ventana del POS abierta (cobro, compra, ficha): nunca compite con Cobrar.
-  function busyPos() { return !!doc.querySelector('.modal-overlay.open, #naPurchaseDialog, .na-pin-overlay'); }
+  // Solo cuenta una ventana que SE VE: una .modal-overlay que quedó con «open» pero oculta (display:none) no esconde la burbuja (Inventario).
+  function shownNode(n) { if (!n || n.hidden || (n.style && n.style.display === 'none')) return false; try { var cs = root.getComputedStyle ? root.getComputedStyle(n) : null; if (cs && (cs.display === 'none' || cs.visibility === 'hidden')) return false; } catch (_) {} return true; }
+  function busyPos() { var l = doc.querySelectorAll ? doc.querySelectorAll('.modal-overlay.open, #naPurchaseDialog, .na-pin-overlay') : []; for (var i = 0; i < l.length; i++) if (shownNode(l[i])) return true; return false; }
   // Con una ventana del POS abierta (cobro, ficha, compra) la burbuja se oculta: nunca tapa sus botones.
   function applyPause() {
     var busyNow = busyPos() && panelEl && panelEl.hidden, rest = holding || (sleeping && state === 'listo');
@@ -119,7 +125,7 @@
     if (heroEl && heroEl.dataset.paused !== hp) heroEl.dataset.paused = hp;
     if (rootEl && rootEl.dataset.paused !== p) rootEl.dataset.paused = p;
     if (rootEl) rootEl.style.visibility = busyNow ? 'hidden' : '';
-    if (rootEl) { var show = allowedHere() && !(heroEl && pageId() === 'pageMenu'); rootEl.style.display = show ? '' : 'none'; // en Inicio la tarjeta hace de lanzador
+    if (rootEl) { var show = allowedHere(); rootEl.style.display = show ? '' : 'none'; // botón flotante también en Inicio e Inventario (la tarjeta de Inicio sigue)
       // Al entrar a Venta o Caja (o si deja de ser dueño) el panel se cierra: nunca queda sobre Cobrar.
       if (!show && panelEl && !panelEl.hidden && (!isAdmin() || pageId() === 'pagePOS' || pageId() === 'pageCaja')) { panelEl.hidden = true; rootEl.hidden = false; } }
   }
@@ -234,7 +240,8 @@
   // Para la puerta de ejecución: rol y nivel según el SERVIDOR (último ping), no el rol guardado del POS.
   function roles() {
     if (!access) return { role: 'unknown' };
-    return { role: access.role, level: access.level, isOwner: function () { return access.role === 'owner'; } };
+    // cambios: nivel 3 con «costos y cambios» según el ping del servidor (solo para tarjetas de Configuración con destino servidor)
+    return { role: access.role, level: access.level, cambios: access.cambios === true, isOwner: function () { return access.role === 'owner'; } };
   }
   // Mismo pedido que NA_ROLES.api (endpoint, Bearer, sin cookies) pero con límite de tiempo propio del asistente.
   // Un timeout lanza un error (timeout=true); un error HTTP vuelve como { error, status }.
@@ -307,10 +314,25 @@
   // es del POS y no lleva la hoja del asistente garantizada). «U+202E 1234-100F» ya llega normalizado («1234-100F»); esto cubre lo que trae la propuesta.
   function ltrIsolate(n) { if (!n || !n.setAttribute) return n; n.setAttribute('dir', 'ltr'); if (n.classList) n.classList.add('na-asst-ltr'); else n.className = (n.className ? n.className + ' ' : '') + 'na-asst-ltr';
     if (n.style) { n.style.unicodeBidi = 'isolate'; n.style.direction = 'ltr'; } return n; }
+  async function configurationApi() {
+    if(!isOwnerAccess()) return null;
+    try { if(!root.NA_CONFIG_V9&&root.NA_CONFIG_V9_BOOT) await root.NA_CONFIG_V9_BOOT.load(); } catch (_) { return null; }
+    return isOwnerAccess()?root.NA_CONFIG_V9:null;
+  }
   var deps = {
+    // (#967 teléfono) destino servidor: el confirm ya guardó; se vuelven a leer pos.business, pos.ticket y pos.flags con el lector EXISTENTE
+    // de Configuración (config-g.js pullSettings: GET /settings y aplica con los mismos setters), sin recargar la página
+    reloadSettings: function () { var G = root.NA_CONFIG_G; return G && typeof G.pullSettings === 'function' ? G.pullSettings() : null; },
+    applyConfiguration: async function(p) { var api=await configurationApi(); return api&&api.assistantApply?api.assistantApply(p):{ok:false,msg:'No se pudo cargar Configuración.'}; },
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
+    // proveedores que el aparato conoce (campo proveedor de los productos y movimientos de compra): no se tapan como clientes
+    proveedores: function () { var out = {}, put = function (v) { v = typeof v === 'string' ? v.trim() : ''; if (v && v.length <= 120 && v !== 'Sin proveedor registrado') out[v] = 1; };
+      var ps = g('productos'), ms = g('inventoryMovements'); if (!Array.isArray(ms)) ms = root.inventoryMovements;
+      (Array.isArray(ps) ? ps : []).slice(0, 5000).forEach(function (x) { if (x) { put(x.proveedor); put(x.supplier); } });
+      (Array.isArray(ms) ? ms : []).slice(-5000).forEach(function (x) { if (x) { put(x.supplier); put(x.proveedor); } });
+      return Object.keys(out).slice(0, 2000); },
     refreshProducts: async function () {
       var client = root.NuevoAmanecerCanonical;
       if (!client || typeof client.refresh !== 'function') throw new Error('catalog_unavailable');
@@ -382,7 +404,7 @@
       o.querySelector('.na-asst-no').onclick = function () { o.remove(); };
       o.querySelector('.na-asst-ok').onclick = function () { try { o.querySelector('iframe').contentWindow.print(); } catch (_) {} };
     },
-    businessName: function () { return 'Botica Nuevo Amanecer'; }
+    businessName: function () { return C.businessName ? C.businessName(g('appConfig')) : 'Nuevo Amanecer'; } // nombre del negocio de Configuración
   };
   // Conserva el borrador de compra mientras se guarda la ficha normal del producto.
   // No llama comandos ni suma stock: Nuevo producto y Registrar compra mantienen sus permisos.
@@ -468,7 +490,14 @@
   function lineName(l) { var prod = null; try { prod = l && l.product_id && deps.productos().find(function (x) { return String(x.id) === String(l.product_id); }); } catch (_) { prod = null; }
     var n = prod && (prod.nombre || prod.name); return n ? n : (l ? l.nombre : ''); }
   // cuántas filas hay en total: en deudas es «clientes» y en ventas no hay cuenta («total» es plata: antes salía «Mostrando 10 de 22057.72»)
-  function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'ventas_periodo' ? null : r.total; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
+  // Solo donde «total» ES una cuenta de filas (bajo stock, sin costo); en caja, compras o ventas es plata (salía «Mostrando 1 de 20»).
+  function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'bajo_stock' || r.tipo === 'sin_costo' || r.tipo === 'creditos_atrasados' ? r.total : null; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
+  // (fix/asist-compras-borrador) fila final con el total de la compra; si alguna fila no trae costo, se avisa cuántas.
+  function totalRow(t) {
+    if (!t || t.filas.length === t.sinCosto) return '';
+    return '<tr class="tot"><td><b>Total de la compra</b>' + (t.sinCosto ? '<div class="note" data-sincosto>' + (t.sinCosto === 1 ? '1 fila sin costo' : t.sinCosto + ' filas sin costo') + '</div>' : '') +
+      '</td><td></td><td class="r"><b data-total>' + soles(t.total) + '</b></td></tr>';
+  }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +
@@ -476,6 +505,7 @@
     if (p.type === 'consulta') {
       var r = p.result || {};
       return '<h4>' + E(r.titulo || 'Consulta') + '<span class="pill ro">Solo lectura</span></h4>' + (r.error ? '<div class="warn">' + E(r.texto) + '</div>' :
+        !(r.filas && r.filas.length) ? '<div class="note na-asst-empty">Sin datos.</div>' : // tabla vacía: sin cabecera suelta
         '<table class="q">' + (r.columnas && r.columnas.length ? '<tr>' + r.columnas.map(function (c, i) { return '<th' + (i ? ' class="r"' : '') + '>' + E(c) + '</th>'; }).join('') + '</tr>' : '') +
         (r.filas || []).map(function (f) { return '<tr>' + f.map(function (c, i) { return '<td' + (i ? ' class="r"' : '') + '>' + E(typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
         (r.truncado ? '<div class="warn">Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.</div>' : '') +
@@ -486,6 +516,7 @@
       '<div class="note">' + E([p.desde, p.hasta && p.hasta !== p.desde ? p.hasta : null].filter(Boolean).join(' a ') + (p.cliente_id && CUSTOMER_DOCS.indexOf(p.tipo) >= 0 ? ' · Cliente: ' + cliLabel(p.cliente_id) : '')) + '</div>' +
       '<div class="warn doc">Documento interno. NO es comprobante SUNAT.</div>' +
       '<div class="res" aria-live="polite"></div><div class="acts"><button type="button" class="na-asst-ok" data-open>Abrir documento</button></div>';
+    var tot = p.type === 'compra' ? C.purchaseTotals(p) : null;
     if (p.type === 'compra') rows = '<tr><th>Producto</th><th class="r">Costo actual</th><th class="r">Factura</th></tr>' + p.lineas.map(function (l, i) {
       var flag = l.revisar && l.revisar.length;
       var why = flag ? l.revisar.map(function (k) { return REVIEW_TEXT[k] || k; }).join(', ') : '';
@@ -493,7 +524,11 @@
       return '<tr' + (flag ? ' class="flag" data-row="' + i + '"' : '') + '><td>' + E(l.cantidad) + ' × ' + E(lineName(l)) + (l.product_id ? '' : ' <b class="nr">(no registrado)</b>') +
         (l.limite && l.limite.length ? '<div class="flag-t">Fuera del límite: ' + E(why) + '. Corrige la factura o quita la fila.</div><div class="flag-a"><button type="button" data-drop="' + i + '">Quitar fila</button></div>'
           : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
-        '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') + '</td></tr>'; }).join('');
+        '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') +
+        (tot.filas[i] != null ? '<div class="lt" data-lt="' + i + '">Total ' + soles(tot.filas[i]) + '</div>' : '') + '</td></tr>'; }).join('') + totalRow(tot);
+    // RUC tapado: sin valor en la tarjeta; se escribe en el campo de abajo (needFields)
+    var cfgVal = function (v) { return typeof v==='boolean'?(v?'Activado':'Desactivado'):v; }, rucNeed = C.isRucCard && C.isRucCard(p) && C.fillValues && (Array.isArray(p.completar) || Array.isArray(p.needFields));
+    if (p.type === 'configuracion') rows = '<tr><td>'+E(p.nombre)+'<div class="note">'+E(p.alcance)+'</div></td><td>'+E(cfgVal(p.antes))+' → <b>'+(rucNeed?'Escríbalo abajo':E(cfgVal(p.valor)))+'</b></td></tr>';
     if (p.type === 'precio') rows = '<tr><td>' + E(p.nombre) + '</td><td class="r">' + soles(p.precio_actual) + ' → <b>' + soles(p.precio_nuevo) + '</b></td></tr>';
     if (p.type === 'costo') rows = '<tr><td>' + E(p.nombre) + '<div class="note">Costo</div></td><td class="r">' + (p.costo_actual != null ? soles(p.costo_actual) : 'sin costo') + ' → <b>' + soles(p.costo_nuevo) + '</b></td></tr>';
     if (p.type === 'ajuste') rows = '<tr><td>' + E(p.nombre) + '<div class="note">' + E(p.motivo) + '</div></td><td class="r">' + (p.tipo === 'entrada' ? '+' : '−') + E(p.cantidad) + '</td></tr>' +
@@ -510,12 +545,13 @@
     if (p.type === 'ajuste' && p.grande) warn += '<div class="warn">Cantidad muy grande. Revisa bien.</div>';
     if (p.type === 'producto' && p.parecidos && p.parecidos.length) warn += '<div class="warn">Ya hay productos parecidos: ' + E(p.parecidos.join(', ')) + '.</div>';
     if (p.type === 'producto' && p.revisar) warn += '<div class="warn">Precio o costo fuera de lo normal. Revisa bien.</div>';
-    var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». La compra no cambia el costo del producto: usa las tarjetas «Actualizar costo».',
+    var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
+      configuracion: p.destino==='servidor'?'Al confirmar se guarda en el servidor. Afecta a toda la tienda.':'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
     var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note" data-docnote></div>' : '';
-    return '<h4>' + E(p.title) + '<span class="pill">Solo Admin</span></h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
+    return '<h4>' + E(p.title) + (C.isServerConfig && C.isServerConfig(p) ? '<span class="pill">Toda la tienda</span>' : '<span class="pill">Solo Admin</span>') + '</h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
       '<div class="meta"><span>Vence en <b data-left>5:00</b></span><span>Se usa una sola vez</span></div>' +
       '<div class="res" aria-live="polite"></div>' +
       '<div class="acts"><button type="button" class="na-asst-ok" data-ok>Confirmar</button><button type="button" class="na-asst-no" data-no>Cancelar</button>' +
@@ -527,9 +563,20 @@
   function tokenExp(p) { return tokenData(p).exp || 0; }
   function tokenOp(p) { var op = tokenData(p).op; return typeof op === 'string' ? op : null; }
   function addDenied(d) { var c = el('div', 'na-asst-card denied'); c.innerHTML = '<h4>No permitido</h4><div>' + C.esc(C.looksTechnical(d.message) ? C.friendlyError('forbidden_role').msg : d.message) + '</div><div class="note">El asistente no puede hacerlo por ti. Pídeselo al Admin.</div>'; msgsEl.appendChild(c); scrollEnd(); }
-  function addCard(p, prompt) {
-    var key = gate.add(p); if (!key) return;
-    var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
+  // Firma de una tarjeta de solo lectura (consulta, pasos, documento): la MISMA tabla de una respuesta anterior no se repite debajo de esta.
+  function cardSig(p) { if (!p || p.confirm_token || (p.type !== 'consulta' && p.type !== 'pasos' && p.type !== 'documento')) return null;
+    try { return p.type + ':' + JSON.stringify(p.type === 'consulta' ? [p.result && p.result.tipo, p.result && p.result.titulo, p.result && p.result.columnas, p.result && p.result.filas, p.result && p.result.texto] : p.type === 'pasos' ? [p.title, p.pasos] : [p.tipo, p.title, p.desde, p.hasta, p.cliente_id]); } catch (_) { return null; } }
+  var cardAnchor = null;
+  function addCard(p, prompt, after) {
+    after = after || cardAnchor;
+    var sig = cardSig(p); if (sig && shownSigs[sig] != null && shownSigs[sig] !== turnNo) return null; // ya está más arriba, igual
+    var key = gate.add(p); if (!key) return null;
+    if (msgsEl.querySelectorAll) { var dup = [].slice.call(msgsEl.querySelectorAll('.na-asst-card')).some(function (x) { return x._naKey === key; }); if (dup) return null; } // la misma propuesta: una sola tarjeta
+    if (sig) shownSigs[sig] = turnNo;
+    var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key;
+    // la tarjeta va con SU respuesta (debajo de la burbuja de este turno), nunca al final de una respuesta posterior
+    if (after && after.parentNode === msgsEl && after.nextSibling) msgsEl.insertBefore(c, after.nextSibling); else msgsEl.appendChild(c);
+    if (cardAnchor) cardAnchor = c;
     // tabla de consulta: el servidor manda «cliente #código»; al ADMIN se le muestra el nombre de la lista de ESTE aparato (decisión del Admin
     // 22-10), al empleado solo el código. El nombre nunca va al modelo.
     var qt = p.type === 'consulta' && C.customerCodesIn && isOwnerAccess() ? c.querySelector('table.q') : null; if (qt) linkCustomers(qt, C.customerCodesIn(qt.textContent, deps.clientes()));
@@ -540,11 +587,15 @@
     var go = c.querySelector('[data-go]'); if (go) go.onclick = function () { gate.execute(key, { confirmed: true }).then(function () { closePanel(); }); };
     // Documento local (solo lectura): se puede abrir varias veces, sin servidor ni PIN.
     var op = c.querySelector('[data-open]'); if (op) op.onclick = function () { var perm = C.canExecute(roles(), p); if (!perm.ok) { c.querySelector('.res').textContent = perm.msg; return; } op.disabled = true; Promise.resolve(C.EXECUTORS.documento(p, deps)).then(function (r) { c.querySelector('.res').textContent = r.msg; }, function () { c.querySelector('.res').textContent = 'No se pudo armar el documento.'; }).then(function () { op.disabled = false; }); };
-    var no = c.querySelector('[data-no]'); if (no) no.onclick = function () { gate.cancel(key); c.dataset.st = 'cancelled'; res.textContent = 'Cancelado. No se hizo nada.'; };
+    var no = c.querySelector('[data-no]'); if (no) no.onclick = function () { gate.cancel(key, 'cancelada'); c.dataset.st = 'cancelled'; res.textContent = 'Cancelado. No se hizo nada.'; };
     var ok = c.querySelector('[data-ok]'), left = c.querySelector('[data-left]');
     var exp = tokenExp(p), timer = null;
     // Filas «Revisa este dato»: Confirmar queda apagado hasta aceptar o quitar cada una (el servidor exige lo mismo).
     var decided = {};
+    // fila quitada: el total de la compra deja de contarla
+    function syncTotal() { if (p.type !== 'compra') return; var b = c.querySelector('[data-total]'); if (!b) return;
+      var t = C.purchaseTotals({ lineas: p.lineas.filter(function (_, i) { return decided[i] !== 'drop'; }) }); b.textContent = soles(t.total);
+      var n = c.querySelector('[data-sincosto]'); if (n) n.textContent = t.sinCosto ? (t.sinCosto === 1 ? '1 fila sin costo' : t.sinCosto + ' filas sin costo') : ''; }
     function pendingRows() { return Array.prototype.filter.call(c.querySelectorAll('tr.flag'), function (tr) { return !decided[tr.dataset.row]; }).length; }
     function review() { if (p.type !== 'compra') return null; var a = [], d = []; Object.keys(decided).forEach(function (k) { (decided[k] === 'drop' ? d : a).push(Number(k)); }); return { op: tokenOp(p), accept: a, drop: d }; }
     // (Bot 2 sobre 6280deae) campos vacíos de la tarjeta de compra: Confirmar apagado hasta llenarlos
@@ -580,7 +631,7 @@
       var i = b.getAttribute('data-accept') != null ? b.getAttribute('data-accept') : b.getAttribute('data-drop'), tr = c.querySelector('tr[data-row="' + i + '"]');
       decided[i] = b.hasAttribute('data-drop') ? 'drop' : 'accept';
       if (tr) { tr.dataset.decision = decided[i]; var t = tr.querySelector('.flag-t'); if (t) t.textContent = decided[i] === 'drop' ? 'Fila quitada: no se agregará.' : 'Revisado: lo aceptaste.'; }
-      syncOk();
+      syncTotal(); syncOk();
     });
     // Vencida (por la hora o porque el servidor dijo 410): Confirmar queda a la vista pero apagado, «Venció», y se ofrece «Pedir de nuevo».
     function expire() {
@@ -592,7 +643,7 @@
     function tick() {
       if (!left) return; var ms = exp - (Date.now() + clockOffset); if (!exp) { left.textContent = '-'; return; }
       if (ms <= 0 && ok && ok.textContent === 'Guardando…') { left.textContent = '0:00'; return; } // en curso: el servidor decide (ya usada = mismo id)
-      if (ms <= 0) { clearInterval(timer); if (c.dataset.st === 'pending') { gate.cancel(key); expire(); if (again) { again.hidden = false; again.disabled = false; } } left.textContent = '0:00'; return; }
+      if (ms <= 0) { clearInterval(timer); if (c.dataset.st === 'pending') { gate.cancel(key, 'vencida'); expire(); if (again) { again.hidden = false; again.disabled = false; } } left.textContent = '0:00'; return; }
       var sec = Math.ceil(ms / 1000); left.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }
     syncOk();
@@ -628,12 +679,14 @@
         // (Bot 4 sobre 58200f60) nada que arreglar en la tarjeta: aviso claro y solo «Cancelar» (ningún botón que no lleve a ningún lado)
         if (f.kind === 'blocked') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (again) again.hidden = true; no.hidden = false; no.disabled = false; no.textContent = 'Cancelar'; return; }
         if (f.kind === 'review' || f.kind === 'limit') markRows(f.rows, f.kind === 'limit');
-        if (f.kind === 'fields') { var rest = need ? need.flag(f.fields) : f.fields; res.textContent = rest.length || !need ? f.msg : 'Complete los datos marcados y vuelva a confirmar.'; }
+        if (f.kind === 'fields' && p.type === 'configuracion') { if (need) need.flag(f.fields, f.msg); res.textContent = f.msg; } // RUC: el aviso del servidor junto al campo y en la tarjeta
+        else if (f.kind === 'fields') { var rest = need ? need.flag(f.fields) : f.fields; res.textContent = rest.length || !need ? f.msg : 'Complete los datos marcados y vuelva a confirmar.'; }
         if (again) { again.hidden = !f.again; again.disabled = false; }
         if (c.dataset.st === 'pending') { c.dataset.btn = f.button; ok.disabled = false; no.disabled = false; ok.textContent = f.button; syncOk(); }
       });
     };
     // La vista la acomoda send() (no se salta lo que la persona está leyendo).
+    return c;
   }
   // ---------- Permiso quitado o cambiado con la app abierta ----------
   // 403 assistant_off / forbidden_role / admin_only en chat o confirm: se cierra el panel y se QUITAN la burbuja, el panel y la tarjeta
@@ -650,6 +703,7 @@
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
     history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
+    mem = C.memNew ? C.memNew() : null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0; configurationTurn = false;
   }
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
@@ -676,17 +730,18 @@
     return true;
   }
   function roleLost(c, key, p, need) {
+    var lostMsg = p && p.type === 'configuracion' && C.CONFIG_LOST_MSG ? C.CONFIG_LOST_MSG : C.ROLE_LOST_MSG; // Configuración: aviso propio
     try { gate.forget(key); } catch (_) {}
     try { if (gate.forgetAll) gate.forgetAll(); } catch (_) {}
     if (c) { if (!c._naNeed) c._naNeed = need; if (!c._naP) c._naP = p; }
     wipeCard(c); C.wipeManual(p);
     Array.prototype.forEach.call(doc.querySelectorAll('.na-asst-card'), wipeCard);
     closeAssistantPurchase();
-    var m = el('div', 'na-asst-msg sys na-asst-rolelost'), t = el('div'); t.textContent = C.ROLE_LOST_MSG; m.appendChild(t);
+    var m = el('div', 'na-asst-msg sys na-asst-rolelost'), t = el('div'); t.textContent = C.ROLE_LOST_MSG; if (lostMsg !== C.ROLE_LOST_MSG) t.textContent = lostMsg; m.appendChild(t);
     var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Cerrar'; b.onclick = function () { m.remove(); closePanel(); }; m.appendChild(b);
-    if (msgsEl) { msgsEl.appendChild(m); scrollEnd(); } announce(C.ROLE_LOST_MSG);
+    if (msgsEl) { msgsEl.appendChild(m); scrollEnd(); } announce(lostMsg);
     // el servidor dice el rol nuevo; si al cambiar de rol se rearma el panel (sin la charla), el aviso queda en el aviso del POS
-    lastPing = 0; Promise.resolve(refreshAccess()).then(function () { if (!m.isConnected && !doc.querySelector('.na-asst-rolelost')) posNotice(C.ROLE_LOST_MSG); }, function () {});
+    lastPing = 0; Promise.resolve(refreshAccess()).then(function () { if (!m.isConnected && !doc.querySelector('.na-asst-rolelost')) posNotice(lostMsg); }, function () {});
   }
   function accessLost(code) {
     access = null; adminOff = true; noRole = false;
@@ -770,7 +825,7 @@
   }
   // ---------- «Ventas bajo costo» (solo Admin) ----------
   // Solo lectura: el servidor compara lo cobrado con el costo actual y arma el informe. Aquí solo se muestra (texto, sin tablas HTML).
-  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b/i;
+  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
   function belowRows(m, d) {
     var list = el('div', 'na-asst-below');
     (d.ventas || []).slice(0, 50).forEach(function (g) { if (!g) return; var r = el('div', 'na-asst-below-row');
@@ -804,7 +859,7 @@
       var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
       setState('hablando', 2500);
     } catch (e) { if (!panelEl) return; thinking.remove(); errMsg(root.navigator.onLine === false ? 'offline' : 'network', null, [text, null]); setState('error', 2600); }
-    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; }
+    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; drainQueue(); }
   }
   // ---------- «Leer boleta con IA» (solo Admin, carga diferida de asistente-boleta.js) ----------
   var BOLETA_RE = /\b(?:lee|leer|l[eé]ame|escanea|escanear)\s+(?:una\s+|la\s+|esta\s+)?boleta\b|\bboleta con ia\b/i;
@@ -847,6 +902,20 @@
     }, function (e) { throw P.message(e && e.code); }); }).catch(function (m) {
       wait.remove(); addMsg('a', typeof m === 'string' ? m : 'No pude abrir ese PDF.'); setState('error', 2000); throw m; });
   }
+  // ---------- «Foto de producto» (solo Admin, carga diferida de asistente-producto-foto.js): solo PRELLENA «Nuevo producto» ----------
+  var PRODFOTO_RE = /\bfoto\s+(?:de(?:l)?\s+)?(?:la\s+)?(?:producto|etiqueta)\b|\b(?:lee|leer|l[eé]ame)\s+(?:la\s+|esta\s+)?etiqueta\b/i;
+  var prodFotoP = null;
+  function loadProdFoto() {
+    if (root.NA_ASISTENTE_PRODUCTO_FOTO) return Promise.resolve(root.NA_ASISTENTE_PRODUCTO_FOTO);
+    if (prodFotoP) return prodFotoP;
+    prodFotoP = new Promise(function (ok, ko) { var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-producto-foto.js';
+      sc.onload = function () { root.NA_ASISTENTE_PRODUCTO_FOTO ? ok(root.NA_ASISTENTE_PRODUCTO_FOTO) : ko(new Error('producto-foto')); }; sc.onerror = function () { prodFotoP = null; ko(new Error('producto-foto')); }; doc.body.appendChild(sc); });
+    return prodFotoP;
+  }
+  function prodFotoPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('producto_foto_admin_only'); return; } fileMode = 'producto'; fileEl.click(); }
+  function prodFotoStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true;
+    compress(f).then(function (img) { addMsg('u', 'Foto de producto', img); return loadProdFoto().then(function (P) { var h = boletaHost(); h.openNewProduct = deps.openNewProduct; return P.start(img, h); }); })
+      .catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); }
   function boletaPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('boleta_admin_only'); return; } fileMode = 'boleta'; fileEl.click(); }
   function boletaStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; addMsg('u', 'Leer boleta con IA');
     loadBoleta().then(function (B) { return B.start(f, boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir el lector de boletas. Inténtelo otra vez.'); setState('error', 2000); }); }
@@ -858,14 +927,15 @@
     var thinking = addMsg('a', 'Revisando el punto de venta'); thinking.classList.add('na-asst-thinking');
     var mine = panelEl;
     try {
-      var d = await post('/auth/assistant/review', C.compactReview ? C.compactReview(reviewData()) : reviewData(), null, C.TIMEOUTS.chat); // bajo el tope del servidor (96 KB) if (panelEl !== mine) return; thinking.remove();
+      var d = await post('/auth/assistant/review', C.compactReview ? C.compactReview(reviewData()) : reviewData(), null, C.TIMEOUTS.chat); // bajo el tope del servidor (96 KB)
+      if (panelEl !== mine) return; thinking.remove();
       if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
       var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review'); linkCustomers(b, Array.isArray(d.customers) ? d.customers : []);
       var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
       var R = root.NA_ASISTENTE_REVISION; if (R && R.markSeen) R.markSeen();
       setState('hablando', 2500);
     } catch (e) { if (!panelEl) return; thinking.remove(); errMsg(root.navigator.onLine === false ? 'offline' : 'network', null, [text, null]); setState('error', 2600); }
-    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; }
+    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; drainQueue(); }
   }
   function reviewNotice() {
     var R = root.NA_ASISTENTE_REVISION, n = isOwnerAccess() && R && R.newErrors ? R.newErrors() : 0;
@@ -874,10 +944,32 @@
     var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Ver revisión'; b.onclick = function () { if (!busy) send('Revisión del punto de venta'); };
     m.appendChild(b); msgsEl.appendChild(m);
   }
+  // «Nueva conversación»: se olvida la charla (historial, resumen, factura en memoria) y la pantalla del chat vuelve a empezar.
+  function newChat() {
+    if (busy || !msgsEl) return;
+    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; liveCard = null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0; configurationTurn = false;
+    mem = C.memNew ? C.memNew() : null;
+    try { gate.forgetAll && gate.forgetAll(); } catch (_) {}
+    [].slice.call(msgsEl.children).forEach(function (n) { if (n !== newBtn) n.remove(); }); if (newBtn) newBtn.hidden = true;
+    var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = false;
+    var m = el('div', 'na-asst-mode'); m.textContent = 'Conversación nueva.'; msgsEl.appendChild(m);
+    if (inputEl) try { inputEl.focus(); } catch (_) {}
+  }
+  // Enter mientras responde: el mensaje queda en fila (uno solo; si escribe más, se juntan) y sale apenas termine la respuesta.
+  function queueMsg(text) {
+    text = String(text || '').trim(); if (!text || !msgsEl) return;
+    queued = queued ? (queued + '\n' + text).slice(0, 500) : text; inputEl.value = '';
+    if (!queuedNote || !queuedNote.parentNode) { queuedNote = el('div', 'na-asst-mode na-asst-queued'); msgsEl.appendChild(queuedNote); }
+    queuedNote.textContent = 'Te respondo esto apenas termine.'; scrollEnd();
+  }
+  function drainQueue() { if (!queued || busy || !panelEl) return; var t = queued; queued = null; if (queuedNote) { queuedNote.remove(); queuedNote = null; } setTimeout(function () { if (!busy && panelEl) send(t); else if (panelEl) queueMsg(t); }, 0); }
+  // Solo «sigue / continúa / más…» usa la cabecera de la tabla cortada anterior; otra pregunta empieza limpia (sin arrastrar la anterior).
+  var CONT_RE = /^\s*(?:y\s+)?(?:sigue|siga|seguí|segui|continúa|continua|continúe|continue|contin[uú]a\s+por\s+favor|más|mas|el\s+resto|lo\s+que\s+falta|los\s+dem[aá]s|dale)(?:[\s,.!¡?¿]|$)/i;
   async function send(text, image) {
-    if (busy) return;
+    if (busy) { if (!image) queueMsg(text); return; }
     text = String(text || '').trim(); if (!text && !image) return;
     if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
+    if (!image && isOwnerAccess() && PRODFOTO_RE.test(text)) { inputEl.value = ''; return prodFotoPick(); }
     if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !isReview(text)) return learnedShow(text);
     if (!image && isOwnerAccess() && BELOW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return belowCost(text); }
     if (!image && isOwnerAccess() && isReview(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
@@ -893,23 +985,37 @@
     var screen = (doc.querySelector('.page.active') || {}).id || null;
     // (auditoría de privacidad 2026-10-22) nombres y direcciones de clientes conocidos -> «cliente #código» / «[dirección oculta]» ANTES
     // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
-    var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
+    turnNo++;
+    // memoria (#946): ventana hasta memoria.max_bytes; lo que no entra va resumido en «resumen» (el del servidor, firmado para el empleado)
+    var role = isOwnerAccess() ? 'owner' : 'employee', mreq = null;
+    var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos(), deps.proveedores ? deps.proveedores() : []) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
+    configurationTurn = C.configurationIntent(text, configurationTurn);
+    if (isOwnerAccess() && configurationTurn) {
+      var configPanel=panelEl, configApi=root.NA_CONFIG_V9;
+      if(!configApi) configApi=await configurationApi();
+      if(panelEl!==configPanel) return;
+      if(isOwnerAccess()&&configApi&&configApi.assistantSnapshot) body.context.settings=configApi.assistantSnapshot();
+    }
+    if (gate.summary) body.cards = gate.summary(); // (fix/asist-compras-borrador) estado real de las tarjetas: una cancelada no vuelve como pendiente
+    if (mem && C.memRequest) { mreq = C.memRequest(history, mem, { role: role, now: Date.now() + clockOffset, bodyBase: body }); body.history = mreq.history; if (mreq.resumen) body.resumen = mreq.resumen; }
     if (image) { body.image = image; invoiceMemory = null; }
     else if (isOwnerAccess() && invoiceMemory) body.invoice_memory = invoiceMemory;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
-    var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null; cutNote = null;
+    var prevLabels = !image && CONT_RE.test(text) && lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null; cutNote = null;
     if (streaming) body.stream = true;
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
-    function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
+    function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } if (bubble._hold && bubble._hold.parentNode) bubble._hold.parentNode.removeChild(bubble._hold); return bubble; }
     function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') b.classList.add('na-asst-wide'); b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
     function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); if (bubble) bubble.removeAttribute('aria-busy'); } // (Bot 4) con aria-busy se va la línea de los puntos: misma altura (CSS)
     // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
     function backToThinking() { painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
     // Aviso del servidor mientras busca datos (antes de cualquier texto): «Buscando en su inventario…» en la misma burbuja.
-    function searching() { if (bubble || panelEl !== mine || !thinking.firstChild || thinking.firstChild.nodeType !== 3) return; thinking.firstChild.data = 'Buscando en su inventario'; thinking.classList.add('na-asst-searching'); }
+    // #962: mientras el servidor retiene texto (tras una palabra delicada) manda status {s:'pensando'} aunque ya haya texto pintado: «Pensando…»
+    // debajo de lo pintado (antes de los puntitos), uno solo; lo quita el siguiente texto (ensureBubble), el final o un reset.
+    function searching() { if (bubble || panelEl !== mine || !thinking.firstChild || thinking.firstChild.nodeType !== 3) { var ev = arguments[0]; if (bubble && panelEl === mine && ev && ev.s === 'pensando') { if (!bubble._hold || bubble._hold.parentNode !== bubble) { bubble._hold = doc.createElement('div'); bubble._hold.className = 'na-asst-hold'; bubble._hold.textContent = 'Pensando…'; } bubble.insertBefore(bubble._hold, dots.parentNode === bubble ? dots : null); } return; } thinking.firstChild.data = 'Buscando en su inventario'; thinking.classList.add('na-asst-searching'); }
     try {
       var mine = panelEl, d;
       if (streaming) {
@@ -922,7 +1028,7 @@
         else {
           painter.finish(); // lo que quedaba en la tanda se pinta: nada se pierde
           if (bubble && bubble._md) bubble._md.finish(); // la última línea (cabecera o fila sin salto) también
-          doneBubble();
+          doneBubble(); if (bubble && bubble._hold && bubble._hold.parentNode) bubble._hold.parentNode.removeChild(bubble._hold); // #962: sin «Pensando…» al final
           if (st.final) d = st.final;
           else if (st.text && bubble && (!st.error || /^upstream_/.test(String(st.error.error || '')))) { incomplete(bubble, text, image); setState('error', 2600); return; }
           else if (st.error) d = { ok: false, error: st.error.error || 'upstream_error', status: st.error.status };
@@ -941,6 +1047,8 @@
       // Turnos firmados por el servidor (texto exacto + firma). Sin firma, el servidor los descarta en un aparato de empleado.
       if (Array.isArray(d.turns) && d.turns.length === 2) history.push({ role: 'user', content: d.turns[0].content, sig: d.turns[0].sig, n: d.turns[0].n, iat: d.turns[0].iat }, { role: 'assistant', content: d.turns[1].content, sig: d.turns[1].sig, n: d.turns[1].n, iat: d.turns[1].iat, cut: d.turns[1].cut === true });
       else history.push({ role: 'user', content: body.text || 'Foto' }, { role: 'assistant', content: d.reply });
+      var memNote = null;
+      if (mem && C.memStore) { C.memStore(history, role, typeof d.nota === 'string' ? d.nota : null); var ma = C.memAfter(history, mem, d, mreq); memNote = ma && ma.notice; }
       // El texto definitivo del servidor reemplaza al que se fue pintando (puede cambiar si una tarjeta se quitó). Tarjetas: SOLO de final.
       // Si es el mismo texto no se toca (nada se mueve). Las tarjetas van DEBAJO del texto terminado: lo ya leído no se desplaza;
       // si la persona estaba abajo se baja, pero nunca más allá del inicio de la respuesta (si la tarjeta no entra, sale «Ver nuevo»).
@@ -950,14 +1058,17 @@
       if (C.customerCodesIn && isOwnerAccess()) linkCustomers(bubble, C.customerCodesIn(d.reply, deps.clientes())); // «cliente #código» -> nombre de ESTE aparato (solo Admin)
       { var shown = C.stripDisplay ? C.stripDisplay(d.reply) : d.reply; announce(shown); if (mascot) mascot.speak(shown); } // (Bots 4/5 sobre f773911f) lo que se lee y lo que «dice» la mascota = lo que se ve
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
+      if (memNote) { var mn = el('div', 'na-asst-mode na-asst-memnote'); mn.textContent = memNote; msgsEl.insertBefore(mn, bubble.nextSibling); }
       (d.denied || []).forEach(addDenied);
       if (d.proposals && d.proposals.some(function (x) { return x.type === 'consulta'; }) && d.reply) { /* el texto ya resume los números */ }
+      cardAnchor = bubble; // tarjetas de ESTA respuesta, debajo de ella (addCard corre el ancla)
       (d.proposals || []).forEach(function (x) { addCard(x, text); });
+      cardAnchor = null;
       if (stick) { var top = bubble.getBoundingClientRect().top - msgsEl.getBoundingClientRect().top + msgsEl.scrollTop - 12, end = msgsEl.scrollHeight - msgsEl.clientHeight;
         msgsEl.scrollTop = Math.max(0, Math.min(end, top)); if (end > top + 1) showNew(); else if (newBtn) newBtn.hidden = true; } else if (d.proposals && d.proposals.length) showNew();
       setState('hablando', Math.min(4000, 900 + d.reply.length * 25));
     } catch (e) { if (!panelEl) return; if (painter) painter.reset(); if (bubble) bubble.remove(); thinking.remove(); errMsg(root.navigator.onLine === false ? 'offline' : e && e.timeout ? 'timeout' : 'network', null, [text, image]); setState('error', 2600); }
-    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; }
+    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; drainQueue(); }
   }
   // Comprime en el aparato: lado mayor 1600 px, JPEG, baja calidad hasta quedar < 1.4 MB.
   function compress(file) {
@@ -997,7 +1108,7 @@
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button><button type="button" data-q="Dame las sugerencias de compra">Sugerencias de compra</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Ventas bajo costo">Ventas bajo costo</button><button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button><button type="button" data-q="Dame las sugerencias de compra">Sugerencias de compra</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + (canPhoto() ? '<button type="button" data-prodfoto>Foto de producto</button>' : '') + '<button type="button" data-q="Ventas bajo costo">Ventas bajo costo</button><button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }
@@ -1027,7 +1138,7 @@
     // Corto (3 s) y sin bloquear nada: con mala señal se corta (timeout del pedido) y queda lo que ya había.
     var prevRole = access ? access.role : null;
     pinging = post('/auth/assistant/chat', { ping: true }, null, PING_TIMEOUT_MS).then(function (d) {
-      if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level, vision: d.vision !== false }; adminOff = false; }
+      if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level, vision: d.vision !== false }; access.cambios = d.role !== 'owner' && d.cambios === true; adminOff = false; }
       else if (d && (d.status === 403 || d.status === 401 || d.status === 404)) { access = null; offNow = d.error === 'assistant_off' && d.reason !== 'sin_rol'; }
       else lastPing = 0; // sin respuesta clara: se puede volver a preguntar al reconectar
       noRole = !!(d && d.reason === 'sin_rol'); if (d && 'owner_bootstrap' in d) bootstrapOn = !!d.owner_bootstrap; // solo viene en el 403 sin_rol
@@ -1345,19 +1456,22 @@
     rootEl.innerHTML = '<span class="na-asst-tag" aria-hidden="true"></span><button type="button" class="na-asst-bubble" aria-label="Abrir asistente Burbuja">' + charHtml() + '</button>';
     tagEl = rootEl.querySelector('.na-asst-tag');
     panelEl = el('section', 'na-asst-panel'); panelEl.hidden = true; panelEl.setAttribute('role', 'dialog'); panelEl.setAttribute('aria-label', 'Asistente Burbuja');
-    panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
+    panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-reset" title="Empezar de cero">Nueva conversación</button><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
       '<div class="na-asst-offline" hidden>Asistente no disponible sin internet</div><div class="na-asst-msgs"></div><div class="na-asst-live" aria-live="polite" aria-atomic="true"></div>' +
       '<div class="na-asst-chips">' + chipsHtml() + '</div>' +
       '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto o PDF" title="Tomar foto o subir foto/PDF"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*,application/pdf,.pdf" hidden>' +
       '<textarea rows="1" placeholder="Escribe aquí…" aria-label="Mensaje para el asistente"></textarea><button type="button" class="na-asst-send" aria-label="Enviar">➤</button></div>';
     doc.body.appendChild(rootEl); doc.body.appendChild(panelEl);
     msgsEl = panelEl.querySelector('.na-asst-msgs'); liveEl = panelEl.querySelector('.na-asst-live');
+    // solo para lector de pantalla, también si la hoja del asistente llega vieja o tarde (si no, la respuesta salía DOS veces, debajo)
+    if (liveEl && liveEl.style) liveEl.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0';
     newBtn = el('button', 'na-asst-new'); newBtn.type = 'button'; newBtn.textContent = 'Ver nuevo ↓'; newBtn.hidden = true; newBtn.onclick = scrollEnd; msgsEl.appendChild(newBtn);
     msgsEl.addEventListener('scroll', function () { if (!newBtn.hidden && (atBottom() || noteSeen())) newBtn.hidden = true; }, { passive: true });
     inputEl = panelEl.querySelector('textarea'); sendBtn = panelEl.querySelector('.na-asst-send');
     photoBtn = panelEl.querySelector('.na-asst-photo'); fileEl = panelEl.querySelector('input[type=file]'); offEl = panelEl.querySelector('.na-asst-offline');
     rootEl.querySelector('.na-asst-bubble').onclick = openPanel;
     panelEl.querySelector('.na-asst-x').onclick = closePanel;
+    panelEl.querySelector('.na-asst-reset').onclick = newChat;
     sendBtn.onclick = function () { send(inputEl.value); };
     inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(inputEl.value); } });
     photoBtn.onclick = function () { fileMode = ''; fileEl.click(); };
@@ -1369,8 +1483,9 @@
       if (k === 'pdf' && !isOwnerAccess()) { errMsg('image_owner_only'); return; }
       var got = k === 'pdf' ? pdfImage(f) : Promise.resolve({ blob: f });
       if (mode === 'boleta') { if (isOwnerAccess()) got.then(function (r) { boletaStart(r.blob); }, function () {}); return; }
+      if (mode === 'producto') { if (isOwnerAccess()) got.then(function (r) { prodFotoStart(r.blob); }, function () {}); return; }
       got.then(function (r) { return compress(r.blob).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }, function () { addMsg('a', k === 'pdf' ? 'No pude abrir ese PDF.' : 'No pude abrir esa foto.'); setState('error', 2000); }); }, function () {}); };
-    panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else send(b.dataset.q); });
+    panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else if (b.hasAttribute('data-prodfoto')) prodFotoPick(); else send(b.dataset.q); });
     shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón
     rootEl.addEventListener('pointerdown', wake, { passive: true }); panelEl.addEventListener('pointerdown', wake, { passive: true });

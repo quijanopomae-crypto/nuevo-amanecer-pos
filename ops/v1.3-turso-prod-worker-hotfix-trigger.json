@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #946 #947 #948 #930 #949 #927 #939 (assistant long memory, Lima time, caja_abierta, below-cost alerts, business name, overdue credits with codes only, levels 1/2/3). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39863942113 first. Backend first then web. No schema, migrations, business data or secret changes.",
-  "target_commit": "8e0f236b451b5003220b332648c1725449dc12ba",
-  "rollback_ref": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #966 (below-cost alerts permission), #967 (business/ticket settings via configurar_app, server side) and #978 (phone side, RUC typed on phone). CANON Critical CI success on each PR; #978 also E2E Smoke and Visual Regression success. DB backup run 39974966971 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "cc073012fb8ca4e969d2fc18f276b83f12122b85",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 72,
-  "optimization": "ASSISTANT_BATCH_LEVELS_MEMORY_CREDITS"
+  "attempt": 76,
+  "optimization": "ASSISTANT_BELOW_COST_PERMISSION_BUSINESS_SETTINGS",
+  "target_commit": "065a8311e9936de8c6551f1c1d5e60a85d64483a"
 }

@@ -77,7 +77,9 @@ test('chat con consulta: segunda llamada a DeepSeek solo con el resumen (mensaje
   const p = r.body.proposals[0]; assert.equal(p.type, 'consulta'); assert.equal(p.needsConfirm, false); assert.ok(!p.confirm_token);
   assert.ok(p.result.filas.length <= 10 && p.result.filas.length > 0);
   // Tope del Admin subido de 12000 a 16000 bytes: decisión de alfa del 2026-10-22, para dejar espacio a #957/#962.
-  const [b1, b2] = r.body.payload_bytes; assert.ok(b1 > 0 && b1 < 16000 && b2 > 0 && b2 < 16000, 'bytes ' + r.body.payload_bytes);
+  // Subido de 16000 a 17000 bytes (decisión de alfa del 2026-10-23, cuando #967 traía su propia herramienta). No se sube más.
+  // Ahora #967 va dentro de configurar_app y su catálogo solo viaja en pedidos de configuración: esta consulta no lo lleva.
+  const [b1, b2] = r.body.payload_bytes; assert.ok(b1 > 0 && b1 < 17000 && b2 > 0 && b2 < 16000, 'bytes ' + r.body.payload_bytes);
   assert.match(r.body.reply, /más urgentes/);
 });
 
@@ -90,7 +92,10 @@ test('si la segunda llamada falla, la respuesta usa el texto de la consulta (no 
 test('foto de factura: compara costo actual y de factura; «Actualizar costo» es tarjeta aparte; la confirma solo la sesión dueño, de un toque', async () => {
   const lines = [{ product_id: 'P1', cantidad: 10, costo_unitario: 0.25 }, { product_id: 'P2', cantidad: 5, costo_unitario: 0.3 }, { nombre: 'Nuevo', cantidad: 1, costo_unitario: 1 }];
   const cap = [];
-  const r = await chat({ text: 'lee', image: 'data:image/jpeg;base64,AAAA' }, { fetch: scripted([{ content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Dist', lineas: lines })] }], cap) }, env({ DEEPSEEK_API_KEY: 'k' }));
+  // (fix/asist-compras-borrador) la tarjeta de costo aparte sale solo si lo piden: al registrar la compra el POS ya guarda el costo.
+  const solo = await chat({ text: 'lee', image: 'data:image/jpeg;base64,AAAA' }, { fetch: scripted([{ content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Dist', lineas: lines })] }], []) }, env({ DEEPSEEK_API_KEY: 'k' }));
+  assert.deepEqual(solo.body.proposals.map((p) => p.type), ['compra']);
+  const r = await chat({ text: 'lee y actualiza los costos', image: 'data:image/jpeg;base64,AAAA' }, { fetch: scripted([{ content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Dist', lineas: lines })] }], cap) }, env({ DEEPSEEK_API_KEY: 'k' }));
   const [compra, costo] = r.body.proposals;
   assert.equal(compra.type, 'compra'); assert.equal(compra.lineas[0].costo_actual, 0.2);
   assert.equal(costo.type, 'costo'); assert.equal(costo.product_id, 'P1'); assert.equal(costo.costo_nuevo, 0.25); assert.ok(costo.confirm_token);

@@ -5,8 +5,11 @@
 // - Productos sin costo no se pueden revisar: se cuentan aparte (ya existe la consulta «Productos sin costo»).
 // - Al modelo (si hay proveedor) van SOLO «producto #código», cantidades y totales; nunca nombres de clientes ni de productos.
 //   El aparato del Admin recibe los nombres de SUS productos para la tabla; el informe se muestra con el nombre puesto aquí.
-// - Empleado o aparato sin rol: 403 below_cost_admin_only (sin cupo, sin modelo, sin leer nada).
+// - Admin, o empleado de nivel 3 con el permiso «costos y cambios» (#939, seesOwnerData): pasan. El empleado con permiso ve lo mismo
+//   que el Admin en esta ruta (nombres de SUS productos en pantalla); al modelo siguen yendo solo «producto #código» y totales.
+// - Empleado sin ese permiso (cualquier nivel), aparato sin rol o sin fila: 403 below_cost_admin_only (sin cupo, sin modelo, sin leer nada).
 import { assistantAccess } from './pos-assistant-access.js';
+import { seesOwnerData } from './pos-assistant-levels.js';
 import { redactText, redactOwnerText, reserveUsage, createSettingsUsageStore } from './pos-assistant.js';
 import { resolveProvider, callModel } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
@@ -102,7 +105,8 @@ export async function belowCostRoute(request, env, auth, json, deps = {}) {
   if (String(env?.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
   const role = deps.resolveRole ? await deps.resolveRole(auth) : await assistantAccess(deps.db, auth);
-  if (role !== 'owner' || auth?.posRole !== 'owner') return json(BELOW_COST_DENIED, 403);
+  // Misma regla que el chat (#939): seesOwnerData = Admin o 'empleado:completo+costos'. El Admin además con sesión Admin (como antes).
+  if (!seesOwnerData(role) || (role === 'owner' && auth?.posRole !== 'owner')) return json(BELOW_COST_DENIED, 403);
   let raw; try { raw = await request.text(); } catch { return json({ error: 'bad_request' }, 400); }
   if (raw.length > BELOW_COST_LIMITS.maxBodyBytes) return json({ error: 'payload_too_large' }, 413);
   let body = {}; if (raw.trim()) { try { body = JSON.parse(raw); } catch { return json({ error: 'bad_request' }, 400); } }
