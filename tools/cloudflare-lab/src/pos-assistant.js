@@ -3469,8 +3469,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
   // (UNI-058 / INV-041 / INV-027) lo conocido en este pedido para el filtro final: productos (marca «Don Vittorio» no se tapa), clientes de la
   // lista (siempre tapados) y, para el Admin, los nombres seguros de los «producto #N» citados. Se lee solo si hace falta (prepKnown).
-  // Solo el Admin: el empleado sigue exactamente como antes (sin known: tapado estricto, sin nombres de producto).
-  const known = { products: [...(ctx.products || [])], customers: [], names: [], nameRefs: role === 'owner' }, knownR = role === 'owner' ? known : null;
+  // (alfa, #1011) Admin y empleado usan el MISMO known (productos y clientes) en el filtro final: las marcas del catálogo no se tapan al
+  // empleado y los nombres de personas sí. Solo cambian las listas del tapado: nameRefs (nombres de «producto #N») sigue siendo del Admin.
+  const known = { products: [...(ctx.products || [])], customers: [], names: [], nameRefs: role === 'owner' }, knownR = known;
   let custRead = false;
   const loadCustomers = async () => { if (custRead) return known.customers; custRead = true;
     try { const cs = rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; known.customers = Array.isArray(cs) ? cs : []; } catch { known.customers = []; }
