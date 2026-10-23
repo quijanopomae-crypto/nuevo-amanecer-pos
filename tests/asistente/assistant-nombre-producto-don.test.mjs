@@ -17,9 +17,11 @@ const { maskReplyPeople, createTextEmitter, redactFor, capReply, ownerHold, REPL
 const EMP = 'empleado:consultas';
 const ROLES = ['owner', EMP];
 // el mismo filtro entero que usa el emisor al cerrar (etapa del rol + maskReplyPeople con lo conocido del pedido)
-const whole = (role, t, known) => capReply(maskReplyPeople(role === 'owner' ? A.redactOwnerText(t) : A.redactOwnerData(A.redactEmployeeText(t)), known));
+// El Admin siempre recibe lo conocido del pedido (un objeto, aunque vacío); el empleado NUNCA (decisión del lead): tapado estricto, como antes.
+const kFor = (role, known) => (role === 'owner' ? known || {} : null);
+const whole = (role, t, known) => capReply(maskReplyPeople(role === 'owner' ? A.redactOwnerText(t) : A.redactOwnerData(A.redactEmployeeText(t)), kFor(role, known)));
 function streamed(role, t, step, known) {
-  let o = ''; const e = createTextEmitter((d) => { if (d.reset) o = ''; if (d.t) o += d.t; }, REPLY_MAX, redactFor(role), role === 'owner' ? null : ownerHold, false, known);
+  let o = ''; const e = createTextEmitter((d) => { if (d.reset) o = ''; if (d.t) o += d.t; }, REPLY_MAX, redactFor(role), role === 'owner' ? null : ownerHold, false, kFor(role, known));
   for (let i = 0; i < t.length; i += step) e.push(t.slice(i, i + step)); e.flush(); return o;
 }
 
@@ -28,18 +30,33 @@ const UNI058 = 'Hay 5 productos en o bajo el mínimo. Los más urgentes: FIDEO D
 const INV041 = 'Admin, encontré Fideo Lavaggi Spaghetti 500 g: precio S/ 2.50 y costo S/ 1.80; Fideo Don Vittorio 500 g: precio S/ 2.60 y costo S/ 1.90. ¿Cuál de los dos contaste en 25?';
 const BRAND_KEEP = [UNI058, INV041, 'Te quedan 30 de FIDEO DON VITTORIO.', 'fideo don vittorio: 30 unid.', 'el fideo don vittorio está a S/ 2.60',
   'Hay aceite Doña Pepa y tallarín Don Vittorio en stock.', 'DON VITTORIO SPAGHETTI 500GR X 20: 30 unid.'];
-test('UNI-058 / INV-041: «FIDEO DON VITTORIO» y «fideo don vittorio» quedan (Admin y empleado, entero y en partes 1/3/7)', () => {
-  for (const role of ROLES) for (const t of BRAND_KEEP) {
+test('UNI-058 / INV-041: «FIDEO DON VITTORIO» y «fideo don vittorio» quedan para el Admin (entero y en partes 1/3/7)', () => {
+  for (const role of ['owner']) for (const t of BRAND_KEEP) {
     const w = whole(role, t);
     assert.doesNotMatch(w, /nombre oculto/, role + ': ' + t + ' -> ' + w);
     assert.match(w, /vittorio|pepa/i, role + ': ' + t);
     for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step), w, role + ' paso ' + step + ': ' + t);
   }
 });
+// Empleado: exactamente como antes (sin known = estricto). Fijado con textos literales.
+const EMP_PINS = [
+  [UNI058, 'Hay 5 productos en o bajo el mínimo. Los más urgentes: FIDEO DON [nombre oculto] 500GR X 20 (Faltan 2), ACEITE PRIMOR CLASICO 900ML X 12BOT (Faltan 3).'],
+  ['fideo don vittorio: 30 unid.', 'fideo don [nombre oculto]: 30 unid.'],
+  ['Te quedan 4 de DOÑA PEPA.', 'Te quedan 4 de DOÑA [nombre oculto].'],
+  ['don vittorio ramos me debe 30', 'don [nombre oculto] ramos me debe 30'],
+  ['DON JUAN ABONÓ 10 DE 2 KG', 'DON [nombre oculto] 10 DE 2 KG'],
+  ['La señora Rosa Quispe tiene DNI 45678912.', 'La señora [nombre oculto] tiene DNI ****8912.']
+];
+test('empleado sin cambios: tapado estricto como antes (entero y en partes 1/3/7), y maskReplyPeople sin known = estricto', () => {
+  for (const [t, want] of EMP_PINS) {
+    assert.equal(whole(EMP, t), want, t); assert.equal(maskReplyPeople(t), want, 'sin known: ' + t);
+    for (const step of [1, 3, 7]) assert.equal(streamed(EMP, t, step), want, step + ': ' + t);
+  }
+});
 test('producto conocido en el pedido: «Don Vittorio Tallarín» sin palabra de producto delante también queda', () => {
   const known = { products: [{ id: 'P10', nombre: 'Fideo Don Vittorio Tallarín 500 g' }] };
   const t = 'Te quedan 30 de Don Vittorio Tallarín.';
-  for (const role of ROLES) {
+  for (const role of ['owner']) {
     assert.equal(whole(role, t, known), t, role);
     for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step, known), t, role + ' ' + step);
     assert.match(whole(role, t), /Don \[nombre oculto\]/, role + ': sin el catálogo es una persona');
@@ -78,23 +95,25 @@ const CAPS_PEOPLE = [
 ];
 const CAPS_KNOWN = { products: [{ id: 'P10', nombre: 'Fideo Don Vittorio Tallarín 500 g' }, { id: 'P11', nombre: 'Aceite Doña Pepa 1 L' }] };
 test('MAYÚSCULAS solas no dejan pasar a una persona; verbo de deuda/pago tras el nombre siempre tapa (entero y en partes 1/3/7)', () => {
-  for (const role of ROLES) for (const [t, want] of CAPS_PEOPLE) for (const k of [undefined, CAPS_KNOWN]) {
-    assert.equal(whole(role, t, k), want, role + ': ' + t);
+  for (const role of ROLES) for (const [t, want0] of CAPS_PEOPLE) for (const k of [undefined, CAPS_KNOWN]) {
+    const want = role === 'owner' ? want0 : maskReplyPeople(t, 'strict'); // el empleado: estricto como antes (también tapa el nombre)
+    assert.equal(whole(role, t, k), want, role + ': ' + t); assert.match(whole(role, t, k), /\[nombre oculto\]/);
     for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step, k), want, role + ' ' + step + ': ' + t);
   }
 });
 test('marca en MAYÚSCULAS con producto antes, producto conocido o medida: queda (entero y en partes 1/3/7)', () => {
   const keep = [['FIDEO DON VITTORIO', undefined], ['Te quedan 4 de FIDEO DON VITTORIO.', undefined], ['DON VITTORIO SPAGHETTI 500GR X 20', undefined],
     ['DOÑA PEPA', CAPS_KNOWN], ['Te quedan 4 de DOÑA PEPA.', CAPS_KNOWN], ['DON VITTORIO TALLARIN', CAPS_KNOWN]];
-  for (const role of ROLES) for (const [t, k] of keep) {
+  for (const role of ['owner']) for (const [t, k] of keep) {
     assert.equal(whole(role, t, k), t, role + ': ' + t);
     for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step, k), t, role + ' ' + step + ': ' + t);
   }
   for (const role of ROLES) assert.equal(whole(role, 'DOÑA PEPA'), 'DOÑA [nombre oculto]', role + ': sin catálogo DOÑA PEPA es una persona');
+  for (const [t, k] of keep) assert.equal(whole(EMP, t, k), maskReplyPeople(A.redactOwnerData(A.redactEmployeeText(t)), 'strict'), 'empleado estricto: ' + t);
 });
 test('cliente de la lista: siempre tapado, aunque se llame como la marca o vaya en mayúsculas', () => {
   const known = { products: [{ id: 'P10', nombre: 'Fideo Don Vittorio Tallarín 500 g' }], customers: [{ id: 'c9', nombre: 'Vittorio Ramos Paz' }, { id: 'c2', nombre: 'Juana Pérez' }] };
-  for (const role of ROLES) {
+  for (const role of ['owner']) {
     for (const t of ['don vittorio ramos me debe 30', 'Don Vittorio Ramos me debe 30', 'FIDEO DON VITTORIO RAMOS', 'doña juana pérez lleva 2 leches']) {
       const w = whole(role, t, known);
       assert.doesNotMatch(w, /vittorio|ramos|juana|p[eé]rez/i, role + ': ' + t + ' -> ' + w);
@@ -114,8 +133,9 @@ const delta = (d, fin) => sse({ choices: [{ delta: d, ...(fin ? { finish_reason:
 const DATA = {
   products: [{ id: 'P1', nombre: 'Arroz 1 kg', precio: 4, costo: 3, stock: 50, min: 5, controla: true },
     { id: 'P5', nombre: 'Lejía Sapolio 1 L', precio: 5, costo: 3, stock: 7, min: 0, controla: true },
-    { id: 'P6', nombre: 'Encargo Sra. Rosa Quispe', precio: 50, costo: 40, stock: 1, min: 0, controla: true },
-    { id: 'P7', nombre: 'Torta Juan Mamani', precio: 30, costo: 20, stock: 3, min: 0, controla: true }],
+    { id: 'P6', nombre: 'Encargo Sra. Rosa Quispe', precio: 50, costo: 40, stock: 3, min: 0, controla: true },
+    { id: 'P7', nombre: 'Torta Juan Mamani', precio: 30, costo: 20, stock: 1, min: 0, controla: true },
+    { id: 'P8', nombre: 'Torta para Juan Pérez', precio: 40, costo: 30, stock: 5, min: 0, controla: true }],
   customers: [{ id: 'C1', nombre: 'Rosa Quispe Huamán' }, { id: 'C2', nombre: 'Juan Mamani' }],
   credits: [],
   sales: [{ sale_id: 'S1', created_at: '2026-10-22T15:00:00.000Z', metodo: 'efectivo', total_cents: 2000 }],
@@ -128,9 +148,9 @@ function seq(list, bodies, stream) { let n = 0; return async (_u, init) => { bod
   const parts = r.calls ? [...r.calls.map((c, i) => delta({ tool_calls: [{ index: i, ...c }] })), delta({}, 'tool_calls')]
     : [...(r.content.match(/[\s\S]{1,3}/g) || []).map((x) => delta({ content: x })), delta({}, 'stop')];
   return new Response(new ReadableStream({ start(c) { for (const p of parts) c.enqueue(enc.encode(p)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } }); }; }
-async function chat(text, { role = 'owner', stream = true, list }) {
+async function chat(text, { role = 'owner', stream = true, list, history }) {
   const bodies = [];
-  const r = await A.assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: {} }) }),
+  const r = await A.assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: {}, ...(history ? { history } : {}) }) }),
     { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:x', posRole: role === 'owner' ? 'owner' : 'empleado' }, jsonR,
     { store: A.createMemoryUsageStore(), resolveRole: async () => role, fetch: seq(list, bodies, stream), reader: memoryReader(DATA), audit: async () => {}, now: () => NOW, statusEveryMs: 60000 });
   const raw = await new Response(r.body).text();
@@ -146,10 +166,14 @@ const checkOwner = (r, label) => {
   assert.match(reply, /Lejía Sapolio 1 L/, label + ': ' + reply);
   assert.doesNotMatch(reply, /producto #P5/, label);
   assert.match(reply, /producto #P6/, label + ': nombre con «Sra. …» sigue como código');
-  assert.match(reply, /producto #P7/, label + ': nombre con un cliente de la lista sigue como código');
+  if (/P7|Mamani/.test(reply) || label.startsWith('segunda')) assert.match(reply, /producto #P7/, label + ': nombre con un cliente de la lista sigue como código');
   // el texto y el historial firmado (vuelve al modelo) sin nombres de persona/cliente; la tarjeta de la consulta trae sus nombres como siempre
   assert.doesNotMatch(reply + JSON.stringify(r.final.turns || []), /Rosa|Quispe|Mamani/, label);
   if (r.text !== null) assert.equal(r.text, reply, label + ': lo pintado en partes = la respuesta final');
+  // (decisión del lead) el turno firmado (historial que vuelve al modelo) queda con «producto #N», nunca con el nombre
+  const hist = JSON.stringify(r.final.turns || []);
+  assert.ok((r.final.turns || []).length === 2, label + ': hay turnos firmados');
+  assert.match(hist, /producto #P5/, label); assert.doesNotMatch(hist, /Lejía|Sapolio|Torta para|P[eé]rez/, label + ': ' + hist);
 };
 test('INV-027 Admin, respuesta directa de la consulta: el nombre del producto, no «producto #N» (en partes y entero)', async (t) => {
   quiet(t);
@@ -173,6 +197,22 @@ test('INV-027 empleado: sin cambios (sigue «producto #N», nunca nombres de la 
   const r = await chat('q productos no se mueven', { role: 'empleado:completo+costos', list: [FIRST] });
   assert.ok(r.final && r.final.reply, r.raw.slice(0, 300));
   // hoy el empleado también ve «producto #N» en el texto (la tarjeta trae los nombres que su nivel permite): se deja igual, reportado.
-  assert.equal(r.final.reply, '3 productos no tuvieron ventas 2026-09-23 a 2026-10-22 (de 4 revisados). Con más stock: producto #P5 (7), producto #P7 (3), producto #P6 (1).');
+  assert.equal(r.final.reply, '4 productos no tuvieron ventas 2026-09-23 a 2026-10-22 (de 5 revisados). Con más stock: producto #P5 (7), producto #P8 (5), producto #P6 (3).');
   assert.equal(r.text, r.final.reply);
+});
+
+test('INV-027 (decisión del lead): en el turno siguiente el modelo ve solo «producto #N», nunca el nombre real de un producto de consulta/resumen', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const t1 = await chat('q productos no se mueven', { stream, list: [FIRST] });
+    assert.match(t1.final.reply, /Lejía Sapolio 1 L/, 'el Admin ve el nombre en pantalla');
+    assert.match(t1.final.reply, /Torta para Juan Pérez/, 'producto de su catálogo: el Admin lo ve en pantalla');
+    const t2 = await chat('¿y cuál conviene rematar?', { stream, history: t1.final.turns, list: [{ content: 'Remata primero el producto #P5.' }] });
+    assert.equal(t2.bodies.length, 1);
+    const sent = JSON.parse(t2.bodies[0]).messages, hist = sent.filter((m) => m.role === 'assistant').map((m) => String(m.content || '')).join('\n');
+    assert.match(hist, /producto #P5/, 'el historial al modelo lleva el código: ' + hist);
+    assert.match(hist, /producto #P8/, hist);
+    assert.doesNotMatch(t2.bodies[0], /Lejía|Sapolio|Torta para|Juan P[eé]rez|P[eé]rez/, 'stream=' + stream + ': al modelo llegó un nombre real');
+    assert.equal(t2.final.reply, 'Remata primero el producto Lejía Sapolio 1 L.', 'en pantalla sigue el nombre (producto de la lista del sistema)');
+  }
 });
