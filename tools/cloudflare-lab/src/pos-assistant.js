@@ -21,7 +21,7 @@ import { SETTINGS_TOOL, SERVER_SETTINGS_TOOL, settingsSnapshot, settingsProposal
 import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
-import { retargetCall, cajaPromptLines, focusedText, creditLimitAsk, CREDIT_LIMIT_TEXT } from './pos-assistant-caja-foco.js';
+import { retargetCall, cajaPromptLines, focusedText } from './pos-assistant-caja-foco.js';
 import { precioPromptLines, PRICE_TALK, priceChangeAsk, priceZeroAsk, priceAmountMissing, keepCorrectedPrice, settlePriceCards, tiedProducts, noteCovered, retargetPriceCall, costHistoryAsk, namesAnother, DISCOUNT_NOTE } from './pos-assistant-precio-foco.js';
 import { stockChangeAsk, ajustePromptLines, settleAdjustCards } from './pos-assistant-ajuste-foco.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
@@ -3444,11 +3444,6 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (PURCHASE_VOID_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm) && (VOID_PATH_RE.test(reply) || !proposals.length)) reply = role === 'owner' ? PURCHASE_VOID_TEXT : PURCHASE_VOID_EMPLOYEE_TEXT;
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
   // (lote en vivo 22-10) borrar todo o reiniciar: el asistente nunca lo ofrece ni lo hace; sin tarjetas.
-  // (auditoría 500, CLI-010) límite de crédito: no existe todavía; se dice claro (la deuda leída, si la hubo, va después). Nunca un límite inventado.
-  if (!resetAsk && creditLimitAsk(parsed.text)) {
-    reply = finalText(CREDIT_LIMIT_TEXT + (role === 'owner' && consultas.length ? ' ' + consultas.map((c) => c.result.texto).join(' ') : ''));
-    if (emit) { emit.reset(); emit.push(reply); emit.flush(); }
-  }
   if (!resetAsk && adjustSettle && (adjustSettle.reply || adjustSettle.note)) {
     const next = adjustSettle.reply || (reply.includes('quedaría en') ? reply : (reply + ' ' + adjustSettle.note).trim());
     if (next !== reply) { reply = finalText(next); if (emit) { emit.reset(); emit.push(reply); emit.flush(); } }

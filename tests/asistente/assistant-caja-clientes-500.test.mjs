@@ -1,7 +1,7 @@
-// Auditoría 500 (caja y clientes, 23-10): hallazgos CAJ-002/008/012/013/014/020/021/032 y CLI-010/014/029.
+// Auditoría 500 (caja y clientes, 23-10): hallazgos CAJ-002/008/012/013/014/020/021/032 y CLI-029 (CLI-010/014/024 son de otro PR).
 // Modelo simulado (fetch con guion) + base simulada (memoryReader). Los datos de la consulta ya estaban en la tabla; aquí se prueba
-// que el TEXTO conteste lo que se preguntó, que «ayer» no use la caja abierta de hoy, que el filtro de contenido del proveedor
-// llegue como un mensaje amable y que el límite de crédito (que no existe) se diga claro.
+// que el TEXTO conteste lo que se preguntó, que «ayer» no use la caja abierta de hoy y que el filtro de contenido del proveedor
+// llegue como un mensaje amable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -88,8 +88,7 @@ const FOCUS = [
   ['CAJ-013', 'los cobros de fiado de hoy entraron a caja?', { tipo: 'caja_abierta' }, 'caja_abierta', [/S\/ 15\.00 en efectivo \(eso sí entra a la caja\)/, /S\/ 9\.00 por Yape, Plin o transferencia \(no entran como efectivo\)/]],
   ['CAJ-014', 'hubo devoluciones hoy? cuanto salio', { tipo: 'ventas_periodo', periodo: 'hoy' }, 'caja_abierta', [/No hubo devoluciones por anulación/]],
   ['CAJ-020', 'cuantas ventas a credito hubo hoy', { tipo: 'resumen_dia', periodo: 'hoy' }, 'resumen_dia', [/Crédito S\/ 31\.00/, /no entra como efectivo/]],
-  ['CAJ-032', 'cuanto entro por yape y plin, separado porfa', { tipo: 'caja_abierta' }, 'caja_abierta', [/Yape S\/ 33\.00 · Plin S\/ 16\.80/]],
-  ['CLI-014', 'quien me debe mas', { tipo: 'deudas_clientes' }, 'deudas_clientes', [/Quien más debe es cliente #3: S\/ 150\.00/]]
+  ['CAJ-032', 'cuanto entro por yape y plin, separado porfa', { tipo: 'caja_abierta' }, 'caja_abierta', [/Yape S\/ 33\.00 · Plin S\/ 16\.80/]]
 ];
 for (const [id, text, args, tipo, want] of FOCUS) {
   test(id + ': «' + text + '» -> el texto da ESE dato (no solo el total)', async (t) => {
@@ -127,18 +126,6 @@ test('un 400 cualquiera sigue siendo upstream_error (502)', async (t) => {
   quiet(t);
   const r = await chat('hola', { fetch: async () => jsonR({ error: { message: 'bad', code: 'invalid_value' } }, 400), stream: false });
   assert.equal(r.status, 502); assert.equal(r.body.error, 'upstream_error');
-});
-
-// ---------- Arreglo 4: límite de crédito ----------
-test('CLI-010: «lo máximo que le puedo fiar» -> dice claro que los límites de crédito no existen todavía', async (t) => {
-  quiet(t); const bodies = [];
-  const r = await chat('cuanto es lo maximo que le puedo fiar a la sra carmen', { fetch: seq([say('cliente #7 no tiene deudas pendientes.')], bodies) });
-  assert.match(r.final.reply, /^Los límites de crédito todavía no existen en el asistente/);
-  assert.match(r.final.reply, /ficha del cliente/);
-  const t2 = await chat('que limite de credito tiene el cliente #3', { fetch: seq([say('Su límite es S/ 500.')], []) });
-  assert.match(t2.final.reply, /límites de crédito todavía no existen/); assert.doesNotMatch(t2.final.reply, /S\/ 500/, 'no inventa un límite');
-  const t3 = await chat('quien me debe mas', { fetch: seq([first(call(0, 'c1', { tipo: 'deudas_clientes' })), SECOND], []) });
-  assert.doesNotMatch(t3.final.reply, /límites de crédito/, 'una pregunta de deuda no lleva el aviso');
 });
 
 // ---------- Alcance: ventas_periodo (fechas y texto) sigue igual ----------

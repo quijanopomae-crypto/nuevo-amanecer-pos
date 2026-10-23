@@ -1,9 +1,9 @@
 // Auditoría 500 (caja y clientes, 23-10): respuestas que contestan LO QUE SE PREGUNTÓ cuando el dato ya está en la consulta.
 // Sin lecturas propias ni escrituras: solo mira el texto de la persona, la consulta que eligió el modelo y el resultado ya leído.
 // - «ayer» con la caja (cierre de ayer, comparar la caja de hoy con ayer): resumen_dia del día anterior en Lima, nunca la caja abierta de HOY.
-// - gastos / devoluciones / cobros / métodos de pago (caja abierta o resumen del día) / quién debe más: una frase con ESE monto.
-//   Alcance: solo caja_abierta, resumen_dia y deudas_clientes; precios, márgenes, stock y fechas de ventas_periodo no se tocan.
-// - límite de crédito: no existe todavía; se dice claro (no se responde con la deuda como si fuera el límite).
+// - gastos / devoluciones / cobros de la caja abierta / métodos de pago (caja abierta o resumen del día): una frase con ESE monto.
+//   Alcance: solo caja_abierta y resumen_dia; precios, márgenes, stock y fechas de ventas_periodo no se tocan.
+//   (clientes: límite de crédito CLI-010, quién debe más CLI-014 y cobros del periodo CLI-024 son de otro PR)
 
 const fold = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const soles = (v) => 'S/ ' + (Number(v) || 0).toFixed(2);
@@ -31,7 +31,7 @@ export function retargetCajaQuery(query, text) {
   if (y && tipo === 'caja_abierta') return { tipo: 'resumen_dia', periodo: y };
   // (alcance) ventas_periodo con fechas no se toca aquí: eso es de la rama de ventas.
   // Gastos / devoluciones / ingresos / egresos de HOY pedidos con ventas o resumen: la caja abierta (ahí están).
-  const ft = fold(text), cajaAsk = CAJA_ONLY_RE.test(ft) || (tipo === 'ventas_periodo' && COBROS_RE.test(ft)); // el resumen del día sí trae cobros
+  const ft = fold(text), cajaAsk = CAJA_ONLY_RE.test(ft);
   if (!y && cajaAsk && (tipo === 'ventas_periodo' || tipo === 'resumen_dia') && (!per || per === 'hoy') && !query.fecha && !query.desde) return { tipo: 'caja_abierta' };
   return null;
 }
@@ -56,7 +56,6 @@ export function cajaPromptLines(text) {
 // ---------- texto enfocado ----------
 const METHODS = [['efectivo', /\befectivo\b|\bcash\b/, 'Efectivo'], ['yape', /\byape\b/, 'Yape'], ['plin', /\bplin\b/, 'Plin'],
   ['transferencia', /transferencia/, 'Transferencia'], ['credito', /\bcredito\b|\bfiad[oa]s?\b|\bfiar\b|\bfie\b/, 'Crédito']];
-const DEBE_MAS_RE = /quien(?:es)?\s+(?:me\s+)?debe|debe\s+mas|mas\s+(?:me\s+)?debe|mayor\s+deud|deuda\s+mas\s+(?:alta|grande)/;
 
 function methodMap(query, r) {
   const res = r && r.resumen ? r.resumen : {};
@@ -100,15 +99,8 @@ export function focusedText(query, r, text) {
   if (!query || !r || r.error) return null;
   const t = fold(text), out = [];
   if (query.tipo === 'caja_abierta') { const c = cajaFocus(t, r.resumen); if (c) out.push(...c); }
-  if (query.tipo === 'resumen_dia' && COBROS_RE.test(t) && r.resumen && r.resumen.actual && r.resumen.actual.cobros_soles != null) out.push('Cobros de créditos: ' + soles(r.resumen.actual.cobros_soles) + '.');
   // (alcance) métodos de pago solo sobre la caja abierta o el resumen del día; ventas_periodo queda con su texto de siempre.
   if (!COBROS_RE.test(t) && (query.tipo === 'caja_abierta' || query.tipo === 'resumen_dia')) { const m = methodsFocus(t, query, r); if (m) out.push(m); }
-  if (query.tipo === 'deudas_clientes' && DEBE_MAS_RE.test(t) && Array.isArray(r.filas) && r.filas.length) out.push('Quien más debe es ' + r.filas[0][0] + ': ' + soles(r.filas[0][1]) + '.');
   if (query.tipo === 'resumen_dia' && query.periodo !== 'hoy' && yesterdayAsk(text) && /caja|cierre|cerr/.test(t)) out.push('El conteo y la diferencia del cierre de caja no los tengo aquí; se ven en la pantalla Caja.');
   return out.length ? out.join(' ') + ' ' + r.texto : null;
 }
-
-// ---------- límite de crédito ----------
-const LIMIT_RE = /(?:limite|maximo|tope|cupo|linea)\s+(?:de\s+)?(?:credito|fiad|fiar|deuda)|(?:credito|fiad[oa]|fiar|deuda)\s+(?:\S+\s+){0,3}(?:limite|maximo|tope|cupo)|(?:cuanto|hasta\s+cuanto|lo\s+maximo\s+que)\s+(?:\S+\s+){0,3}(?:puedo|podria|se\s+puede|debo)\s+(?:fiar|dar\s+(?:a\s+)?(?:credito|fiado))/;
-export function creditLimitAsk(text) { return LIMIT_RE.test(fold(text)); }
-export const CREDIT_LIMIT_TEXT = 'Los límites de crédito todavía no existen en el asistente ni en el sistema: no hay un máximo registrado para fiar a ningún cliente. Lo que debe cada cliente se ve en Clientes (ficha del cliente) y en el reporte de deudas.';
