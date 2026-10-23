@@ -2817,6 +2817,22 @@ export async function issueConfirmToken(proposal, role, auth, secret, nowMs) {
   const body = b64url(enc.encode(JSON.stringify(payload)));
   return body + '.' + (await hmac(secret, body));
 }
+// (revisión #996) Tarjeta de ajuste del lote con stock viejo: null si sigue vigente; 'unavailable' si la base no trae stock (falla cerrado).
+// Mismo cuerpo que el 409 stock_changed de #983 (error, nombre, stock_antes, stock_ahora, objetivo, proposal, message). El lote es un
+// cambio («súmale 2»): la tarjeta nueva es la MISMA entrada/salida sobre el stock de ahora, firmada y con otro id.
+const r3b = (n) => Math.round(n * 1000) / 1000;
+export async function staleBulkCard(card, current, role, auth, secret, now) {
+  const antes = Number(card?.stock_actual), ahora = current && current.stock != null ? Number(current.stock) : NaN, q = Number(card?.cantidad);
+  if (!Number.isFinite(antes) || !Number.isFinite(ahora) || !Number.isFinite(q)) return 'unavailable';
+  if (r3b(antes) === r3b(ahora)) return null;
+  const objetivo = r3b(ahora + (card.tipo === 'salida' ? -q : q)), nombre = String(card.nombre || 'este producto');
+  const { confirm_token, completar, ...rest } = card;
+  const fresh = { ...rest, id: String(card.id || 'ajuste') + '-r', stock_actual: r3b(ahora), stock_despues: objetivo, quedaNegativo: objetivo < 0, stock_de_servidor: true };
+  fresh.confirm_token = await issueConfirmToken(fresh, role, auth, secret, now);
+  return { error: 'stock_changed', nombre, stock_antes: r3b(antes), stock_ahora: r3b(ahora), objetivo, proposal: fresh,
+    message: 'El stock de ' + nombre + ' cambió de ' + r3b(antes) + ' a ' + r3b(ahora) + ' desde que preparé la tarjeta. Con ' + (card.tipo === 'salida' ? 'la salida' : 'la entrada')
+      + ' de ' + q + ' queda en ' + objetivo + '. Revisa la tarjeta nueva.' };
+}
 export async function readConfirmToken(token, secret) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig || token.length > 2000) return null;
@@ -2971,12 +2987,11 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
       const bad = lines.filter((l) => l.product_id && byId.get(String(l.product_id)).controla === false).map((l) => l.nombre);
       if (bad.length) return json({ error: 'sin_control_stock', nombres: bad, message: bad.map(NO_STOCK_TEXT).join(' ') }, 409);
       // (revisión #996) Tarjeta del lote («sí»/«siguientes»): lleva el stock leído en el servidor en ese turno. Si la base ya tiene otro
-      // (una venta o movimiento en medio), no se aplica nada: 409 stale_stock, el mismo código que /inventory (a6-inventory.js).
+      // (una venta o movimiento en medio), no se aplica nada: 409 stock_changed con el formato de #983 (message + tarjeta NUEVA firmada).
       if (tok.t === 'ajuste' && applied.stock_de_servidor === true) {
-        const cur = byId.get(String(applied.product_id)).stock, card = Number(applied.stock_actual);
-        if (cur == null || !Number.isFinite(Number(cur)) || !Number.isFinite(card)) return unavailable();
-        if (Math.abs(Number(cur) - card) > 1e-9) return json({ error: 'stale_stock', product_id: String(applied.product_id), stock_actual: Number(cur),
-          message: 'El stock de ' + String(applied.nombre || 'este producto') + ' cambió: ahora hay ' + fmtN(cur) + ' (la tarjeta decía ' + fmtN(card) + '). Pida la tarjeta de nuevo.' }, 409);
+        const sc = await staleBulkCard(applied, byId.get(String(applied.product_id)), role, auth, secret, now);
+        if (sc === 'unavailable') return unavailable();
+        if (sc) return json({ ...sc, operation_id: tok.op }, 409);
       }
     }
   }
