@@ -1,0 +1,24 @@
+/* #141 Sesiones y cierre remoto: estilos limitados a #pageSesionesAparatos. */
+#pageSesionesAparatos { --sa-bg: #f8fafc; --sa-surface: #fff; --sa-text: #0f172a; --sa-muted: #475569; --sa-border: #cbd5e1; --sa-accent: #0f766e; --sa-danger: #b91c1c; --sa-notice-bg: #fffbeb; --sa-notice-text: #92400e; min-width: 0; background: var(--sa-bg); color: var(--sa-text); }
+body.dark #pageSesionesAparatos { --sa-bg: #0f172a; --sa-surface: #1e293b; --sa-text: #f8fafc; --sa-muted: #cbd5e1; --sa-border: #475569; --sa-accent: #5eead4; --sa-danger: #fca5a5; --sa-notice-bg: #422006; --sa-notice-text: #fde68a; }
+#pageSesionesAparatos *, #pageSesionesAparatos *::before { box-sizing: border-box; }
+#pageSesionesAparatos [hidden] { display: none !important; }
+#pageSesionesAparatos .sa-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--sa-border); }
+#pageSesionesAparatos .sa-heading { flex: 1 1 220px; min-width: 0; }
+#pageSesionesAparatos h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; color: var(--sa-text); }
+#pageSesionesAparatos .sa-header p { margin: 0; color: var(--sa-muted); line-height: 1.5; }
+#pageSesionesAparatos button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--sa-accent); border-radius: 10px; font: inherit; font-weight: 700; color: var(--sa-accent); background: var(--sa-surface); cursor: pointer; }
+#pageSesionesAparatos button.sa-revoke { border-color: var(--sa-danger); color: var(--sa-danger); }
+#pageSesionesAparatos button:focus-visible { outline: 3px solid var(--sa-accent); outline-offset: 2px; }
+#pageSesionesAparatos .sa-content { padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); min-width: 0; }
+#pageSesionesAparatos .sa-status, #pageSesionesAparatos .sa-empty { margin: 0 0 12px; line-height: 1.6; color: var(--sa-muted); overflow-wrap: anywhere; }
+#pageSesionesAparatos .sa-notice { margin: 0 0 12px; padding: 12px; border-radius: 8px; background: var(--sa-notice-bg); color: var(--sa-notice-text); line-height: 1.5; }
+#pageSesionesAparatos .sa-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+#pageSesionesAparatos .sa-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--sa-border); border-radius: 12px; background: var(--sa-surface); }
+#pageSesionesAparatos .sa-item[data-sa-current] { border-color: var(--sa-accent); }
+#pageSesionesAparatos .sa-info { flex: 1 1 220px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+#pageSesionesAparatos .sa-name { overflow-wrap: anywhere; }
+#pageSesionesAparatos .sa-badge { padding: 2px 8px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--sa-surface); background: var(--sa-accent); }
+#pageSesionesAparatos .sa-meta, #pageSesionesAparatos .sa-self { flex-basis: 100%; color: var(--sa-muted); line-height: 1.4; overflow-wrap: anywhere; }
+#pageSesionesAparatos .sa-self { flex-basis: auto; }
+@media (min-width: 768px) { #pageSesionesAparatos .sa-header { padding: 20px 24px; } #pageSesionesAparatos .sa-content { padding: 20px 24px 40px; } }
