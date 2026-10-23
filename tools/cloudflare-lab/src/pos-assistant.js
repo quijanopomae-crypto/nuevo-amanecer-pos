@@ -2119,7 +2119,10 @@ export function createSettingsUsageStore(db) {
 // (lote 3) Lo que el Admin enseña HOY se guarda en el servidor (pos_settings, la misma tabla del cupo; sin migración), por aparato del Admin
 // y por día de Lima. Así «¿qué te enseñé hoy?» no depende del historial del celular (8 mensajes) ni del token que se pierde con una foto.
 export const LESSONS_PREFIX = USAGE_PREFIX + 'taught:';
-export async function lessonsKey(auth) { return LESSONS_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 40); }
+// pos_settings.key admite 1..60 caracteres (migración 0024): prefijo de 21 + 39 hex = 60. Con 40 hex (61) D1 rechazaba TODO guardado,
+// así que no existe ninguna fila con la clave vieja que haya que leer.
+export const LESSONS_HASH_HEX = 60 - LESSONS_PREFIX.length;
+export async function lessonsKey(auth) { return LESSONS_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, LESSONS_HASH_HEX); }
 export async function readLessons(store, auth, nowMs) {
   try { const r = await store.get(await lessonsKey(auth)), v = r && r.value; return v && v.d === limaDate(nowMs) && Array.isArray(v.items) ? v.items.filter((x) => typeof x === 'string').slice(-MAX_TAUGHT) : []; }
   catch { return []; }
@@ -2172,6 +2175,8 @@ export function sanitizeLesson(fact, customers = [], products = []) {
   out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || isBrandDon(all, at, at + m.length, products) ? m : cue + ' ');
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
+// Aviso en el registro cuando lo enseñado no se guarda: solo el motivo (sin clave, aparato, texto ni mensaje de la base).
+function lessonSaveWarn(motivo) { try { console.warn('[asistente] no se guardó la lección del Admin en pos_settings: ' + motivo); } catch { /* sin registro */ } }
 export async function saveLesson(store, auth, nowMs, fact, customers = [], products = []) {
   const f = sanitizeLesson(fact, customers, products).slice(0, 200); if (!f) return false;
   try {
@@ -2180,7 +2185,8 @@ export async function saveLesson(store, auth, nowMs, fact, customers = [], produ
       const r = await store.get(key), v = r.value && r.value.d === day && Array.isArray(r.value.items) ? r.value.items : [];
       if (await store.put(key, { d: day, items: [...v.filter((x) => x !== f), f].slice(-MAX_TAUGHT) }, r.revision)) return true;
     }
-  } catch { /* sin guardar: el token firmado sigue llevando lo enseñado */ }
+    lessonSaveWarn('conflicto');
+  } catch (e) { lessonSaveWarn(/constraint/i.test(String(e?.message || '')) ? 'restriccion' : 'error'); } // sin guardar: el token firmado sigue llevando lo enseñado
   return false;
 }
 function capFrom(env, name, fallback) { const n = Number.parseInt(env?.[name] || '', 10); return Number.isFinite(n) && n >= 0 ? n : fallback; }
@@ -3257,6 +3263,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const rd0 = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
   const loadProducts = async () => { if (!rd0 || typeof rd0.products !== 'function') return null; try { return await rd0.products(); } catch { return null; } };
   let sysProducts = PRICE_ASK_RE.test(parsed.text || '') ? await loadProducts() : null;
+  let custCache = null;
+  const lessonCustomers = async () => { if (custCache) return custCache; try { custCache = rd0 && typeof rd0.customers === 'function' ? (await rd0.customers()) || [] : []; } catch { custCache = []; } return custCache; };
+  // Un token firmado antes de este arreglo puede traer la frase cruda: se limpia al leer, antes del modelo y antes de volver a firmarse.
+  if (invoiceMemory && invoiceMemory.taught.length) { const cust = await lessonCustomers(), prods = ctx.products || [];
+    invoiceMemory.taught = [...new Set(invoiceMemory.taught.map((x) => sanitizeLesson(x, cust, prods).slice(0, 200)).filter(Boolean))]; }
   const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
@@ -3517,12 +3528,17 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
-    if (!sysProducts) sysProducts = await loadProducts(); await saveLesson(store, auth, now, redactModelOwner(fact), cust, [...(ctx.products || []), ...(sysProducts || [])]); } }
+  // (alfa) lo enseñado va al token firmado (invoice_memory.taught) con el mismo limpiado que pos_settings (sanitizeLesson + isBrandDon):
+  // «doña Rosa debe 2 kg» se firma como «doña debe 2 kg»; «fideo don vittorio» se queda.
+  let taughtClean = null;
+  if (role === 'owner' && !parsed.image) { const fact = taughtFact(parsed.text); if (fact) { const cust = await lessonCustomers();
+    if (!sysProducts) sysProducts = await loadProducts(); const prods = [...(ctx.products || []), ...(sysProducts || [])];
+    taughtClean = sanitizeLesson(redactModelOwner(fact), cust, prods);
+    if (!resetAsk) await saveLesson(store, auth, now, redactModelOwner(fact), cust, prods); } }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
-  const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner}) : null;
+  const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner, taughtClean}) : null;
   return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }

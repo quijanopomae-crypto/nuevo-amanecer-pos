@@ -60,7 +60,8 @@ export async function readInvoiceMemory(token, secret, auth, now) {
     return m;
   } catch { return null; }
 }
-export async function writeInvoiceMemory({previous, image, proposals, reply, text, secret, auth, now, clean}) {
+// taughtClean: la frase enseñada ya limpia (sanitizeLesson en pos-assistant.js); si viene, se firma esa y no la cruda.
+export async function writeInvoiceMemory({previous, image, proposals, reply, text, secret, auth, now, clean, taughtClean}) {
   if (!secret) return null;
   const purchases = proposals.filter(p => p.type === 'compra');
   const fresh = !!image || purchases.length > 0;
@@ -75,7 +76,7 @@ export async function writeInvoiceMemory({previous, image, proposals, reply, tex
   })), lectura:clean(reply || '').slice(0,1500), clarifications:keep ? previous.clarifications : []}
     : previous ? {...previous} : {v:1, scope:await scope(secret, auth), exp:now + TTL, invoices:[], lectura:'', clarifications:[]};
   m.taught = taughtBefore.slice();
-  if (fact) { const f = clean(fact).slice(0, 200); m.taught = [...m.taught.filter((x) => x !== f), f].slice(-MAX_TAUGHT); }
+  if (fact) { const f = (typeof taughtClean === 'string' ? taughtClean : clean(fact)).slice(0, 200); if (f) m.taught = [...m.taught.filter((x) => x !== f), f].slice(-MAX_TAUGHT); }
   // Las preguntas no deben expulsar equivalencias confirmadas. Una respuesta corta
   // conserva la pregunta previa para que «96» o «sí» no pierdan su significado.
   const question = isQuestion(text);
