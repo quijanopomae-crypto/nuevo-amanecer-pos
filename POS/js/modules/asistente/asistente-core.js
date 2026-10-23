@@ -53,20 +53,34 @@
     return (n === 'documento' || n === 'ruc') ? (/(?<!\p{L})x(?:[\s-]?x)+[\s-]?\d/iu.test(k) || maskLeft(k)) : false; }
   function manualBad(n, v) { if (!v) return true; v = String(v); return manualBad1(n, v) || manualBad1(n, v.normalize('NFKC')); } // NFC y copia NFKC
   var NEED_LABEL = { proveedor: 'Proveedor', documento: 'Documento' }, NEED_MAX = { proveedor: 120, documento: 80 };
+  // (#967 teléfono) Tarjeta «configuracion» de RUC (destino servidor) con el RUC tapado: llega SIN valor y con el campo a completar
+  // («completar» o «needFields»). La persona escribe el RUC en el teléfono; va en body.manual del confirm (fuera de la propuesta firmada)
+  // y nunca en el chat ni a la IA. Solo esa tarjeta y solo esos nombres.
+  var RUC_FIELDS = ['ruc', 'valor'], RUC_RE = /^(10|15|16|17|20)\d{9}$/;
+  function isRucCard(p) { return !!p && p.type === 'configuracion' && p.destino === 'servidor' && p.ajuste === 'negocio_ruc'; }
+  function needLabel(p, n) { return isRucCard(p) ? (RUC_FIELDS.indexOf(n) >= 0 ? 'RUC' : null) : (p && p.type === 'compra' ? NEED_LABEL[n] || null : null); }
+  function needMax(p, n) { return isRucCard(p) ? 16 : NEED_MAX[n]; } // 11 dígitos + espacios, puntos o guiones al pegar; se valida sobre los dígitos
+  function rucDigits(v) { return String(v == null ? '' : v).replace(/[\s.\-]/g, ''); }
+  function needList(p) { return p && Array.isArray(p.completar) ? p.completar : p && Array.isArray(p.needFields) ? p.needFields : null; }
+  function needNames(p) { var l = needList(p); return l ? l.filter(function (n, i, a) { return typeof n === 'string' && needLabel(p, n) && a.indexOf(n) === i; }) : []; }
   function needFields(doc, p, onChange) {
-    var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
+    var names = needNames(p), rucCard = isRucCard(p), NEED_MAX = {};
+    names.forEach(function (n) { NEED_MAX[n] = needMax(p, n); });
     if (!names.length) return null;
     var state = {}, stale = {}, inputs = [], hints = {}, byName = {}, checks = [], box = doc.createElement('div'); box.className = 'na-asst-need-box';
     names.forEach(function (n, i) {
       var lab = doc.createElement('label'); lab.className = 'na-asst-need-l';
-      var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = NEED_LABEL[n];
+      var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = needLabel(p, n);
       var inp = doc.createElement('input'); inp.type = 'text'; inp.className = 'na-asst-need'; inp.maxLength = NEED_MAX[n] * 2; // (Bot 3 sobre 6e0b3c5d) holgura: lo pegado con caracteres de formato se limpia ANTES de recortar a NEED_MAX (cleanField)
       inp.setAttribute('data-need', n); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('autocomplete', 'off');
-      var hint = doc.createElement('span'); hint.className = 'na-asst-need-t'; hint.textContent = 'Complete este dato'; hint.id = 'naNeed' + n + (++needSeq);
+      if (rucCard) { inp.setAttribute('inputmode', 'numeric'); inp.setAttribute('placeholder', '11 dígitos'); }
+      var HINT = rucCard ? 'Escriba los 11 dígitos del RUC' : 'Complete este dato';
+      var hint = doc.createElement('span'); hint.className = 'na-asst-need-t'; hint.textContent = HINT; hint.id = 'naNeed' + n + (++needSeq);
       inp.setAttribute('aria-describedby', hint.id);
       // (Bot 2 sobre 84a49517) la parte exacta que trajo el servidor («F001-») va de inicio; cuenta solo cuando se le agrega lo que falta
       // (Bot 4 sobre 5646a4c9) el inicio que trae la propuesta también sin caracteres de formato (lo que se ve = lo que se manda)
-      var pre0 = p[n] && typeof p[n] === 'string' ? inputClean(p[n]) : '', pre = pre0 && !maskLeft(pre0) ? pre0.slice(0, NEED_MAX[n]) : '';
+      // RUC: el campo empieza SIEMPRE vacío (lo tapado no se muestra ni se completa a medias)
+      var pre0 = !rucCard && p[n] && typeof p[n] === 'string' ? inputClean(p[n]) : '', pre = pre0 && !maskLeft(pre0) ? pre0.slice(0, NEED_MAX[n]) : '';
       if (pre) inp.value = pre;
       hints[n] = hint; byName[n] = inp;
       // (Bot 4 sobre 5646a4c9) el CAMPO muestra lo limpio: si inputClean cambia lo escrito/pegado (U+202E, U+00AD, U+200B…), se reescribe el valor
@@ -88,10 +102,11 @@
       function sync() {
         // (Bots 4/5 sobre 6e0b3c5d) mientras el campo MUESTRA algo distinto de lo que se mandaría (composición abierta o colgada sin compositionend,
         // con U+202E crudo a la vista), no cuenta: «Confirmar» apagado hasta que lo visible sea lo limpio
-        var raw = String(inp.value == null ? '' : inp.value); lastRaw = raw; var v = normManual(raw).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre) && inputClean(raw) === raw && raw.length <= NEED_MAX[n]; state[n] = ok ? v : '';
+        var raw = String(inp.value == null ? '' : inp.value); lastRaw = raw; var v = normManual(raw).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre) && inputClean(raw) === raw && raw.length <= NEED_MAX[n];
+        if (rucCard) { v = rucDigits(v); ok = ok && RUC_RE.test(v); } state[n] = ok ? v : '';
         if (stale[n] != null && v !== stale[n]) delete stale[n]; // (Bot 4 sobre 58200f60) tras un 422 cuenta recién cuando cambia
         ok = ok && stale[n] == null;
-        hint.textContent = 'Complete este dato';
+        hint.textContent = HINT;
         inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); setCls(inp, 'ok', ok); hint.hidden = ok; // (Bot 4) classList: na-asst-ltr se queda
         if (onChange) onChange(); }
       // (Bot 5 sobre 39ccd25c) valor cambiado SIN evento (script, extensión): al pulsar «Confirmar» se vuelve a mirar; si cambió se limpia A LA
@@ -141,9 +156,9 @@
       var other = [], first = null;
       (Array.isArray(fields) ? fields : []).forEach(function (n) {
         var inp = byName[n], hint = hints[n]; if (!inp) { other.push(String(n)); return; }
-        hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); setCls(inp, 'ok', false); if (!first) first = inp;
+        hint.hidden = false; hint.textContent = text || (rucCard ? 'Escriba los 11 dígitos del RUC' : 'Complete este dato'); inp.setAttribute('aria-invalid', 'true'); setCls(inp, 'ok', false); if (!first) first = inp;
         // (Bot 4 sobre 58200f60) lo escrito queda, pero el campo no vuelve a contar como lleno (ni «Confirmar» se enciende) hasta que cambie
-        stale[n] = normManual(inp.value).slice(0, NEED_MAX[n]).trim(); });
+        stale[n] = normManual(inp.value).slice(0, NEED_MAX[n]).trim(); if (rucCard) stale[n] = rucDigits(stale[n]); });
       if (first) { try { first.focus({ preventScroll: false }); } catch (_) {} }
       return other;
     }
@@ -161,8 +176,9 @@
   function fmtClean(v) { return String(v == null ? '' : v).normalize('NFC').replace(MANUAL_FMT, '').replace(MANUAL_LOOSE_MARK, '$1').normalize('NFC'); }
   function purchaseValue(p, n) { var m = p && p._manual && normManual(p._manual[n]); if (m && !manualBad(n, m)) return m; var v = p ? fmtClean(p[n]).trim() : ''; return v && !maskLeft(v) ? v : ''; }
   // lo escrito a mano para los campos de «completar» (va en body.manual del confirm, fuera de la propuesta firmada); nunca una máscara
-  function fillValues(p) { var m = p && p._manual; if (!m || !Array.isArray(p.completar)) return null; var o = {}, k = 0;
-    p.completar.forEach(function (n) { var v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, NEED_MAX[n]).trim() : ''; if (NEED_LABEL[n] && !manualBad(n, v)) { o[n] = v; k++; } }); return k ? o : null; }
+  function fillValues(p) { var m = p && p._manual; if (!m || !needList(p)) return null; var o = {}, k = 0, ruc = isRucCard(p);
+    needNames(p).forEach(function (n) { var v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, needMax(p, n)).trim() : ''; if (ruc) v = RUC_RE.test(rucDigits(v)) ? rucDigits(v) : '';
+      if (v && !manualBad(n, v)) { o[n] = v; k++; } }); return k ? o : null; }
   function perms() { return root.NA_PERMISSIONS; }
   function canDo(role, action) { var P = perms(); return !!(P && P.canDo(role, action)); }
 
@@ -187,12 +203,18 @@
   // y aun así NO recibe tarjetas que cambian algo (solo el dueño confirma). Documentos del empleado: solo lista de precios y pedido.
   var TYPES = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto', 'documento', 'consulta', 'pasos'];
   var EMP_LEVELS = ['consultas', 'consultas_documentos'], EMP_DOCS = ['lista_precios', 'lista_pedido'];
+  // (#967 teléfono) Datos del negocio y del ticket (destino servidor): los aplica el Admin o el nivel 3 con «costos y cambios» (roles.cambios,
+  // del ping). Las tarjetas del aparato (#972: apariencia, lector, stock…) siguen solo del Admin. Misma lista cerrada que el Worker (CONFIG_KEYS).
+  var SERVER_CONFIG_KEYS = ['negocio_nombre', 'negocio_ruc', 'negocio_direccion', 'ticket_pie', 'ticket_ancho', 'ticket_logo', 'ticket_igv', 'ticket_forma_pago', 'avisos'];
+  function isServerConfig(p) { return !!p && p.type === 'configuracion' && p.destino === 'servidor' && SERVER_CONFIG_KEYS.indexOf(p.ajuste) >= 0; }
   function canExecute(roles, proposal) {
     var role = roles && roles.role;
     if (role !== 'owner' && role !== 'empleado') return { ok: false, msg: 'No se sabe quién usa este aparato. Revisa la conexión.' };
     if (role === 'owner' && roles.isOwner && !roles.isOwner()) return { ok: false, msg: 'El asistente es solo para el Admin.' };
     if (role === 'empleado') {
       if (EMP_LEVELS.indexOf(roles.level) < 0) return { ok: false, msg: 'El asistente es solo para el Admin.' };
+      if (proposal && proposal.type === 'configuracion') return isServerConfig(proposal) && roles.cambios === true && roles.level === 'consultas_documentos' ? { ok: true } // el nivel 3 llega como consultas_documentos
+        : { ok: false, msg: isServerConfig(proposal) ? 'Los datos del negocio y del ticket los cambia el Admin o quien tenga el permiso «costos y cambios».' : 'Ese ajuste es solo del Admin.' };
       if (proposal && proposal.type === 'costo') return { ok: false, msg: 'Solo el Admin puede cambiar costos.' };
       if (proposal && (proposal.needsConfirm || ['compra', 'precio', 'ajuste', 'producto'].indexOf(proposal.type) >= 0)) return { ok: false, msg: 'Los cambios los hace el Admin desde su teléfono.' };
       if (proposal && proposal.type === 'documento' && (roles.level !== 'consultas_documentos' || EMP_DOCS.indexOf(proposal.tipo) < 0)) return { ok: false, msg: 'Ese documento es solo para el Admin.' };
@@ -295,7 +317,11 @@
 
   // Ejecutores: usan SOLO funciones existentes del POS, inyectadas (deps) para poder probarlos.
   var EXECUTORS = {
-    configuracion: function (p,d) { return d.applyConfiguration ? d.applyConfiguration(p) : {ok:false,msg:'No se pudo abrir la configuración. Intenta de nuevo.'}; },
+    // destino servidor: ya lo guardó /auth/assistant/confirm; aquí solo se vuelve a leer pos.business, pos.ticket y pos.flags (sin recargar la página)
+    configuracion: function (p,d) {
+      if (p && p.destino === 'servidor') { var done = { ok: true, msg: 'Guardado para todos los aparatos.' };
+        return Promise.resolve(d.reloadSettings ? d.reloadSettings(p) : null).then(function () { return done; }, function () { return done; }); }
+      return d.applyConfiguration ? d.applyConfiguration(p) : {ok:false,msg:'No se pudo abrir la configuración. Intenta de nuevo.'}; },
     compra: function (p, d) {
       var w = d.openPurchase();
       if (!w) return { ok: false, msg: 'No se pudo abrir «Nueva compra».' };
@@ -650,6 +676,8 @@
   var TIMEOUTS = { chat: 30000, confirm: 12000, approval: 15000 };
   // Errores en palabras simples (pedido del dueño): la persona NUNCA ve un código (403, 409, 429, 503, assistant_off, forbidden_document…).
   // Cada código conocido tiene su frase; uno desconocido o «HTTP_xxx» cae en la frase general. retry=true: se muestra «Reintentar».
+  var CONFIG_CONFLICT_MSG = 'Otro aparato cambió la Configuración mientras tanto. Pide la tarjeta de nuevo.',
+    CONFIG_LOST_MSG = 'Esta sesión ya no tiene permiso para cambiar la Configuración. Pídeselo al Admin.';
   var MSG = {
     owner: 'Eso solo lo puede hacer el Admin.',
     offline: 'Sin conexión. Toca «Reintentar» cuando vuelva el internet.',
@@ -685,7 +713,10 @@
     not_found: ['El asistente no está disponible por ahora.'], HTTP_404: ['El asistente no está disponible por ahora.'], bad_request: [MSG.again, true], bad_token: [MSG.changed],
     // (Bots 3/4/5 sobre d72b7601) 409 already_confirmed = OTRA sesión dueño (el mismo aparato y sesión recibe already_confirmed_same_session);
     // «otro aparato» solo con 403 other_device (+ confirmed)
-    already_confirmed: ['Esta compra ya se confirmó en otra sesión.']
+    already_confirmed: ['Esta compra ya se confirmó en otra sesión.'],
+    // (#967 teléfono) Configuración con destino servidor
+    revision_conflict: [CONFIG_CONFLICT_MSG], config_sin_datos: ['Ese ajuste todavía no está guardado en el servidor. Ábrelo una vez en Configuración.'],
+    config_invalid: ['Ese valor no es válido. Pide la tarjeta de nuevo.'], config_forbidden: [CONFIG_LOST_MSG], save_failed: [MSG.again, true]
   };
   var NO_LINK_MSG = 'Sin conexión. Toque Reintentar', RECONNECT_MSG = 'Reconectando…', SAME_SESSION_MSG = 'Esta compra ya se confirmó. Corrija los datos en Nueva compra.', OTHER_DEVICE_DONE_MSG = 'Ya se confirmó en otro aparato.';
   // ¿El texto trae algo que parece código? (palabra_con_guion_bajo, «HTTP», «error 403», «Error:»). Entonces no se muestra tal cual.
@@ -715,9 +746,11 @@
     if (code === 'review_required') return { kind: 'review', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: 'Revisa este dato en las filas marcadas y vuelve a confirmar.' };
     if (code === 'fields_required') { var fl = (Array.isArray(r.fields) ? r.fields : []).filter(function (n) { return typeof n === 'string' && n.length <= 40; });
       var own = fl.every(function (n) { return editable.indexOf(n) >= 0; }); if (!fl.length || !own) return blocked();
-      return { kind: 'fields', rows: [], fields: fl, button: 'Confirmar', again: true, msg: 'Complete los datos marcados y vuelva a confirmar.' }; }
+      // Configuración (RUC): el aviso del servidor («El RUC debe tener 11 dígitos»…) se muestra tal cual si viene en palabras
+      return { kind: 'fields', rows: [], fields: fl, button: 'Confirmar', again: true, msg: type === 'configuracion' && r.msg && !looksTechnical(r.msg) ? r.msg : 'Complete los datos marcados y vuelva a confirmar.' }; }
     if (code === 'over_limit' && !(r.rows || []).some(function (n) { return Number.isInteger(n) && n >= 0; })) return blocked(type === 'compra' ? null : (r.msg && !looksTechnical(r.msg) ? r.msg : null));
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
+    if (code === 'revision_conflict' || code === 'config_sin_datos' || code === 'config_invalid' || code === 'config_forbidden') return { kind: 'config', rows: [], button: null, again: true, msg: r.msg || friendlyError(code).msg };
     if (code === 'already_confirmed') return { kind: 'elsewhere', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : FRIENDLY.already_confirmed[0] };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
     if (code === 'other_device') return { kind: 'elsewhere', rows: [], button: null, again: true, msg: r.msg || FRIENDLY.other_device[0] };
@@ -817,7 +850,16 @@
         // (Bots 3/5 sobre 58200f60) 409 already_confirmed: la tarjeta la usó otra sesión (u otros datos). Nota corta, sin error crudo ni propuesta.
         // (Bots 4/5 sobre 58200f60) 403 forbidden_role al confirmar: manda el rol del SERVIDOR (no se mira el rol guardado en el aparato).
         // La propuesta y lo escrito a mano salen de la memoria del celular (la tarjeta sale de la pantalla en la UI); sin reintento automático.
-        if (c && !c.ok && c.error === 'forbidden_role') { forget(it); return { ok: false, code: 'forbidden_role', dropped: true, msg: ROLE_LOST_MSG }; }
+        if (c && !c.ok && c.error === 'forbidden_role') { var lostMsg = it.p.type === 'configuracion' ? CONFIG_LOST_MSG : ROLE_LOST_MSG; forget(it); return { ok: false, code: 'forbidden_role', dropped: true, msg: lostMsg }; }
+        // (#967 teléfono) Configuración del servidor que no se puede guardar así (otro aparato la cambió, fila que no existe, valor inválido):
+        // la tarjeta NO queda aplicada ni se puede reenviar igual; se pide de nuevo. Se vuelve a leer la del servidor. El RUC escrito que el
+        // servidor rechaza (fields_required / ruc_invalid…) sigue editable con el aviso del servidor.
+        if (c && !c.ok && isRucCard(it.p) && needNames(it.p).length && c.error !== 'manual_not_allowed' && c.status >= 400 && c.status < 500 && c.status !== 409 && c.status !== 403 && c.status !== 429 && c.status !== 410) {
+          it.state = 'pending'; var rf = needNames(it.p); // un solo campo en la tarjeta: el aviso va a ese campo aunque el servidor lo nombre distinto
+          return { ok: false, code: 'fields_required', fields: rf, msg: c.message && !looksTechnical(c.message) ? c.message : 'Escriba los 11 dígitos del RUC y vuelva a confirmar.' }; }
+        if (c && !c.ok && isServerConfig(it.p) && ['revision_conflict', 'config_sin_datos', 'config_invalid', 'config_forbidden'].indexOf(c.error) >= 0) {
+          it.state = 'denied'; if (c.error === 'revision_conflict' && deps.reloadSettings) { try { Promise.resolve(deps.reloadSettings(it.p)).catch(function () {}); } catch (_) {} }
+          return { ok: false, code: c.error, msg: c.error === 'revision_conflict' ? CONFIG_CONFLICT_MSG : friendlyError(c.error, c.message).msg }; }
         if (c && !c.ok && c.error === 'already_confirmed') { it.state = 'denied'; return { ok: false, code: 'already_confirmed', msg: it.p.type === 'compra' ? FRIENDLY.already_confirmed[0] : 'Este cambio ya se confirmó en otra sesión.' }; }
         if (c && !c.ok && c.error === 'other_device') { it.state = 'denied'; return { ok: false, code: 'other_device', msg: c.confirmed ? OTHER_DEVICE_DONE_MSG : FRIENDLY.other_device[0] }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
@@ -836,6 +878,7 @@
       try {
         var r = await EXECUTORS[it.p.type](it.applied || it.p, deps, it.operationId);
         if (r.ok) it.executed = true;
+        if (r.ok && isRucCard(it.p)) { wipeManual(it.p); wipeManual(it.applied); } // el RUC escrito no queda en la memoria del teléfono
         it.state = r.ok ? 'done' : 'pending'; return r;
       } catch (e) { it.state = 'pending'; return { ok: false, msg: 'No se pudo completar. Inténtalo otra vez.' }; }
     }
@@ -1158,7 +1201,7 @@
     if (/\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/.test(t)) return true;
     return !!previous && /^(?:s[ií]|no|hazlo|apl[ií]calo|normal|chico|grande|muy grande|azul|verde|naranja|celeste|simple|claro|noche|auto|\d{1,6}%?)[.!]?$/i.test(t);
   }
-  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
