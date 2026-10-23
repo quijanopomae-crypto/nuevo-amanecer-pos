@@ -861,4 +861,7 @@ test('#995 (bloqueo en b4072c52) 5 o más palabras entre el verbo y el nombre: s
     const hit = await askP(text, { stream, args });
     assert.equal(hit.reply, ROSA_REPLY, why); noNamesP(hit.cap, why);
   }
+  // Sin persona, con palabras sueltas al inicio: siguen con el total de la tienda (ni «Ver» ni «Final» son nombres).
+  for (const text of ['¿a ver cuánto me pagaron esta semana?', '¿al final cuánto me pagaron esta semana?', '¿ya hoy en la tarde me pagaron?']) for (const stream of [false, true])
+    assert.equal((await askP(text, { stream })).reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', text);
 });

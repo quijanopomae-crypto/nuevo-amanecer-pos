@@ -133,7 +133,8 @@ const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'do
 // (bloqueo en 764d2ee3) Palabras de tiempo: no son nombres y, como la lista fija y los artículos, no cortan la cercanía verbo–nombre
 // («¿me pagó hoy Rosa?», «¿me pagó solo Rosa?», «la vecina Gumercinda»).
 const PAYER_TIME = new Set(['hoy', 'ayer', 'anteayer', 'antier', 'manana', 'anoche', 'temprano', 'recien']);
-const PAYER_GAP = new Set(['el', 'la', 'los', 'las', 'a', 'al']);
+// (bloqueo en b4072c52) también «en», «a», «la», «una», «tarde», «noche», «mañana», «nomás»: se saltan sin tope y nunca son nombres.
+const PAYER_GAP = new Set(['el', 'la', 'los', 'las', 'a', 'al', 'en', 'una', 'tarde', 'noche', 'manana', 'nomas', 'noma']);
 const payerStop = (f) => !f || /\d/.test(f) || PAYER_STOP.has(f) || PAYER_HON.has(f) || PAYER_VERBS.has(f) || NAME_NOT.has(f) || NAME_UNIT.has(f) || NAME_STOP_VERB.has(f) || DEBT_VERB.test(' ' + f + ' ');
 function personTokens(text) {
   const s = String(text ?? ''), out = []; let sent = 0, last = 0;
@@ -188,10 +189,13 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) {
     const { len, hits } = personAt(toks, i, ck);
     if (len) { ments.push({ s: start, e: toks[i + len - 1].e, hits }); i += len - 1; continue; }
     const isPron = t.f === 'ella' || t.w.toLowerCase() === 'él';
-    if (!isPron && (payerStop(t.f) || PAYER_TIME.has(t.f) || t.f.length < 2)) continue;
-    let pv = i - 1; while (pv > i - 5 && same(pv) && !isVerb(pv) && (PAYER_STOP.has(toks[pv].f) || PAYER_TIME.has(toks[pv].f) || PAYER_GLUE.has(toks[pv].f) || PAYER_GAP.has(toks[pv].f))) pv--;
+    if (!isPron && (payerStop(t.f) || PAYER_TIME.has(t.f) || PAYER_GAP.has(t.f) || PAYER_GLUE.has(t.f) || t.f.length < 2)) continue;
+    // Sin tope: hacia atrás hasta el inicio de la oración (la coma no corta) saltando la lista fija, el tiempo y los artículos; hacia adelante
+    // hasta el fin, saltando tiempo, artículos y «me/le/ya» (no la lista fija: «a ver cuánto me pagaron» no hace de «ver» un nombre).
+    const timeGap = (j) => PAYER_TIME.has(toks[j].f) || PAYER_GLUE.has(toks[j].f) || PAYER_GAP.has(toks[j].f);
+    let pv = i - 1; while (same(pv) && !isVerb(pv) && (PAYER_STOP.has(toks[pv].f) || timeGap(pv))) pv--;
     const prevVerb = same(pv) && isVerb(pv);
-    let n = i + 1; while (same(n) && PAYER_GLUE.has(toks[n].f) && n < i + 3) n++;
+    let n = i + 1; while (same(n) && !isVerb(n) && timeGap(n)) n++;
     const nextVerb = same(n) && isVerb(n);
     // (decisión del lead) «me pagó ella / él»: no es un nombre; si no hay otro cliente en el mensaje se pregunta de qué cliente (kind 'quien').
     if (isPron) { if (prevVerb || nextVerb) pron = true; continue; }
