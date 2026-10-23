@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 195: lote asistente (#962 #958 #929 #960 #957 #969 #963 #959 #932, merge 4f08b5f8). Backend Worker 73 run 39881912812 success y salud verificada. Respaldo DB run 39881741834. CI crítico, E2E y visual success en cada PR. Sin migraciones ni datos comerciales. Rollback web a 8c9452a2 (Web 194, ops #965).",
-  "retry_attempt": 195,
-  "retry_reason": "Owner autorizó 2026-10-22: aprobado publiquen todo lo ya terminaron. Rollback a 8c9452a2.",
-  "requested_at_utc": "2026-10-23T01:05:34Z",
-  "approved_base": "e2c662a5ecb3d7c68a2df268830900a19584bb73"
+  "note": "Web 197: #975 corrección de 'Color' en configuración del asistente (merge cc073012, 4 archivos, sin DB). Backend Worker 75 run 39945590907 success y salud verificada. Respaldo DB run 39945418717. CI crítico, E2E y visual success. Sin migraciones ni datos comerciales. Rollback web a 95474aab (Web 196, ops #974).",
+  "retry_attempt": 197,
+  "retry_reason": "Owner autorizó 2026-10-22: aprobado publiquen todo lo ya terminaron. Rollback a 95474aab.",
+  "requested_at_utc": "2026-10-23T11:23:06Z",
+  "approved_base": "2c4b8c375b9ec44dac1a7354f8dfd602c5eb85df"
 }

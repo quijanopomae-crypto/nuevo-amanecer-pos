@@ -13,10 +13,11 @@
   if (!doc || !C || root.NA_ASISTENTE) return;
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
+  var configurationTurn = false;
   var history = [], invoiceMemory = null, state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   // Memoria de la charla (#946): hasta memoria.max_bytes del servidor; lo viejo se resume (resumen_sugerido -> «resumen»). Solo en memoria,
   // nunca en el almacenamiento del aparato; se borra con «Nueva conversación». queued: lo escrito mientras se respondía (sale al terminar).
-  var mem = C.memNew ? C.memNew() : null, queued = null, queuedNote = null, shownSigs = {}, turnNo = 0;
+  var mem = C.memNew ? C.memNew() : null, queued = null, queuedNote = null, shownSigs = {}, turnNo = 0; configurationTurn = false;
   var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -312,7 +313,13 @@
   // es del POS y no lleva la hoja del asistente garantizada). «U+202E 1234-100F» ya llega normalizado («1234-100F»); esto cubre lo que trae la propuesta.
   function ltrIsolate(n) { if (!n || !n.setAttribute) return n; n.setAttribute('dir', 'ltr'); if (n.classList) n.classList.add('na-asst-ltr'); else n.className = (n.className ? n.className + ' ' : '') + 'na-asst-ltr';
     if (n.style) { n.style.unicodeBidi = 'isolate'; n.style.direction = 'ltr'; } return n; }
+  async function configurationApi() {
+    if(!isOwnerAccess()) return null;
+    try { if(!root.NA_CONFIG_V9&&root.NA_CONFIG_V9_BOOT) await root.NA_CONFIG_V9_BOOT.load(); } catch (_) { return null; }
+    return isOwnerAccess()?root.NA_CONFIG_V9:null;
+  }
   var deps = {
+    applyConfiguration: async function(p) { var api=await configurationApi(); return api&&api.assistantApply?api.assistantApply(p):{ok:false,msg:'No se pudo cargar Configuración.'}; },
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
@@ -515,6 +522,7 @@
           : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
         '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') +
         (tot.filas[i] != null ? '<div class="lt" data-lt="' + i + '">Total ' + soles(tot.filas[i]) + '</div>' : '') + '</td></tr>'; }).join('') + totalRow(tot);
+    if (p.type === 'configuracion') rows = '<tr><td>'+E(p.nombre)+'<div class="note">'+E(p.alcance)+'</div></td><td>'+E(typeof p.antes==='boolean'?(p.antes?'Activado':'Desactivado'):p.antes)+' → <b>'+E(typeof p.valor==='boolean'?(p.valor?'Activado':'Desactivado'):p.valor)+'</b></td></tr>';
     if (p.type === 'precio') rows = '<tr><td>' + E(p.nombre) + '</td><td class="r">' + soles(p.precio_actual) + ' → <b>' + soles(p.precio_nuevo) + '</b></td></tr>';
     if (p.type === 'costo') rows = '<tr><td>' + E(p.nombre) + '<div class="note">Costo</div></td><td class="r">' + (p.costo_actual != null ? soles(p.costo_actual) : 'sin costo') + ' → <b>' + soles(p.costo_nuevo) + '</b></td></tr>';
     if (p.type === 'ajuste') rows = '<tr><td>' + E(p.nombre) + '<div class="note">' + E(p.motivo) + '</div></td><td class="r">' + (p.tipo === 'entrada' ? '+' : '−') + E(p.cantidad) + '</td></tr>' +
@@ -532,6 +540,7 @@
     if (p.type === 'producto' && p.parecidos && p.parecidos.length) warn += '<div class="warn">Ya hay productos parecidos: ' + E(p.parecidos.join(', ')) + '.</div>';
     if (p.type === 'producto' && p.revisar) warn += '<div class="warn">Precio o costo fuera de lo normal. Revisa bien.</div>';
     var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
+      configuracion: 'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
@@ -687,7 +696,7 @@
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
     history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
-    mem = C.memNew ? C.memNew() : null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0;
+    mem = C.memNew ? C.memNew() : null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0; configurationTurn = false;
   }
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
@@ -930,7 +939,7 @@
   // «Nueva conversación»: se olvida la charla (historial, resumen, factura en memoria) y la pantalla del chat vuelve a empezar.
   function newChat() {
     if (busy || !msgsEl) return;
-    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; liveCard = null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0;
+    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; liveCard = null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0; configurationTurn = false;
     mem = C.memNew ? C.memNew() : null;
     try { gate.forgetAll && gate.forgetAll(); } catch (_) {}
     [].slice.call(msgsEl.children).forEach(function (n) { if (n !== newBtn) n.remove(); }); if (newBtn) newBtn.hidden = true;
@@ -973,6 +982,13 @@
     var role = isOwnerAccess() ? 'owner' : 'employee', mreq = null;
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos(), deps.proveedores ? deps.proveedores() : []) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
+    configurationTurn = C.configurationIntent(text, configurationTurn);
+    if (isOwnerAccess() && configurationTurn) {
+      var configPanel=panelEl, configApi=root.NA_CONFIG_V9;
+      if(!configApi) configApi=await configurationApi();
+      if(panelEl!==configPanel) return;
+      if(isOwnerAccess()&&configApi&&configApi.assistantSnapshot) body.context.settings=configApi.assistantSnapshot();
+    }
     if (gate.summary) body.cards = gate.summary(); // (fix/asist-compras-borrador) estado real de las tarjetas: una cancelada no vuelve como pendiente
     if (mem && C.memRequest) { mreq = C.memRequest(history, mem, { role: role, now: Date.now() + clockOffset, bodyBase: body }); body.history = mreq.history; if (mreq.resumen) body.resumen = mreq.resumen; }
     if (image) { body.image = image; invoiceMemory = null; }
