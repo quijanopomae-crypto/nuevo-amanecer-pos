@@ -30,4 +30,4 @@ export function settingsMessage(ctx){
 }
 export const SETTINGS_TOOL={name:'configurar_app',description:'Propone cambiar UN ajuste del catálogo configuracion_app. Solo Admin. No aplica hasta Confirmar. Usa la clave exacta y el valor concreto pedido; si es ambiguo, pregunta.',parameters:{type:'object',properties:{ajuste:{type:'string',enum:Object.keys(SETTINGS)},valor:{anyOf:[{type:'string'},{type:'number'},{type:'boolean'}]}},required:['ajuste','valor'],additionalProperties:false}};
 
-export function settingsRequested(text,ctx){return !!ctx?.settings || /configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/i.test(String(text||''));}
+export function settingsRequested(text,ctx){return !!ctx?.settings || /\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/i.test(String(text||''));}
