@@ -17,7 +17,9 @@ function visibleStrings(path) {
 
 test('Admin: ninguna cadena del asistente en el aparato dice «dueño»', () => {
   for (const f of ['POS/js/modules/asistente/asistente-ui.js', 'POS/js/modules/asistente/asistente-core.js']) {
-    const bad = visibleStrings(f).filter((s) => /due[ñn]o/i.test(s));
+    // '[dato del dueño]' en MASK_HOLDERS de asistente-core.js es la marca VIEJA que hay que reconocer (misma lista que #994) para no
+    // volver a taparla; no es un texto que el aparato muestre. Solo esa cadena exacta se permite.
+    const bad = visibleStrings(f).filter((s) => /due[ñn]o/i.test(s) && s !== "'[dato del dueño]'");
     assert.deepEqual(bad, [], f);
   }
   const ui = readFileSync('POS/js/modules/asistente/asistente-ui.js', 'utf8');
