@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #946 #947 #948 #930 #949 #927 #939 (assistant long memory, Lima time, caja_abierta, below-cost alerts, business name, overdue credits with codes only, levels 1/2/3). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39863942113 first. Backend first then web. No schema, migrations, business data or secret changes.",
-  "target_commit": "8e0f236b451b5003220b332648c1725449dc12ba",
-  "rollback_ref": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #962 #958 #929 #960 #957 #969 #963 #959 #932 (assistant name filter, new queries, purchase suggestions, latency, live batch lessons, neutral codes, phone memory, purchase draft cards, product label photo). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39881741834 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "target_commit": "4f08b5f85bc73279ed8602a7f7eff4d9556381c8",
+  "rollback_ref": "8e0f236b451b5003220b332648c1725449dc12ba",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 72,
-  "optimization": "ASSISTANT_BATCH_LEVELS_MEMORY_CREDITS"
+  "attempt": 73,
+  "optimization": "ASSISTANT_BATCH_PURCHASES_PHONE_MEMORY_PHOTO"
 }

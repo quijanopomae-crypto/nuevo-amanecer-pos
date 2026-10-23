@@ -63,6 +63,8 @@ test('1) aparato: nombres y direcciones de clientes conocidos -> «cliente #cód
   assert.equal(m('estado de cuenta de ROSA QUISPE MAMANI').text, 'estado de cuenta de cliente #c1');
   assert.equal(m('quispe pagó 20').text, 'cliente #c1 pagó 20');
   assert.equal(m('cuánto debe Rosa').text, 'cuánto debe cliente #c1 o cliente #c2', 'nombre compartido: sus códigos');
+  assert.equal(m('Quispe Mamani pagó').text, 'cliente #c1 pagó');
+  assert.equal(m('Rosa Huamán pagó').text, 'cliente #c2 pagó');
   assert.equal(m('Jose Perez debe').text, 'un cliente debe', 'código que el redactor taparía (8 dígitos): «un cliente»');
   assert.equal(m('vive en Jr. Los Olivos 345, Ate').text, 'vive en [dirección oculta]');
   assert.equal(m('entrega en Av. Grau 123 Mz B Lt 5').text, 'entrega en [dirección oculta]');
@@ -73,7 +75,7 @@ test('1) aparato: nombres y direcciones de clientes conocidos -> «cliente #cód
   assert.deepEqual(C.customerCodesIn('Sí, cliente #c2 debe; cliente #zz no existe; cliente #c2 otra vez', CLI), ['c2']);
 });
 test('1) UI: el mensaje pasa por maskCustomers ANTES del redactor y del envío (el historial guarda lo mismo); la respuesta pinta el nombre local', () => {
-  assert.match(UI, /var masked = C\.maskCustomers \? C\.maskCustomers\(text, deps\.clientes\(\), deps\.productos\(\)\) : \{ text: text \};\n\s*var body = \{ text: C\.redactText\(masked\.text\), history/);
+  assert.match(UI, /var masked = C\.maskCustomers \? C\.maskCustomers\(text, deps\.clientes\(\), deps\.productos\(\), deps\.proveedores \? deps\.proveedores\(\) : \[\]\) : \{ text: text \};\n\s*var body = \{ text: C\.redactText\(masked\.text\), history/);
   assert.match(UI, /if \(C\.customerCodesIn && isOwnerAccess\(\)\) linkCustomers\(bubble, C\.customerCodesIn\(d\.reply, deps\.clientes\(\)\)\);/);
   assert.ok(!/text: C\.redactText\(text\)/.test(UI), 'ya no se manda el texto sin cambiar nombres');
 });
@@ -91,7 +93,7 @@ test('1) servidor: el estado de cuenta va por cliente_id (código), nunca por no
   { store: createMemoryUsageStore(), resolveRole: async () => 'owner', audit: async () => {}, mockChunkMs: 0,
     fetch: async (u, init) => { cap.push(JSON.parse(init.body)); return jsonR({ choices: [{ message: { content: 'Listo, cliente #c1.', tool_calls: [{ id: 't1', type: 'function', function: { name: 'preparar_documento', arguments: JSON.stringify({ tipo: 'estado_cuenta', cliente_id: 'c1' }) } }] } }], usage: { prompt_tokens: 5, completion_tokens: 5 } }); } });
   const d = await r.json(), sent = JSON.stringify(cap);
-  assert.ok(sent.includes('cliente #c1') && !/Rosa|Quispe|Olivos/.test(sent), sent);
+  assert.ok(sent.includes('cliente #C-0001') && !sent.includes('cliente #c1') && !/Rosa|Quispe|Olivos/.test(sent), sent); // hacia la IA, código neutro
   assert.equal(d.proposals[0].cliente_id, 'c1'); assert.match(d.reply, /cliente #c1/);
 });
 test('1) aparato: el documento busca al cliente por su código y pone el nombre en la hoja (el modelo nunca lo vio)', async () => {
