@@ -493,7 +493,7 @@ export function memoryReader(data) {
     async creditPolicy(code) { if (!data.creditPolicies) return undefined; const k = String(code), lk = k.toLowerCase();
       const r = data.creditPolicies[k] ?? Object.entries(data.creditPolicies).find(([id]) => id.toLowerCase() === lk)?.[1];
       return r ? { mode: String(r.mode), limite: r.mode === 'MANUAL' ? cents(r.manual_limit_cents) : null } : null; },
-    async creditPayments() { return data.payments ? data.payments.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0, cr: x.credit_id == null ? null : String(x.credit_id) })) : null; },
+    async creditPayments() { if (!data.payments) return null; const l = data.payments.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0, cr: x.credit_id == null ? null : String(x.credit_id) })); l.truncated = !!data.paymentsTruncated; return l; },
     async itemsByProduct(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)), m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const k = String(it.product_id), r = m.get(k) || { product_id: k, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(k, r); }
       return [...m.values()].sort((a, b) => b.c - a.c); },
@@ -1135,6 +1135,10 @@ async function creditPaymentsQuery(reader, args, nowMs, base) {
   for (const x of inP) { const r = byDay.get(x.dia) || { n: 0, c: 0 }; r.n += x.c > 0 ? 1 : -1; r.c += x.c; byDay.set(x.dia, r); }
   const n = Math.max(0, inP.reduce((s, x) => s + (x.c > 0 ? 1 : -1), 0)), c = inP.reduce((s, x) => s + x.c, 0), corte = cut ? ' (lista larga: se revisó una parte)' : '';
   if (cut) base.truncado = true;
+  // (#995) Lista cortada y nada encontrado: no se sabe si hubo cobros en la parte no revisada; nunca «No hubo cobros».
+  if (cut && !(n && c > 0)) return { ...base, titulo: 'Cobros de fiados ' + de + rango, columnas: [], filas: [],
+    texto: 'No tengo el dato completo de los cobros de fiados ' + de + rango + ': la lista es larga y en la parte revisada no aparecen. Se ven completos en Clientes > ' + (ref ? 'ficha del cliente.' : 'Reporte de deuda.'),
+    resumen: { desde: p.desde, hasta: p.hasta, ...(ref ? { cliente: ref } : {}), lista_cortada: true, no_disponible: true } };
   return { ...base, titulo: 'Cobros de fiados ' + de + rango, columnas: ['Día', 'Cobros', 'Total S/'],
     filas: [...byDay.entries()].filter(([, r]) => r.c !== 0 || r.n > 0).sort((a, b) => a[0].localeCompare(b[0])).map(([d, r]) => [d, Math.max(0, r.n), soles(r.c)]),
     total: soles(c), texto: (n && c > 0 ? 'Cobros de fiados ' + de + rango + ': ' + money(c) + ' en ' + n + (n === 1 ? ' cobro' : ' cobros') + '.' : 'No hubo cobros de fiados ' + de + rango + '.') + corte,
