@@ -274,6 +274,9 @@ function _naCreditDetailHtml(cr){
 }
 const _naCajaMovsSesion=()=>{if(cajEstado?.sessionId)return cajMovs.filter(m=>m.sessionId===cajEstado.sessionId);const fecha=cajEstado?.fechaApertura||obtenerHoy();return cajMovs.filter(m=>m.fecha===fecha);};
 
+// CM-066: unidades pesables/medibles conservan decimales en movimientos; UND sigue entera.
+const _NA_DECIMAL_UNITS=new Set(['kilogramo','kg','gramo','litro','mililitro']);
+function _naMovQty(m){const p=(Array.isArray(productos)?productos:[]).find(x=>String(x?.id)===String(m?.productId));return _NA_DECIMAL_UNITS.has(_naClean(p?.unidad).toLowerCase())?(v=>_naNumber(v)):(v=>_naInt(v));}
 function _naNormalizeData(){
   _naEnsureCashierConfig();
   productos=(Array.isArray(productos)?productos:[]).map((p,index)=>({
@@ -286,7 +289,7 @@ function _naNormalizeData(){
   creditos=(Array.isArray(creditos)?creditos:[]).map((cr,index)=>_naNormalizeCreditRecord(cr,index));
   gastos=(Array.isArray(gastos)?gastos:[]).map(g=>({...g,desc:_naClean(g.desc||'Gasto'),monto:Math.max(0,_naNumber(g.monto)),fecha:g.fecha?String(g.fecha).slice(0,10):obtenerHoy()}));
   cajMovs=(Array.isArray(cajMovs)?cajMovs:[]).map(m=>({...m,monto:Math.max(0,_naNumber(m.monto)),efectivo:Math.max(0,_naNumber(m.efectivo)),fecha:m.fecha?String(m.fecha).slice(0,10):obtenerHoy()}));
-  inventoryMovements=(Array.isArray(inventoryMovements)?inventoryMovements:[]).map(m=>({...m,productId:m?.productId??null,type:_naClean(m?.type)||'AJUSTE',before:_naInt(m?.before),delta:_naNumber(m?.delta),after:_naInt(m?.after),reason:_naClean(m?.reason||''),source:_naClean(m?.source)||'MANUAL',referenceId:m?.referenceId==null?null:String(m.referenceId),fecha:m?.fecha?String(m.fecha).slice(0,10):obtenerHoy()}));
+  inventoryMovements=(Array.isArray(inventoryMovements)?inventoryMovements:[]).map(m=>{const _q=_naMovQty(m);return{...m,productId:m?.productId??null,type:_naClean(m?.type)||'AJUSTE',before:_q(m?.before),delta:_naNumber(m?.delta),after:_q(m?.after),reason:_naClean(m?.reason||''),source:_naClean(m?.source)||'MANUAL',referenceId:m?.referenceId==null?null:String(m.referenceId),fecha:m?.fecha?String(m.fecha).slice(0,10):obtenerHoy()}});
   cart=(Array.isArray(cart)?cart:[]).map((it,index)=>({...it,qty:Math.max(1,_naNumber(it.qty,1)),precio:Math.max(0,_naNumber(it.precio)),costo:Math.max(0,_naNumber(it.costo)),unitsPerQty:Math.max(1,_naInt(it.unitsPerQty,1)),_lineKey:it._lineKey||_naLineKey(it.id,it.unitsPerQty>1?'caja':'unidad')}));
 }
 
