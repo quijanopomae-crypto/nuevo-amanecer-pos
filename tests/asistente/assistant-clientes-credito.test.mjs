@@ -438,7 +438,7 @@ test('#995 (2ª, regla nueva) una persona: «doña Rosa» / «me pagó Rosa» = 
     for (const args of SALES_ARGS) for (const stream of [false, true]) {
       const { reply, cap } = await ask995(text, args, stream);
       assert.ok(!/S\/ \d/.test(reply), 'nunca un monto: ' + text + ' -> ' + reply);
-      assert.match(reply, /código del cliente/, text + ' stream=' + stream);
+      assert.match(reply, /código del cliente|^¿De qué cliente\? Escríbame su nombre\.$/, text + ' stream=' + stream); // (diseño final, punto 4) singular sin nombre: también vale «¿De qué cliente?»
       noNames(cap);
     }
   // Lo general sigue con el total de la tienda (también con una persona nombrada en otra frase).
@@ -520,7 +520,7 @@ test('#995 frases del bloqueo, con y sin partes: cliente 5 = sus cobros; doña R
   const cases = [
     ['¿cuánto me pagó el cliente 5 de su deuda esta semana?', (r) => assert.equal(r, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.')],
     ['¿cuánto me pagó doña Rosa de su deuda esta semana?', (r) => assert.equal(r, ROSA_REPLY)],
-    ['¿cuánto me pagó doña [nombre oculto] de su deuda esta semana?', (r) => { assert.match(r, /código del cliente/); assert.ok(!/S\/ \d/.test(r)); }],
+    ['¿cuánto me pagó doña [nombre oculto] de su deuda esta semana?', (r) => { assert.match(r, /código del cliente|^¿De qué cliente\? Escríbame su nombre\.$/); assert.ok(!/S\/ \d/.test(r)); }],
     ['¿cuánto cobré de fiados esta semana?', (r) => assert.equal(r, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.')]
   ];
   for (const [text, check] of cases) for (const args of SALES_ARGS) for (const stream of [false, true]) {
@@ -979,7 +979,8 @@ test('#995 (final 3) «pagarán», «paguen», «pagaría», «abonarán»…: R
   }
 });
 test('#995 (final 3) «paquete», «página» y «pagué la luz» no son preguntas de cobros: la IA contesta, sin «No encontré» ni «De qué cliente»', async () => {
-  for (const text of ['¿cuánto cuesta el paquete?', '¿en qué página veo las ventas?', '¿cuánto pagué de luz este mes?']) for (const stream of [false, true]) {
+  for (const text of ['¿cuánto cuesta el paquete?', '¿en qué página veo las ventas?', '¿cuánto pagué de luz este mes?', '¿cómo pago con Yape?', '¿dónde registro un pago con tarjeta?', '¿cuánto se paga de IGV?', '¿cuánto he pagado de luz?'])
+    for (const stream of [false, true]) {
     const { reply, cap } = await askP(text, { stream, args: { tipo: 'ventas_periodo', ...WEEK } });
     assert.ok(cap.length >= 1, text); assert.ok(!/No encontré|De qué cliente|De cuál cliente/.test(reply), text + ' -> ' + reply);
   }
@@ -993,4 +994,11 @@ test('#995 (final 4) «¿me pagó?», «¿cuánto me pagó?», «¿me pagó el h
   }
   for (const text of ['¿me pagaron?', '¿cuánto me pagaron hoy?', '¿me pagó alguien hoy?', '¿cuánto me pagó cada uno esta semana?', '¿me abonaron esta semana?'])
     for (const stream of [false, true]) assert.equal((await askP(text, { stream })).reply, STORE29, text + ' stream=' + stream);
+});
+test('#995 (final 2) sin «me»: «¿Rosa ya pagó?» = cliente #5; sin Rosa = «No encontré… Rosa» (nombre con mayúscula); «¿cómo pago con Yape?» va a la IA', async () => {
+  for (const stream of [false, true]) {
+    assert.equal((await askP('¿Rosa ya pagó?', { stream })).reply, ROSA_REPLY);
+    const miss = await askP('¿Rosa ya pagó?', { stream, data: noRosa(DATA_CR) });
+    assert.equal(miss.reply, NOT_FOUND_ROSA); assert.equal(miss.cap.length, 0);
+  }
 });

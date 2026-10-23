@@ -120,8 +120,17 @@ function creditPaymentsClient(proposals, text, role, hasList = false, onePayer =
 // pregunta cuál con los nombres completos. Ninguno: «No encontré a un cliente llamado …». Esas dos salen sin llamar a la IA. El nombre
 // nunca va a la IA: el mensaje, el historial y el resumen que van al modelo se pasan por scrub ([nombre oculto]). Sin lista: se pide el código.
 // (decisión del lead) también presente/futuro: paga, pagar, pagará, abona, abonar, abonará («va a pagar» = «a» + «pagar»).
-const PAYER_ASK_RE = /\b(pago|pagaron|abono|abonaron|cancelo|cancelaron|devolvio|devolvieron|paga|pagar|pagara|abona|abonar|abonara)\b/;
-const PAYER_VERBS = new Set(['pago', 'pagaron', 'abono', 'abonaron', 'cancelo', 'cancelaron', 'devolvio', 'devolvieron', 'paga', 'pagar', 'pagara', 'abona', 'abonar', 'abonara']);
+// (diseño final del lead) Verbos por RAÍZ: pag…/abon… con cualquier terminación (pagó, pagaron, pagarán, paguen, pagaría, abonarán…) más
+// canceló/devolvió. «página» y «paquete» no empiezan por pag+vocal. Fuera: la primera y segunda persona («¿cuánto pagué de luz?», «pagamos»,
+// «pagaré», «pagaste») y los sustantivos «pagos/abonos»: no son un cliente que le paga al Admin.
+const PAYER_VERB_STEM = /^(?:pag[aoue]|abon[aoe])/;
+const PAYER_NOT_VERB = new Set(['pague', 'pagamos', 'pagare', 'pagaremos', 'pagariamos', 'pagaste', 'pagabamos', 'pagos', 'abone', 'abonamos', 'abonare', 'abonaremos', 'abonaste', 'abonos']);
+const PAYER_VERB_OTHER = new Set(['cancelo', 'cancelaron', 'devolvio', 'devolvieron']);
+const PAYER_VERBS = { has: (f) => !!f && ((PAYER_VERB_STEM.test(f) && !PAYER_NOT_VERB.has(f)) || PAYER_VERB_OTHER.has(f)) };
+// «¿cuánto he pagado de luz?», «yo pagué…»: la oración es del Admin, no de un cliente.
+const PAYER_FIRST = new Set(['yo', 'he', 'hemos']);
+// Pago A la tienda: «me/nos/le pagó…» o de un fiado/deuda/crédito. «¿cómo pago con Yape?», «¿dónde registro un pago?» no son cobros de un cliente.
+const PAYER_TO_ME = new Set(['me', 'nos', 'le', 'les', 'fiado', 'fiados', 'fiada', 'deuda', 'deudas', 'credito', 'creditos', 'cuenta', 'saldo']);
 const PAYER_HON = new Set(['don', 'dona', 'sr', 'sra', 'srta', 'senor', 'senora', 'senorita']);
 const PAYER_GLUE = new Set(['me', 'le', 'nos', 'te', 'ya', 'ha', 'han', 'hoy', 'ayer', 'va', 'van']); // «va a pagar»
 const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'donde', 'quien', 'quienes', 'fue', 'fueron', 'ha', 'han', 'hoy', 'ayer', 'anteayer', 'antier',
@@ -136,6 +145,21 @@ const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'do
 const PAYER_TIME = new Set(['hoy', 'ayer', 'anteayer', 'antier', 'manana', 'anoche', 'temprano', 'recien']);
 // (bloqueo en b4072c52) también «en», «a», «la», «una», «tarde», «noche», «mañana», «nomás»: se saltan sin tope y nunca son nombres.
 const PAYER_GAP = new Set(['el', 'la', 'los', 'las', 'a', 'al', 'en', 'una', 'tarde', 'noche', 'manana', 'nomas', 'noma']);
+// (diseño final, punto 2) Más palabras conocidas que nunca son un nombre: preposiciones, relleno, lugares, formas de pago y «tía/casera/señora/
+// vecina» (punto 5). Lo que sobra en la pregunta tras quitar todas las conocidas se toma como un nombre que no está en Clientes.
+const PAYER_FILL = new Set(['por', 'fin', 'vez', 'veces', 'con', 'sin', 'hasta', 'desde', 'sobre', 'tras', 'ver', 'final', 'puesto', 'lado', 'tia', 'tio', 'tias', 'tios',
+  'casera', 'casero', 'caseras', 'caseros', 'vecino', 'vecinos', 'senoras', 'senores', 'hable', 'vino', 'vinieron', 'paso', 'llego', 'conmigo', 'tienda', 'bodega', 'plata', 'dinero',
+  'sol', 'transferencia', 'deposito', 'cuales', 'esto', 'eso', 'estos', 'estas', 'esos', 'esas', 'acaso', 'sabes', 'sabe', 'saber', 'quiero', 'quisiera', 'puedes', 'podrias', 'dame',
+  'semanal', 'mensual', 'diario', 'horas', 'hora', 'tardes', 'noches', 'mananas', 'momento', 'rato', 'luego', 'despues', 'antes', 'ahora', 'ahorita', 'parte', 'completo',
+  'completa', 'mitad', 'resto', 'adelanto', 'cuota', 'cuotas', 'ultima', 'ultimo', 'ultimos', 'ultimas', 'primera', 'primer', 'primero', 'semanas', 'meses', 'anos', 'fiadas',
+  'monto', 'suma', 'algun', 'alguno', 'alguna', 'algunos', 'algunas', 'ninguno', 'ninguna', 'yo', 'ella', 'nosotros', 'pero', 'asi', 'tal', 'verdad', 'cierto', 'tanto', 'poco',
+  'mucho', 'bien', 'mal', 'igual', 'hace', 'sea', 'ojala', 'persona', 'personas', 'clienta', 'clientas', 'alla', 'aca', 'frente', 'esquina', 'mercado', 'calle', 'casa', 'pasaje',
+  'mano', 'contado', 'visa', 'banco', 'yapeo', 'plineo', 'deben', 'queda', 'quedo', 'falta', 'faltan', 'cobrar', 'cobra', 'cobraste', 'cobrado', 'he', 'hemos', 'hay', 'habia',
+  'hizo', 'hicieron', 'dio', 'dieron', 'tardes', 'dias', 'sus', 'ustedes', 'atrasado', 'atrasados', 'pendiente', 'pendientes', 'cuantas', 'todo', 'toda',
+  'frecuente', 'frecuentes', 'nuevo', 'nuevos', 'nueva', 'nuevas', 'habitual', 'habituales', 'fijo', 'fijos']);
+// (punto 4) Con estas palabras la pregunta es por todos («¿me pagó alguien hoy?», «cada uno», «¿quién me pagó?»): el total, sin preguntar el cliente.
+const PAYER_ALL = new Set(['alguien', 'nadie', 'mi', 'mis', 'nuestro', 'nuestros', 'nuestra', 'nuestras', 'ellos', 'ellas', 'varios', 'cada', 'uno',
+  'entre', 'ambos', 'todos', 'gente', 'vecina', 'vecinas', 'solo', 'recien', 'quien', 'quienes', 'clientes']);
 const payerStop = (f) => !f || /\d/.test(f) || PAYER_STOP.has(f) || PAYER_HON.has(f) || PAYER_VERBS.has(f) || NAME_NOT.has(f) || NAME_UNIT.has(f) || NAME_STOP_VERB.has(f) || DEBT_VERB.test(' ' + f + ' ');
 function personTokens(text) {
   const s = String(text ?? ''), out = []; let sent = 0, last = 0;
@@ -174,43 +198,57 @@ export function scrubClientNames(value, customers, { codes = false } = {}) {
   return out + s.slice(at);
 }
 const capName = (x) => x.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-// customers: la lista (null = no se pudo leer). Devuelve null (nada que hacer) o { kind: 'uno'|'cual'|'nadie'|'quien'|'sin_lista', ... }.
-// strict (sin «fiado/deuda» en el mensaje): solo cuentan las personas con señal clara (nombre de la lista, «doña …», junto al verbo);
-// una palabra con mayúscula sola («en Octubre», «Plaza Vea») no convierte la pregunta en cobros de alguien.
-export function resolvePayerNames(text, customers, { strict = false } = {}) {
+// customers: la lista (null = no se pudo leer). Devuelve null (nada que hacer: el total) o { kind: 'uno'|'cual'|'nadie'|'quien'|'sin_lista', ... }.
+// (diseño final del lead) Sin cercanía verbo–nombre:
+// 1) se busca un cliente de la lista en TODO el mensaje (también la oración de antes: «Hablé con Rosa. ¿Cuánto me pagó?» = Rosa);
+// 2) en la pregunta de pago se quitan todas las palabras conocidas (lista fija con las de alfa, tiempo, artículos, preposiciones, verbos de pago,
+//    «cuánto», «fiado», «Yape»…, «tía/casera/señora»); si SOBRA alguna, es un nombre que no está: «No encontré a un cliente llamado …» y nunca el
+//    total (la oración de antes cuenta solo si no se halló ningún cliente: «Rosa, ¿cuánto me pagaron?»);
+// 3) sin nombre: singular («¿me pagó?», «¿cuánto me pagó?», «¿me pagó ella?») = «¿De qué cliente?»; plural («me pagaron») o una palabra de
+//    todos («alguien», «cada uno», «¿quién…?») = el total.
+// strict: ya no cambia nada (se deja por compatibilidad de la llamada).
+// Oraciones con verbo de pago (sin «yo/he/hemos»); toMe: las que además son un pago A la tienda («me/le pagó», «fiado», «deuda»…).
+export function payerSentences(toks, { toMe = false } = {}) {
+  const by = new Map(); for (const t of toks) { if (!by.has(t.sent)) by.set(t.sent, []); by.get(t.sent).push(t); }
+  return new Set([...by].filter(([, ts]) => ts.some((t) => PAYER_VERBS.has(t.f)) && !ts.some((t) => PAYER_FIRST.has(t.f)) && (!toMe || ts.some((t) => PAYER_TO_ME.has(t.f)))).map(([k]) => k));
+}
+export const asksPayer = (text) => payerSentences(personTokens(text)).size > 0;
+const payerKnown = (t) => payerStop(t.f) || PAYER_TIME.has(t.f) || PAYER_GAP.has(t.f) || PAYER_GLUE.has(t.f) || PAYER_FILL.has(t.f) || PAYER_ALL.has(t.f)
+  || t.f.length < 2 || t.w.toLowerCase() === 'él';
+export function resolvePayerNames(text, customers, { strict = false } = {}) { void strict;
   const s = String(text ?? ''), toks = personTokens(s);
-  const paySent = new Set(toks.filter((t) => PAYER_VERBS.has(t.f)).map((t) => t.sent));
-  if (!paySent.size) return null;
-  const ck = Array.isArray(customers) ? personKeys(customers) : [], ments = []; let pron = false;
-  const isVerb = (j) => !!toks[j] && PAYER_VERBS.has(toks[j].f);
-  for (let i = 0; i < toks.length; i++) {
-    const t = toks[i]; if (!paySent.has(t.sent)) continue;
-    const same = (j) => toks[j] && toks[j].sent === t.sent;
-    const hon = i > 0 && same(i - 1) && PAYER_HON.has(toks[i - 1].f);
-    const start = hon ? toks[i - 1].s : t.s;
-    const { len, hits } = personAt(toks, i, ck);
-    if (len) { ments.push({ s: start, e: toks[i + len - 1].e, hits }); i += len - 1; continue; }
-    const isPron = t.f === 'ella' || t.w.toLowerCase() === 'él' || (t.f === 'el' && !same(i + 1)); // «¿me pagó el?» (sin tilde, al final de la oración)
-    if (!isPron && (payerStop(t.f) || PAYER_TIME.has(t.f) || PAYER_GAP.has(t.f) || PAYER_GLUE.has(t.f) || t.f.length < 2)) continue;
-    // Sin tope: hacia atrás hasta el inicio de la oración (la coma no corta) saltando la lista fija, el tiempo y los artículos; hacia adelante
-    // hasta el fin, saltando tiempo, artículos y «me/le/ya» (no la lista fija: «a ver cuánto me pagaron» no hace de «ver» un nombre).
-    const timeGap = (j) => PAYER_TIME.has(toks[j].f) || PAYER_GLUE.has(toks[j].f) || PAYER_GAP.has(toks[j].f);
-    let pv = i - 1; while (same(pv) && !isVerb(pv) && (PAYER_STOP.has(toks[pv].f) || timeGap(pv))) pv--;
-    const prevVerb = same(pv) && isVerb(pv);
-    let n = i + 1; while (same(n) && !isVerb(n) && timeGap(n)) n++;
-    const nextVerb = same(n) && isVerb(n);
-    // (decisión del lead) «me pagó ella / él»: no es un nombre; si no hay otro cliente en el mensaje se pregunta de qué cliente (kind 'quien').
-    if (isPron) { if (prevVerb || nextVerb) pron = true; continue; }
-    const afterAnd = same(i - 1) && ['y', 'e'].includes(toks[i - 1].f) && ments.length && ments.at(-1).e <= toks[i - 1].s;
-    if (!(hon || prevVerb || nextVerb || afterAnd || (!strict && /^\p{Lu}/u.test(t.w)))) continue;
-    let j = i; while (j + 1 < i + 3 && same(j + 1) && /^\p{Lu}/u.test(toks[j + 1].w) && !payerStop(toks[j + 1].f)) j++;
-    ments.push({ s: start, e: toks[j].e, hits: [], name: capName(s.slice(t.s, toks[j].e)) }); i = j;
+  if (!payerSentences(toks).size) return null;
+  // Lo que sobra y el «¿de qué cliente?» solo en un pago A la tienda; «¿Rosa ya pagó?» (sin «me») solo cuenta un cliente de la lista.
+  const paySent = payerSentences(toks, { toMe: true }), verbSent = payerSentences(toks);
+  const ck = Array.isArray(customers) ? personKeys(customers) : [], ments = [], used = new Set();
+  for (let i = 0; i < toks.length; i++) { // (1) clientes de la lista en todo el mensaje
+    const { len, hits } = personAt(toks, i, ck); if (!len) continue;
+    const hon = i > 0 && toks[i - 1].sent === toks[i].sent && PAYER_HON.has(toks[i - 1].f);
+    ments.push({ s: hon ? toks[i - 1].s : toks[i].s, e: toks[i + len - 1].e, hits });
+    for (let k = i; k < i + len; k++) used.add(k); i += len - 1;
   }
-  if (!ments.length) return pron ? { kind: 'quien', masked: s } : null;
+  const prevSent = new Set([...paySent].map((x) => x - 1).filter((x) => x >= 0 && !paySent.has(x)));
+  const runs = []; let run = null; // (2) lo que sobra
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i], scope = paySent.has(t.sent) || (!ments.length && prevSent.has(t.sent))
+      || (verbSent.has(t.sent) && /^\p{Lu}\p{Ll}/u.test(t.w)); // sin «me»: solo un nombre con mayúscula («¿Gumercinda ya pagó?»; no «registro», «IGV»)
+    if (!scope || used.has(i) || payerKnown(t)) { run = null; continue; }
+    if (run && run.sent === t.sent && run.last === i - 1 && run.n < 3) { run.e = t.e; run.last = i; run.n++; continue; }
+    run = { s: t.s, e: t.e, last: i, n: 1, sent: t.sent }; runs.push(run);
+  }
+  if (runs.length) {
+    const all = [...ments.map((m) => ({ s: m.s, e: m.e })), ...runs].sort((x, y) => x.s - y.s);
+    const masked = all.reduceRight((x, m) => x.slice(0, m.s) + NAME_MASK + x.slice(m.e), s);
+    if (!Array.isArray(customers)) return { kind: 'sin_lista', masked };
+    return { kind: 'nadie', names: [...new Set(runs.map((r) => capName(s.slice(r.s, r.e))))], masked };
+  }
+  if (!ments.length && !paySent.size) return null;
+  if (!ments.length) { // (3) sin nombre: singular = ¿de qué cliente?; plural o «alguien/cada uno/quién» = total
+    const inPay = toks.filter((t) => paySent.has(t.sent));
+    const plural = inPay.some((t) => (PAYER_VERBS.has(t.f) && /n$/.test(t.f)) || ['han', 'van'].includes(t.f) || PAYER_ALL.has(t.f));
+    return plural ? null : { kind: 'quien', masked: s };
+  }
   const masked = ments.reduceRight((x, m) => x.slice(0, m.s) + NAME_MASK + x.slice(m.e), s);
-  if (!Array.isArray(customers)) return { kind: 'sin_lista', masked };
-  const missing = [...new Set(ments.filter((m) => !m.hits.length).map((m) => m.name))];
-  if (missing.length) return { kind: 'nadie', names: missing, masked };
   const all = [...new Set(ments.flatMap((m) => m.hits))];
   if (all.length > 1) return { kind: 'cual', options: all.slice(0, 5).map((c) => ({ cliente_id: String(c.id), nombre: String(productNameOf(c)).trim() })), masked };
   const code = String(all[0].id);
@@ -3502,7 +3540,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // (#995, regla del 23-10) cobros de una persona nombrada: se resuelve con la lista de Clientes antes de la IA (resolvePayerNames).
   // (3ª revisión) también sin «fiado/deuda»: verbo de pago + una persona («¿cuánto me abonó Rosa esta semana?») = cobros de ese cliente.
   let payer = null, scrub = null, turnText = null, hasList = false;
-  const creditAsk = !parsed.image && asksCreditPayments(parsed.text), payAsk = !parsed.image && !creditAsk && PAYER_ASK_RE.test(foldText(parsed.text))
+  const creditAsk = !parsed.image && asksCreditPayments(parsed.text), payAsk = !parsed.image && !creditAsk && asksPayer(parsed.text)
     && !SALES_MENTION_RE.test(foldText(parsed.text)) && !CREDIT_PAYMENT_ACTION_RE.test(foldText(parsed.text)) && !clientCodesInText(parsed.text).length;
   if (creditAsk || payAsk) {
     const cs = await (async () => { try { return rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; } catch { return null; } })();
