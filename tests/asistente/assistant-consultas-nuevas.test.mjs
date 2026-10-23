@@ -169,13 +169,15 @@ test('ganancia: empleado sin permiso de costos -> 403 costs_admin_only, sin leer
 
 test('chat del Admin: deuda_cliente manda al modelo SOLO código, saldo, créditos y fecha; nunca nombre, DNI ni teléfono', async () => {
   const cap = [];
-  const r = await chat({ text: '¿Cuánto debe el cliente #C1?' }, { rd: reader(), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: 'deuda_cliente', cliente_id: 'C1' }, 'call_1')] }, { content: 'cliente #C1 debe S/ 35.00.' }], cap) });
+  // «explícame»: va la segunda llamada (con #960 una consulta simple responde sin ella) y se revisa lo que recibe el modelo.
+  const r = await chat({ text: '¿Cuánto debe el cliente #C1? Explícame.' }, { rd: reader(), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: 'deuda_cliente', cliente_id: 'C1' }, 'call_1')] }, { content: 'cliente #C1 debe S/ 35.00.' }], cap) });
   assert.equal(r.status, 200); assert.equal(cap.length, 2);
   const toolMsg = JSON.parse(cap[1]).messages.find((m) => m.role === 'tool');
   const sent = JSON.parse(toolMsg.content);
-  assert.deepEqual(sent, { tipo: 'deuda_cliente', resumen: { cliente: 'cliente #C1', saldo_soles: 35, creditos_abiertos: 2, vence_primero: '2026-10-01' } });
-  for (const body of cap) for (const v of PII) assert.ok(!body.includes(v), 'al modelo llegó ' + v);
-  const p = r.body.proposals.find((x) => x.type === 'consulta'); assert.equal(p.result.filas.length, 2);
+  assert.deepEqual(sent, { tipo: 'deuda_cliente', resumen: { cliente: 'cliente #C-0001', saldo_soles: 35, creditos_abiertos: 2, vence_primero: '2026-10-01' } });
+  // Hacia la IA el código va neutro (pos-assistant-codigos.js); el aparato recibe el real.
+  for (const body of cap) { assert.ok(!/#C1\b|"C1"/.test(body), 'al modelo llegó el código real'); for (const v of PII) assert.ok(!body.includes(v), 'al modelo llegó ' + v); }
+  const p = r.body.proposals.find((x) => x.type === 'consulta'); assert.equal(p.result.filas.length, 2); assert.equal(p.query.cliente_id, 'C1'); assert.match(r.body.reply, /cliente #C1\b/);
   // Un nombre en vez de código no llega a la consulta.
   assert.equal(toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: 'deuda_cliente', cliente_id: PII[0] }) }, 'owner', { products: [] }, 1).query.cliente_id, null);
 });
@@ -183,7 +185,7 @@ test('chat del Admin: deuda_cliente manda al modelo SOLO código, saldo, crédit
 test('chat del Admin: ganancia y ventas por hora llegan al modelo solo con códigos de producto y números', async () => {
   for (const [tipo, check] of [['ganancia', (s) => assert.equal(s.ganancia_soles, 17.2)], ['ventas_por_hora', (s) => assert.equal(s.mejor_hora.hora, '23:00', 'sin período = esta semana: el 21 a las 23:00 vendió S/ 40')], ['productos_sin_ventas', (s) => assert.equal(s.sin_ventas, 2)]]) {
     const cap = [];
-    const r = await chat({ text: 'dime' }, { rd: reader(), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo }, 'call_1')] }, { content: 'Listo.' }], cap) });
+    const r = await chat({ text: 'dime y explícame' }, { rd: reader(), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo }, 'call_1')] }, { content: 'Listo.' }], cap) }); // «explícame»: segunda llamada (#960)
     assert.equal(r.status, 200, tipo);
     const content = JSON.parse(cap[1]).messages.find((m) => m.role === 'tool').content, sent = JSON.parse(content);
     assert.equal(sent.tipo, tipo); check(sent.resumen);
@@ -240,7 +242,7 @@ test('SQL: la fecha se filtra en la base (rango de Lima), por promoción activa,
   const ayer = await rd.salesByHour({ fromIso: '2026-10-21T05:00:00.000Z', toIso: '2026-10-22T05:00:00.000Z' });
   assert.deepEqual(ayer, [{ h: 23, n: 1, c: 4000 }]);
   for (const sql of seen.filter((s) => /sale_items|strftime/.test(s))) {
-    assert.match(sql, /r\.created_at>=\?2 AND r\.created_at<\?3/); assert.match(sql, /x\.promotion_id=\?1/); assert.match(sql, /LIMIT \?4$/); assert.match(sql, /pos_sale_annulments/);
+    assert.match(sql, /julianday\(r\.created_at\).*>=.*julianday\(\?2\).*julianday\(r\.created_at\).*<.*julianday\(\?3\)/, 'fecha por momento (#960), en SQL'); assert.match(sql, /x\.promotion_id=\?1/); assert.match(sql, /LIMIT \?4$/); assert.match(sql, /pos_sale_annulments/);
     assert.ok(/^SELECT /.test(sql) && !/INSERT|UPDATE|DELETE|DROP/i.test(sql), 'solo lectura');
   }
   // Sin la tabla de anulaciones (base vieja): no hay anuladas, no falla. Antes de ACTIVE: tabla sales tal cual.

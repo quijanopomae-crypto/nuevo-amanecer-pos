@@ -122,7 +122,7 @@ test('lectura cortada (ventas o líneas): avisa en el informe y marca truncado',
   assert.match(d.report, /no se pudo leer todo/);
   const ok = await (await belowCostRoute(req(), ENV, OWNER, jsonR, { resolveRole: owner, reader: base, store: createMemoryUsageStore(), fetch: async () => { throw new Error('sin modelo'); } })).json();
   assert.equal(ok.truncado, false); assert.doesNotMatch(ok.report, /no se pudo leer todo/);
-  assert.match(readFileSync('tools/cloudflare-lab/src/pos-assistant-queries.js', 'utf8'), /out\.truncated = !!\(sales\.truncated \|\| items\.truncated\)/);
+  assert.match(readFileSync('tools/cloudflare-lab/src/pos-assistant-queries.js', 'utf8'), /out\.truncated = !!\((?:sales\.truncated \|\| items\.truncated|salesCut \|\| linesCut)\)/); // la lectura SQL (perf) marca el corte de ventas o de líneas
 });
 
 const KEY = { ...ENV, OHMYAGENT_API_KEY: 'clave-prueba-ohmyagent' };
