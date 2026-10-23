@@ -3,22 +3,22 @@
  "pregunta": "cuanto vale la caja de gloria chica en la lista",
  "texto_usado": "cuanto vale la caja de gloria chica en la lista",
  "rol": "owner",
- "nota": "turno previo: lista de leche e31 pegada (inventada)",
+ "nota": "turno previo: extracto real de la lista e31 (20-03) pegado",
  "historial_previo": [
   {
    "role": "user",
-   "content": "te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20"
+   "content": "te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 91.00\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | MEDIA CAJA | 46.50\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30"
   },
   {
    "role": "assistant",
-   "content": "Admin, la lista del proveedor indica: caja de 48 a S/ 99.50, media caja a S/ 50.80, docena a S/ 26.00 y lata de 170 g a S/ 2.30; la lata de 395 g está a S/ 4.20. Son precios del proveedor; no he cambiado los precios ni registrado una compra."
+   "content": "Admin, la lista del proveedor e31 tiene precios por presentación: para 395 g, caja S/ 91.00, media caja S/ 46.50 y lata S/ 4.20; para 170 g, caja S/ 99.50, media caja S/ 50.80, docena S/ 26.00 y lata S/ 2.30. \nSon precios del proveedor; no he cambiado los precios ni registrado una compra."
   }
  ],
  "turnos_previos": [
   {
    "status": 200,
-   "ms": 3850,
-   "reply": "Admin, la lista del proveedor indica: caja de 48 a S/ 99.50, media caja a S/ 50.80, docena a S/ 26.00 y lata de 170 g a S/ 2.30; la lata de 395 g está a S/ 4.20. Son precios del proveedor; no he cambiado los precios ni registrado una compra.",
+   "ms": 5411,
+   "reply": "Admin, la lista del proveedor e31 tiene precios por presentación: para 395 g, caja S/ 91.00, media caja S/ 46.50 y lata S/ 4.20; para 170 g, caja S/ 99.50, media caja S/ 50.80, docena S/ 26.00 y lata S/ 2.30. \nSon precios del proveedor; no he cambiado los precios ni registrado una compra.",
    "proposals": [],
    "tool_calls": [
     []
@@ -28,7 +28,7 @@
  "corridas": [
   {
    "status": 200,
-   "ms": 3270,
+   "ms": 3129,
    "reply": "Admin, en la lista del proveedor, la caja de Gloria chica de 170 g, con 48 latas, vale S/ 99.50.",
    "error": null,
    "proposals": [],
@@ -63,11 +63,11 @@
       },
       {
        "role": "user",
-       "content": "<dato_usuario>te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20</dato_usuario>"
+       "content": "<dato_usuario>te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 91.00\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | MEDIA CAJA | 46.50\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30</dato_usuario>"
       },
       {
        "role": "assistant",
-       "content": "Admin, la lista del proveedor indica: caja de 48 a S/ 99.50, media caja a S/ 50.80, docena a S/ 26.00 y lata de 170 g a S/ 2.30; la lata de 395 g está a S/ 4.20. Son precios del proveedor; no he cambiado los precios ni registrado una compra."
+       "content": "Admin, la lista del proveedor e31 tiene precios por presentación: para 395 g, caja S/ 91.00, media caja S/ 46.50 y lata S/ 4.20; para 170 g, caja S/ 99.50, media caja S/ 50.80, docena S/ 26.00 y lata S/ 2.30. \nSon precios del proveedor; no he cambiado los precios ni registrado una compra."
       },
       {
        "role": "user",
@@ -80,7 +80,7 @@
      ],
      "response": {
       "status": 200,
-      "body": "{\"id\":\"resp_0ab65976bc6abb33006adb947e6a8c81969969b8e556aed53e\",\"object\":\"chat.completion\",\"created\":1792775296,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, en la lista del proveedor, la caja de Gloria chica de 170 g, con 48 latas, vale S/ 99.50.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4760,\"completion_tokens\":36,\"total_tokens\":4796}}"
+      "body": "{\"id\":\"resp_07cd0841a8ee594d006adb950a9be0819088a88e1621f48d8e\",\"object\":\"chat.completion\",\"created\":1792775436,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, en la lista del proveedor, la caja de Gloria chica de 170 g, con 48 latas, vale S/ 99.50.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4826,\"completion_tokens\":36,\"total_tokens\":4862}}"
      }
     }
    ]

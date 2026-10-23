@@ -3,22 +3,22 @@
  "pregunta": "pon la gloria a 4.20",
  "texto_usado": "pon la gloria a 4.20",
  "rol": "owner",
- "nota": "turno previo: el Admin pega una lista de leche inventada con los valores e31 (LISTA_E31 en _datos-simulados.json)",
+ "nota": "turno previo: el Admin pega el extracto real de leche Gloria de la lista e31 (PRODUCTOS AV 20-03.xlsm, filas 109 y 113; LISTA_E31 en _datos-simulados.json)",
  "historial_previo": [
   {
    "role": "user",
-   "content": "te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20"
+   "content": "te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 91.00\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | MEDIA CAJA | 46.50\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30"
   },
   {
    "role": "assistant",
-   "content": "Admin, recibí la lista del proveedor de leche con precios por caja, media caja, docena y lata. No he registrado ninguna compra ni cambiado los precios de la tienda."
+   "content": "Admin, la lista del proveedor e31 trae precios distintos por caja, media caja, docena y lata; no he cambiado los precios de la tienda. ¿Quieres comparar esos precios con los costos registrados?"
   }
  ],
  "turnos_previos": [
   {
    "status": 200,
-   "ms": 5050,
-   "reply": "Admin, recibí la lista del proveedor de leche con precios por caja, media caja, docena y lata. No he registrado ninguna compra ni cambiado los precios de la tienda.",
+   "ms": 6776,
+   "reply": "Admin, la lista del proveedor e31 trae precios distintos por caja, media caja, docena y lata; no he cambiado los precios de la tienda. ¿Quieres comparar esos precios con los costos registrados?",
    "proposals": [],
    "tool_calls": [
     []
@@ -28,14 +28,14 @@
  "corridas": [
   {
    "status": 200,
-   "ms": 2974,
+   "ms": 3075,
    "reply": "LECHE GLORIA EVAPORADA 24 LATAS X 395GR (S/ 4.20): 30 unid. LECHE GLORIA EVAPORADA 48 LATAS X 170GR (S/ 2.40): 40 unid. LECHE GLORIA LIGHT 24 LATAS X 395GR (S/ 4.50): 12 unid. LECHE GLORIA SIN LACTOSA 395GR X 24UND (S/ 4.80): 8 unid. MANTEQUILLA GLORIA 90GR (S/ 4.80): 7 unid. LECHE GLORIA EVAPORADA 395GR CAJA CERRADA X 24 (S/ 99.00): 3 unid.",
    "error": null,
    "proposals": [
     {
      "type": "consulta",
      "raw": {
-      "id": "cf0ee891-0aa7-4943-8197-ac4022b3349a",
+      "id": "786895c1-5b36-4e1e-a8ee-c4602d1029e5",
       "type": "consulta",
       "needsConfirm": false,
       "query": {
@@ -149,11 +149,11 @@
       },
       {
        "role": "user",
-       "content": "<dato_usuario>te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20</dato_usuario>"
+       "content": "<dato_usuario>te paso la lista del proveedor de leche (e31)\nPRODUCTO | SKU | PRECIO\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | CAJA | 91.00\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | MEDIA CAJA | 46.50\nLECHE GLORIA EVAPORADA 24 LATAS X 395GR | LATA | 4.20\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | CAJA | 99.50\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | MEDIA CAJA | 50.80\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | DOCENA | 26.00\nLECHE GLORIA EVAPORADA 48 LATAS X 170GR | LATA | 2.30</dato_usuario>"
       },
       {
        "role": "assistant",
-       "content": "Admin, recibí la lista del proveedor de leche con precios por caja, media caja, docena y lata. No he registrado ninguna compra ni cambiado los precios de la tienda."
+       "content": "Admin, la lista del proveedor e31 trae precios distintos por caja, media caja, docena y lata; no he cambiado los precios de la tienda. ¿Quieres comparar esos precios con los costos registrados?"
       },
       {
        "role": "user",
@@ -162,7 +162,7 @@
      ],
      "response": {
       "status": 200,
-      "body": "{\"id\":\"resp_0db7cd06324b223f006adb947abb8c8190b866e1581f04f372\",\"object\":\"chat.completion\",\"created\":1792775292,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_GoRu9isMDBxtuBHlG9xYluiN\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"stock_producto\\\",\\\"producto\\\":\\\"gloria\\\",\\\"periodo\\\":\\\"hoy\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4503,\"completion_tokens\":41,\"total_tokens\":4544}}"
+      "body": "{\"id\":\"resp_03ad4b8e6faff0ac006adb950c0254819385e5fcd8ec30bfd5\",\"object\":\"chat.completion\",\"created\":1792775437,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_qCcdaklVLPLwSFPGdzTISaIp\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"stock_producto\\\",\\\"producto\\\":\\\"gloria\\\",\\\"periodo\\\":\\\"hoy\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4559,\"completion_tokens\":41,\"total_tokens\":4600}}"
      }
     }
    ]
