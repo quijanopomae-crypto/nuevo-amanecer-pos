@@ -3018,6 +3018,11 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
     const ints = (a) => (Array.isArray(a) ? a : []).filter((i) => Number.isInteger(i) && i >= 0 && i < body.proposal.lineas.length);
     const accept = rv.op === tok.op ? ints(rv.accept) : [], drop = rv.op === tok.op ? ints(rv.drop) : [];
     const missing = flagged.filter((i) => !accept.includes(i) && !drop.includes(i));
+    // Fila sin cantidad (la mixta «2 cajas y 3 sueltos»): «Está bien» no la deja pasar, aunque un celular viejo o modificado mande «aceptar»;
+    // solo se quita. Mismo 422 de revisión (el celular marca las filas) con el aviso «Falta cuántas trae la caja»; no se aplica nada.
+    const noQty = body.proposal.lineas.map((l, i) => (!drop.includes(i) && !(Number(l?.cantidad) > 0) ? i : -1)).filter((i) => i >= 0);
+    if (noQty.length) return json({ error: 'review_required', rows: [...new Set([...missing, ...noQty])].sort((a, b) => a - b), operation_id: tok.op,
+      message: MISSING_BOX_TEXT + ' de ' + noQty.map((i) => '«' + (body.proposal.lineas[i]?.nombre || 'fila ' + (i + 1)) + '»').join(', ') + ': quita esa fila y anótala en Nueva compra con la cantidad.' }, 422);
     if (missing.length) return json({ error: 'review_required', rows: missing, operation_id: tok.op }, 422);
     const lineas = body.proposal.lineas.filter((_, i) => !drop.includes(i));
     if (!lineas.length) return json({ error: 'empty_after_review' }, 422);
