@@ -38,11 +38,17 @@ export const CONFIG_KEYS = Object.freeze({
 });
 export const CONFIG_KEY_NAMES = Object.freeze(Object.keys(CONFIG_KEYS));
 export const isServerKey = (k) => typeof k === 'string' && Object.hasOwn(CONFIG_KEYS, k);
+// (auditoría 500, SEG) «avisos» (Avisos y confirmaciones) apaga las confirmaciones de TODOS los aparatos: solo el Admin. El nivel 3 + «costos y
+// cambios» sigue con negocio y ticket. Se rechaza antes de leer la base (chat y confirm) y aquí otra vez (applyConfigCard).
+export const ADMIN_ONLY_SERVER_KEYS = Object.freeze(['avisos']);
+export const CONFIG_ADMIN_ONLY_TEXT = 'Los avisos y confirmaciones los cambia solo el Admin.';
+export const employeeServerKey = (k) => isServerKey(k) && !ADMIN_ONLY_SERVER_KEYS.includes(k);
+export const EMPLOYEE_CONFIG_KEY_NAMES = Object.freeze(CONFIG_KEY_NAMES.filter(employeeServerKey));
 // Catálogo para el modelo (solo en pedidos de configuración, igual que el de #972): clave, nombre y valores admitidos. NUNCA los valores
 // actuales (nombre, RUC, dirección y pie no salen al modelo; el «antes» de la tarjeta se lee de la base en resolveConfigProposals).
 const KIND = { negocio_ruc: 'RUC de 11 dígitos (o valor vacío: se escribe en el teléfono)', ticket_ancho: ['58mm', '80mm'] };
-export function serverCatalog() {
-  return CONFIG_KEY_NAMES.map((clave) => { const s = CONFIG_KEYS[clave], k = KIND[clave] || (s.parse === bool ? 'boolean' : 'texto');
+export function serverCatalog(admin = true) {
+  return (admin ? CONFIG_KEY_NAMES : EMPLOYEE_CONFIG_KEY_NAMES).map((clave) => { const s = CONFIG_KEYS[clave], k = KIND[clave] || (s.parse === bool ? 'boolean' : 'texto');
     return { clave, nombre: s.label, ...(Array.isArray(k) ? { valores: k } : { tipo: k }) }; });
 }
 
@@ -101,6 +107,7 @@ export async function resolveConfigProposals(db, proposals, dropped) {
 // bitácora con el aparato que aplicó.
 export async function applyConfigCard(db, auth, role, proposal, opId, audit = auditWrite) {
   const k = proposal?.ajuste, spec = isServerKey(k) ? CONFIG_KEYS[k] : null;
+  if (role !== 'owner' && !employeeServerKey(k) && isServerKey(k)) return { status: 403, body: { error: 'config_forbidden', message: CONFIG_ADMIN_ONLY_TEXT } };
   const v = spec ? spec.parse(proposal.valor) : undefined;
   if (!spec || proposal.destino !== CONFIG_DEST || v === undefined || v !== proposal.valor || !db) return { status: 400, body: { error: 'config_invalid' } };
   const at = new Date().toISOString(), who = String(auth?.principalId || 'assistant').slice(0, 120);
