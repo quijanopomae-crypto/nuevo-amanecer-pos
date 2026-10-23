@@ -24,7 +24,8 @@ const DATA = {
     { id: 'P5', nombre: 'Chocolate Sublime 30 g', precio: 1.5, costo: 1.1, stock: 40, min: 0, controla: true },
     { id: 'P6', nombre: 'Cerveza Pilsen Callao 630 ml', precio: 6, costo: 4.8, stock: 24, min: 0, controla: true },
     { id: 'P7', nombre: 'Gaseosa Inca Kola 500 ml', precio: 2.5, costo: 1.9, stock: 24, min: 0, controla: true },
-    { id: 'P8', nombre: 'Mayonesa Alacena Alicorp 100 g', precio: 3, costo: 2.2, stock: 12, min: 0, controla: true }],
+    { id: 'P8', nombre: 'Mayonesa Alacena Alicorp 100 g', precio: 3, costo: 2.2, stock: 12, min: 0, controla: true },
+    { id: 'P9', nombre: 'Galleta Doña Pepa 6 un', precio: 1, costo: 0.7, stock: 30, min: 0, controla: true }],
   customers: [{ id: 'C1', nombre: 'Marta Lucía Ccori' }], // Rosa Quispe y Juan Pérez NO están: personas nuevas
   credits: [], sales: [], saleItems: []
 };
@@ -240,4 +241,49 @@ test('revisión (no bloqueante): 3000 productos y 50 KB de texto se tapan rápid
   assert.ok(text.length >= 50000); const leak = out.match(/Rosa|Quispe|Juan|P[eé]rez|Ana Torres/); assert.equal(leak, null, 'quedó: ' + (leak && out.slice(Math.max(0, leak.index - 40), leak.index + 40)));
   assert.match(out, /rebaja a Marca17 a 3/);
   assert.ok(ms < 3000, 'tardó ' + Math.round(ms) + ' ms');
+});
+
+// (alfa) la palabra que sigue al nombre tapado se queda: «doña Carmen Salas trajo la boleta» -> «doña [nombre oculto] trajo la boleta».
+const AFTER = [['doña Carmen Salas trajo la boleta', /Carmen|Salas/, /doña \[nombre oculto\] trajo la boleta/],
+  ['la boleta es de don Ernesto Villar', /Ernesto|Villar/, /la boleta es de don \[nombre oculto\]/]];
+const AFTER_KEEP = ['fideo don vittorio', 'doña pepa viene en caja de 6'];
+test('alfa) palabra tras el nombre tapado: Admin y empleado, mensaje actual (en partes y entero); «fideo don vittorio» y «doña pepa» quedan', async (t) => {
+  quiet(t);
+  for (const role of ['owner', EMP]) for (const stream of [true, false]) {
+    for (const [text, re, want] of AFTER) {
+      const r = await chat(text, { role, stream });
+      assert.equal(r.bodies.length, 1, role + ' stream=' + stream + ' «' + text + '»: ' + r.raw.slice(0, 200));
+      assert.doesNotMatch(r.bodies[0], re, role + ' stream=' + stream + ': ' + r.lastUser);
+      assert.match(r.lastUser, want, role + ' stream=' + stream + ': ' + r.lastUser);
+    }
+    for (const text of AFTER_KEEP) {
+      const r = await chat(text, { role, stream });
+      if (!r.bodies.length) continue;
+      assert.ok(code(r.lastUser).includes(code(text)), role + ' stream=' + stream + ': «' + text + '» cambió: ' + r.lastUser);
+    }
+  }
+});
+test('alfa) palabra tras el nombre tapado: historial del Admin y historial FIRMADO del empleado (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) for (const [u, re, want] of AFTER) {
+    const r = await chat('¿y qué más?', { stream, history: [{ role: 'user', content: u }, { role: 'assistant', content: 'Anotado.' }] });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ': ' + r.raw.slice(0, 200));
+    assert.doesNotMatch(r.bodies[0], re, 'Admin stream=' + stream + ': «' + u + '»');
+    assert.ok(JSON.parse(r.bodies[0]).messages.some((m) => want.test(String(m.content))), 'Admin stream=' + stream + ': «' + u + '» no quedó como se espera');
+    const iat = NOW - 1000, a = 'Anotado.', sig = await A.signTurnPair(SECRET, 'empleado', 'session:personas-nuevas', 0, iat, u, a);
+    const h = await chat('¿y qué más?', { role: EMP, stream, history: [{ role: 'user', content: u, sig, n: 0, iat }, { role: 'assistant', content: a, sig, n: 0, iat }] });
+    assert.equal(h.bodies.length, 1, 'empleado stream=' + stream + ': ' + h.raw.slice(0, 200));
+    assert.doesNotMatch(h.bodies[0], re, 'empleado stream=' + stream + ': «' + u + '»');
+    assert.ok(JSON.parse(h.bodies[0]).messages.some((m) => want.test(String(m.content))), 'empleado stream=' + stream + ': «' + u + '» no quedó como se espera');
+  }
+});
+test('alfa) palabra tras el nombre tapado: lecciones (sanitizeLesson) guardan «trajo la boleta» sin Carmen ni Salas', () => {
+  for (const prods of [DATA.products, []]) {
+    const o = A.sanitizeLesson('doña Carmen Salas trajo la boleta', [], prods);
+    assert.doesNotMatch(o, /Carmen|Salas/, o); assert.match(o, /^doña .*trajo la boleta$/, o);
+    const o2 = A.sanitizeLesson('la boleta es de don Ernesto Villar', [], prods);
+    assert.doesNotMatch(o2, /Ernesto|Villar/, o2); assert.match(o2, /^la boleta es de don/, o2);
+  }
+  assert.equal(A.sanitizeLesson('fideo don vittorio', [], DATA.products), 'fideo don vittorio');
+  assert.equal(A.sanitizeLesson('doña pepa viene en caja de 6', [], DATA.products), 'doña pepa viene en caja de 6');
 });
