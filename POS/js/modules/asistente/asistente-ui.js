@@ -986,7 +986,7 @@
     var it = C.customerIntent ? C.customerIntent(text) : null; if (!it) return false;
     inputEl.value = ''; addMsg('u', text);
     var found = C.findCustomers(deps.clientes(), it);
-    if (found.length) { addMsg('a', C.customerExistsReply(found)); return true; }
+    if (found.length) { addMsg('a', C.customerExistsReply(found, it)); return true; }
     var ok = deps.openNewCustomer(it) === true;
     if (ok) closePanel(); // como al confirmar una tarjeta: el formulario queda a la vista para tocar Guardar
     addMsg('a', ok ? 'Abrí «Nuevo cliente» con ' + it.nombre + (it.tel ? ', celular ' + it.tel : '') + (it.dni ? ', DNI ' + it.dni : '') + '. Revisa los datos y toca Guardar.' : 'No se pudo abrir «Nuevo cliente» (permiso o módulo bloqueado). Ábrelo desde Clientes.');
