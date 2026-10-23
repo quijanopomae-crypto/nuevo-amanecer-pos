@@ -403,7 +403,8 @@ async function ask995(text, args, stream) {
   return { reply: String(fin.reply).trim(), cap };
 }
 const WEEK = { periodo: 'esta_semana' };
-const ROSA_REPLY = 'Cobros de fiados de Rosa Huamán (cliente #5) 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.';
+// (3ª revisión, punto 2) el servidor deja «cliente #5» como en toda respuesta; el nombre lo pone el aparato (linkCustomers), sin doble nombre.
+const ROSA_REPLY = 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.';
 const SALES_ARGS = [{ tipo: 'ventas_periodo', ...WEEK }, { tipo: 'cobros_creditos', ...WEEK }];
 
 test('#995 (2ª) «el cliente 5» sin «#»: con ventas_periodo o cobros_creditos sin cliente_id da SOLO lo de cliente #5 (con y sin partes)', async () => {
@@ -558,7 +559,7 @@ const ARGS_ALL = [...SALES_ARGS, { tipo: 'cobros_creditos', ...WEEK, cliente_id:
 // Las 4 frases de la revisión: «abonó Rosa», Rosa antes del verbo, «rosa» en minúsculas (y «Rosa y Elmer» abajo).
 const ROSA_PHRASES = ['¿cuánto me abonó Rosa de su deuda esta semana?', '¿Rosa cuánto me pagó de su deuda esta semana?', 'Rosa me abonó de su fiado; ¿cuánto fue esta semana?', '¿cuánto me pagó rosa de su deuda esta semana?', '¿cuánto me pagó ROSA HUAMÁN de su deuda esta semana?'];
 
-test('#995 nombre → un cliente: «abonó Rosa», «Rosa … pagó», «rosa», nombre completo = SOLO cliente #5 con el nombre en pantalla (con y sin partes); a la IA sin nombre', async () => {
+test('#995 nombre → un cliente: «abonó Rosa», «Rosa … pagó», «rosa», nombre completo = SOLO cliente #5 (el nombre lo pone el aparato; con y sin partes); a la IA sin nombre', async () => {
   for (const text of ROSA_PHRASES) for (const args of ARGS_ALL) for (const stream of [false, true]) {
     const why = text + ' ' + JSON.stringify(args) + ' stream=' + stream;
     const { reply, cap, body } = await askP(text, { args, stream });
@@ -577,7 +578,7 @@ test('#995 nombre → varios clientes («Carmen»): pregunta cuál con los nombr
       const why = role + ' ' + text + ' stream=' + stream;
       const { status, reply, cap, body } = await askP(text, { stream, role });
       assert.equal(status, 200, why);
-      assert.equal(reply, '¿De cuál cliente quiere los cobros: Carmen Quispe (cliente #3) o Carmen Flores (cliente #7)? Pregunte por uno a la vez.', why);
+      assert.equal(reply, '¿De cuál cliente quiere los cobros: Carmen Quispe o Carmen Flores? Pregunte por uno a la vez.', why);
       assert.deepEqual(body.opciones, [{ cliente_id: '3', nombre: 'Carmen Quispe' }, { cliente_id: '7', nombre: 'Carmen Flores' }], why);
       assert.equal(cap.length, 0, 'sin IA: ' + why);
       if (!stream) turnsNoNames(body, why);
@@ -585,7 +586,7 @@ test('#995 nombre → varios clientes («Carmen»): pregunta cuál con los nombr
   // «Carmen Quispe» (nombre completo) es uno solo.
   for (const stream of [false, true]) {
     const { reply, cap } = await askP('¿cuánto me pagó Carmen Quispe de su deuda esta semana?', { stream });
-    assert.equal(reply, 'Cobros de fiados de Carmen Quispe (cliente #3) 2026-10-19 a 2026-10-23: S/ 24.00 en 2 cobros.', 'stream=' + stream);
+    assert.equal(reply, 'Cobros de fiados de cliente #3 2026-10-19 a 2026-10-23: S/ 24.00 en 2 cobros.', 'stream=' + stream);
     noNamesP(cap, 'Carmen Quispe');
   }
 });
@@ -594,7 +595,7 @@ test('#995 «Rosa y Elmer» (dos personas): pregunta cuál con los dos nombres; 
   for (const text of ['¿cuánto me pagaron Rosa y Elmer de su deuda esta semana?', 'Rosa y Elmer me abonaron de su fiado, ¿cuánto fue esta semana?']) for (const stream of [false, true]) {
     const why = text + ' stream=' + stream;
     const two = await askP(text, { stream, data: DATA_P });
-    assert.equal(two.reply, '¿De cuál cliente quiere los cobros: Rosa Huamán (cliente #5) o Elmer Paz (cliente #9)? Pregunte por uno a la vez.', why);
+    assert.equal(two.reply, '¿De cuál cliente quiere los cobros: Rosa Huamán o Elmer Paz? Pregunte por uno a la vez.', why);
     assert.deepEqual(two.body.opciones, [{ cliente_id: '5', nombre: 'Rosa Huamán' }, { cliente_id: '9', nombre: 'Elmer Paz' }], why);
     assert.equal(two.cap.length, 0, why);
     const miss = await askP(text, { stream, data: DATA_CR });
@@ -662,7 +663,7 @@ test('#995 modo demostración: el nombre se resuelve igual (Rosa = cliente #5; C
     const one = await askP('¿cuánto me abonó Rosa de su deuda esta semana?', { stream, env: ENV_DEMO });
     assert.equal(one.reply, ROSA_REPLY, 'stream=' + stream);
     const two = await askP('¿cuánto me pagó Carmen de su deuda esta semana?', { stream, env: ENV_DEMO });
-    assert.match(two.reply, /^¿De cuál cliente quiere los cobros: Carmen Quispe \(cliente #3\) o Carmen Flores \(cliente #7\)\?/);
+    assert.match(two.reply, /^¿De cuál cliente quiere los cobros: Carmen Quispe o Carmen Flores\?/);
     const none = await askP('¿cuánto me pagó Pedro de su deuda esta semana?', { stream, env: ENV_DEMO });
     assert.match(none.reply, /^No encontré a un cliente llamado Pedro\./);
     const both = await askP('¿cuánto me pagó el cliente #5 o el #9 de su deuda esta semana?', { stream, env: ENV_DEMO, data: DATA_P });
@@ -696,5 +697,66 @@ test('#995 (punto 2) número con unidad no es un código: «cliente 2 kilos», �
   for (const stream of [false, true]) {
     const { reply } = await askP('¿cuánto me pagaron de fiados esta semana? el cliente 2 kilos de arroz no', { stream });
     assert.equal(reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', 'stream=' + stream);
+  }
+});
+
+// (3ª revisión) Las 4 frases TAL CUAL, también sin «fiado/deuda». En 0b626c24 daban el total de la tienda (S/ 50.00 en 5 cobros).
+const REVIEW3 = ['¿cuánto me abonó Rosa esta semana?', '¿Rosa cuánto me pagó de fiado esta semana?', '¿cuánto me pagaron Rosa y Elmer de fiado esta semana?', '¿cuánto me pagó rosa esta semana?'];
+const STORE_TOTAL = /^Cobros de fiados \d{4}|^Ventas|en \d+ cobros\.$/;
+test('#995 (3ª revisión) las 4 frases tal cual, con y sin partes, con ventas o cobros del modelo: Rosa = solo cliente #5; Rosa y Elmer = cuál; nunca el total; sin nombre a la IA', async () => {
+  for (const text of REVIEW3) for (const args of ARGS_ALL) for (const stream of [false, true]) {
+    const why = text + ' ' + JSON.stringify(args) + ' stream=' + stream;
+    const { reply, cap, body } = await askP(text, { args, stream, data: DATA_P });
+    assert.ok(!STORE_TOTAL.test(reply) || reply === ROSA_REPLY, 'total de la tienda: ' + why + ' -> ' + reply);
+    noNamesP(cap, why); if (!stream) turnsNoNames(body, why);
+    if (/Elmer/.test(text)) {
+      assert.equal(reply, '¿De cuál cliente quiere los cobros: Rosa Huamán o Elmer Paz? Pregunte por uno a la vez.', why);
+      assert.deepEqual(body.opciones, [{ cliente_id: '5', nombre: 'Rosa Huamán' }, { cliente_id: '9', nombre: 'Elmer Paz' }], why);
+      assert.equal(cap.length, 0, 'sin IA: ' + why);
+    } else {
+      assert.equal(reply, ROSA_REPLY, why);
+      assert.match(JSON.parse(cap[0]).messages.at(-1).content, /cliente #C-0001/, why);
+    }
+  }
+  // Elmer no está en la lista: «No encontré…», sin IA ni monto.
+  for (const stream of [false, true]) {
+    const { reply, cap } = await askP(REVIEW3[2], { stream });
+    assert.match(reply, /^No encontré a un cliente llamado Elmer\./, 'stream=' + stream); assert.equal(cap.length, 0); assert.ok(!/S\/ \d/.test(reply));
+  }
+});
+
+test('#995 (3ª revisión) sin «fiado/deuda»: nadie en la lista = «No encontré…»; modo demostración igual; sin lista = pide el código; preguntas sin persona no cambian', async () => {
+  for (const text of ['¿cuánto me pagó Pedro esta semana?', '¿cuánto me abonó doña Pedro esta semana?']) for (const stream of [false, true]) for (const args of SALES_ARGS) {
+    const { reply, cap } = await askP(text, { args, stream });
+    assert.equal(reply, 'No encontré a un cliente llamado Pedro. Revise el nombre en Clientes o dígame su código («cliente #código»).', text + ' stream=' + stream);
+    assert.equal(cap.length, 0);
+  }
+  for (const text of REVIEW3) for (const stream of [false, true]) {
+    const { reply } = await askP(text, { stream, env: ENV_DEMO, data: DATA_P });
+    if (/Elmer/.test(text)) assert.equal(reply, '¿De cuál cliente quiere los cobros: Rosa Huamán o Elmer Paz? Pregunte por uno a la vez.', 'demo ' + text);
+    else assert.equal(reply, ROSA_REPLY, 'demo ' + text + ' stream=' + stream);
+  }
+  const reader = { ...memoryReader(DATA_P), customers: async () => { throw new Error('sin lista'); } };
+  for (const text of [REVIEW3[0], REVIEW3[3]]) for (const args of SALES_ARGS) for (const stream of [false, true]) {
+    const why = text + ' ' + JSON.stringify(args) + ' stream=' + stream;
+    const { reply, cap } = await askP(text, { args, stream, reader });
+    assert.match(reply, /código del cliente/, why); assert.ok(!/S\/ \d/.test(reply), why); noNamesP(cap, why);
+  }
+  // Sin persona: igual que antes (la IA contesta; con cobros del modelo, el total de fiados).
+  for (const text of ['¿cuánto me pagaron esta semana?', '¿Cuánto me pagaron en Yape esta semana?', '¿cuánto me abonaron en Octubre?']) for (const stream of [false, true]) {
+    const { reply, cap } = await askP(text, { stream });
+    assert.ok(cap.length >= 1, text); assert.ok(!/No encontré|De cuál cliente/.test(reply), text + ' -> ' + reply);
+  }
+});
+
+test('#995 (3ª revisión, punto 2) sin doble nombre: un cliente queda «cliente #N» (el aparato pone el nombre); dos con el MISMO nombre se distinguen por código', async () => {
+  const data = { ...DATA_P, customers: [...DATA_P.customers, { id: '12', nombre: 'Rosa Huamán' }] };
+  for (const stream of [false, true]) {
+    const { reply, cap, body } = await askP('¿cuánto me pagó Rosa Huamán esta semana?', { stream, data });
+    assert.equal(reply, '¿De cuál cliente quiere los cobros: cliente #5 o cliente #12? Pregunte por uno a la vez.', 'stream=' + stream);
+    assert.deepEqual(body.opciones, [{ cliente_id: '5', nombre: 'Rosa Huamán' }, { cliente_id: '12', nombre: 'Rosa Huamán' }]);
+    assert.equal(cap.length, 0);
+    const one = await askP('¿cuánto me abonó Rosa esta semana?', { stream, data: DATA_P });
+    assert.ok(!/\(cliente #/.test(one.reply) && !NAMES_P.test(one.reply), one.reply);
   }
 });
