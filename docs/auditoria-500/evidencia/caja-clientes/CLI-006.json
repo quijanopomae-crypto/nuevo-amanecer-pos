@@ -1,0 +1,149 @@
+{
+ "id": "CLI-006",
+ "file": "clientes-creditos.csv",
+ "role": "owner",
+ "pregunta": "el don [nombre] me pago 20 soles, anotale",
+ "texto_enviado_por_el_aparato": "el don cliente #4 me pago 20 soles, anotale",
+ "status": 200,
+ "ms": 3122,
+ "provider": "ohmyagent",
+ "model": "gpt-6.1-sol",
+ "reply": "Aquí tienes los pasos.",
+ "error": null,
+ "message": null,
+ "proposals": [
+  {
+   "id": "5e25cc87-c1e6-431a-98ac-c04f6d8ed166",
+   "type": "pasos",
+   "needsConfirm": false,
+   "title": "Registrar un abono de S/ 20 para cliente #4",
+   "pasos": [
+    "Entra a Clientes y Créditos.",
+    "Abre la ficha del cliente #4.",
+    "Pulsa Abonar e ingresa S/ 20.",
+    "Revisa los datos y guarda el abono."
+   ],
+   "pantalla": "pageClientes"
+  }
+ ],
+ "dropped": [],
+ "timings": {
+  "ms_gates": 0,
+  "ms_model1": 3120,
+  "ms_db": 0,
+  "ms_total": 3121,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "attempts": 1,
+  "fallback": false,
+  "db_stmts": 0
+ },
+ "lessons": [],
+ "nombres_en_lo_enviado_al_modelo": [],
+ "dni_tel_en_respuesta": false,
+ "model_calls": [
+  {
+   "model": "gpt-6.1-sol",
+   "tools": [
+    "explicar_pasos",
+    "consultar",
+    "proponer_ajuste_stock",
+    "preparar_compra",
+    "leer_factura_compra",
+    "proponer_cambio_precio",
+    "proponer_producto_nuevo",
+    "preparar_documento",
+    "configurar_nivel"
+   ],
+   "messages": [
+    {
+     "role": "system",
+     "chars": 7429
+    },
+    {
+     "role": "user",
+     "content": "<datos_pos>{\"pantalla\":null,\"productos\":[]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+    },
+    {
+     "role": "user",
+     "content": "<dato_usuario>el don cliente #C-0001 me pago 20 soles, anotale</dato_usuario>"
+    }
+   ],
+   "response": {
+    "status": 200,
+    "body": "{\"id\":\"resp_075ff646fcf64585006adb7ef80d4081909b6ea862448bf367\",\"object\":\"chat.completion\",\"created\":1792769786,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_z4ZRoiEi96X9rjSQeAJYj78H\",\"type\":\"function\",\"function\":{\"name\":\"explicar_pasos\",\"arguments\":\"{\\\"tema\\\":\\\"Registrar un abono de S/ 20 para cliente #C-0001\\\",\\\"pasos\\\":[\\\"Entra a Clientes y Créditos.\\\",\\\"Abre la ficha del cliente #C-0001.\\\",\\\"Pulsa Abonar e ingresa S/ 20.\\\",\\\"Revisa los datos y guarda el abono.\\\"],\\\"pantalla\\\":\\\"pageClientes\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":3446,\"completion_tokens\":88,\"total_tokens\":3534}}"
+   }
+  }
+ ],
+ "body": {
+  "ok": true,
+  "mode": "ohmyagent",
+  "role": "owner",
+  "server_now": 1792769783218,
+  "reply": "Aquí tienes los pasos.",
+  "cut": false,
+  "turns": [
+   {
+    "role": "user",
+    "content": "el don cliente #4 me pago 20 soles, anotale",
+    "sig": "mgzGRy7DJdFtvukpzBGwY1kiSUJcXEUkeHVQuzBDRcQ",
+    "n": 0,
+    "iat": 1792769783218
+   },
+   {
+    "role": "assistant",
+    "content": "Aquí tienes los pasos.",
+    "sig": "mgzGRy7DJdFtvukpzBGwY1kiSUJcXEUkeHVQuzBDRcQ",
+    "n": 0,
+    "iat": 1792769783218
+   }
+  ],
+  "invoice_memory": null,
+  "proposals": [
+   {
+    "id": "5e25cc87-c1e6-431a-98ac-c04f6d8ed166",
+    "type": "pasos",
+    "needsConfirm": false,
+    "title": "Registrar un abono de S/ 20 para cliente #4",
+    "pasos": [
+     "Entra a Clientes y Créditos.",
+     "Abre la ficha del cliente #4.",
+     "Pulsa Abonar e ingresa S/ 20.",
+     "Revisa los datos y guarda el abono."
+    ],
+    "pantalla": "pageClientes"
+   }
+  ],
+  "denied": [],
+  "dropped": [],
+  "left": {
+   "hoy": 149,
+   "fotosHoy": 30
+  },
+  "memoria": {
+   "max_turnos": 40,
+   "max_bytes": 48000,
+   "recortados": 0,
+   "resumen_necesario": false,
+   "resumen_usado": false
+  },
+  "payload_bytes": [
+   15282
+  ],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 3120,
+   "ms_db": 0,
+   "ms_total": 3121,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "usage": {
+   "prompt_tokens": 3446,
+   "completion_tokens": 88
+  }
+ }
+}

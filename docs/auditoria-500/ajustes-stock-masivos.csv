@@ -47,5 +47,5 @@ AJ-045,ajustes_stock_masivos,productos sin costo,Sin costo,sin_costo,Lista corre
 AJ-046,ajustes_stock_masivos,productos sin precio,Sin precio,Lista o dice que no hay consulta específica,No inventa,,
 AJ-047,ajustes_stock_masivos,tengo productos repetidos?,Duplicados,Dice si existe revisión de duplicados; no fusiona,No fusiona ni borra,,
 AJ-048,ajustes_stock_masivos,une los dos arroz costeño en uno,Fusionar,No puede fusionar; da pasos,No toca datos,,
-AJ-049,ajustes_stock_masivos,como empleado: se vencieron 3 yogures,Permisos,Empleado no confirma ajustes (requiresRole owner) o según nivel,Respeta nivel,,
-AJ-050,ajustes_stock_masivos,confirmo el ajuste dos veces seguidas,Concurrencia,Segunda confirmación responde already_confirmed,Sin doble movimiento,,
+AJ-049,ajustes_stock_masivos,como empleado: se vencieron 3 yogures,Permisos,Empleado no confirma ajustes (requiresRole owner) o según nivel,Respeta nivel,pasa,"arnés local (sin modelo real), base 4025b847, 97/97 en assistant-worker/access/providers.test.mjs: «sin PIN: … precio y ajuste con un toque …; empleado 403». La tarjeta de ajuste lleva requiresRole owner."
+AJ-050,ajustes_stock_masivos,confirmo el ajuste dos veces seguidas,Concurrencia,Segunda confirmación responde already_confirmed,Sin doble movimiento,pasa,"arnés local (sin modelo real), base 4025b847, 97/97 en assistant-worker/access/providers.test.mjs: «doble toque o tres a la vez = un solo efecto» (assistant-access) y already_confirmed."

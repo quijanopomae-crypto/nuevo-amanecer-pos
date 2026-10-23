@@ -1,0 +1,29 @@
+{
+ "id": "CAJ-028",
+ "file": "caja.csv",
+ "role": "empleado:consultas_documentos",
+ "pregunta": "dame el resumen de cierre (empleado nivel 2)",
+ "texto_enviado_por_el_aparato": "dame el resumen de cierre",
+ "status": 403,
+ "ms": 1,
+ "provider": "ohmyagent",
+ "model": "gpt-6.1-sol",
+ "reply": null,
+ "error": "forbidden_document",
+ "message": "Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.",
+ "proposals": null,
+ "dropped": null,
+ "timings": null,
+ "lessons": [],
+ "nombres_en_lo_enviado_al_modelo": [],
+ "dni_tel_en_respuesta": false,
+ "model_calls": [],
+ "body": {
+  "error": "forbidden_document",
+  "message": "Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.",
+  "allowed": [
+   "lista_precios",
+   "lista_pedido"
+  ]
+ }
+}
