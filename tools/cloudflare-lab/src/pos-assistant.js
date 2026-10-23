@@ -31,7 +31,7 @@ import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
   bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
-import { CONFIG_CARD, CONFIG_DEST, isServerKey, resolveConfigProposals, applyConfigCard, configFillNames, configFillValue } from './pos-assistant-config-route.js';
+import { CONFIG_CARD, CONFIG_DEST, isServerKey, employeeServerKey, CONFIG_ADMIN_ONLY_TEXT, resolveConfigProposals, applyConfigCard, configFillNames, configFillValue } from './pos-assistant-config-route.js';
 import { MEMORY_LIMITS, trimHistory, readNote, noteTurn, readResumenField, cleanResumen, verifyResumen, buildResumen, resumenMessage, resumenSigData } from './pos-assistant-memoria.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
@@ -71,6 +71,8 @@ export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', messa
 // Datos del negocio o del ticket (configurar_app con destino servidor) pedidos por quien no tiene el permiso «cambios» (niveles 1, 2, 3 sin
 // permiso o sin rol): 403, sin leer la base ni segunda llamada al modelo (chat) y 403 antes de leer el cuerpo (confirm).
 export const CONFIG_FORBIDDEN = Object.freeze({ error: 'config_forbidden', message: 'Los cambios de Configuración los hace el Admin o quien tenga el permiso «costos y cambios».' });
+// «avisos» pedido por el nivel 3 + «costos y cambios» (SEG 500): mismo código (el celular ya lo entiende), frase propia.
+export const CONFIG_ADMIN_ONLY = Object.freeze({ error: 'config_forbidden', message: CONFIG_ADMIN_ONLY_TEXT });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
 const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
 export function employeeQueryDenied(role, text) {
@@ -623,12 +625,19 @@ function createWsStage(out) {
     flush() { if (ws || zw) { out(ws || zw); } tail = ''; ws = ''; zw = ''; pend = false; drop = false; seen = false; }
   };
 }
+// (auditoría 500, OCR-023) «PIN» dentro de un nombre de producto («CHUPETIN PIN POP», «pin pon»): «pin» + espacio + una palabra de solo letras,
+// sin «:», «=», «es», flecha ni un número de 3 a 8 dígitos cerca, NO es una clave: no se tapa la palabra (ni lo que sigue). La «p» se cambia
+// por un carácter privado del mismo largo mientras corren los patrones y se devuelve al final (lo de afuera nunca trae ese carácter).
+const PIN_NAME_RE = /(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])([pP])([iI][nN])(?=[ \t]+(?!(?:es|era|fue|de|del|al|en|a|la|el|actual|nuevo|nueva|secreto|correcto|numero|número|code|codigo|código|codigos|códigos|cod|cód|ean|para|por|y|o|precio|precios|costo|costos|monto|valor|total|importe|cobro|pago|soles|pin|clave|sin|siempre|nunca)(?![A-Za-záéíóúñüÁÉÍÓÚÑÜ]))[A-Za-záéíóúñüÁÉÍÓÚÑÜ]{2,}(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ]|[ \t]*[:=])(?![^\n]{0,24}?(?<![\d.,/])\d{3,8}(?![\d.,])(?![ \t]*(?:unid|und|u\b|x\b|kg|g\b|gr|ml|l\b|lt|cajas?|paq|bols|sobres?|pzas?|piezas?))))/g;
+const PIN_NAME_P = '\uF8F0', PIN_NAME_PU = '\uF8F1';
+function pinNameShield(v) { const s = /[\uF8F0\uF8F1]/.test(v) ? v.replace(/[\uF8F0\uF8F1]/g, ' ') : v; return /pin/i.test(s) ? s.replace(PIN_NAME_RE, (m, p, rest) => (p === 'p' ? PIN_NAME_P : PIN_NAME_PU) + rest) : s; }
+function pinNameRestore(v) { return /[\uF8F0\uF8F1]/.test(v) ? v.replace(/\uF8F0/g, 'p').replace(/\uF8F1/g, 'P') : v; }
 const WS_LONG = new RegExp('\\s{' + (WS_RUN_MAX + 1) + '}');
 function collapseWs(v) { if (!WS_LONG.test(v) && !WS_ZW.test(v)) return v; let o = ''; const st = createWsStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 export function redactText(value) {
-  let out = supQuotes(collapseWs(String(value ?? '')));
+  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
   const kw = PIN_GATE.test(out); for (const [re, label] of PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return out;
+  return pinNameRestore(out);
 }
 // (Bot 2 sobre 6280deae, revisado por la sala) Lo que va AL MODELO cuando el rol del SERVIDOR es dueño (mensaje, historial, contexto) y los
 // campos proveedor/documento de su tarjeta de compra: igual que redactText, salvo
@@ -694,9 +703,9 @@ const MODEL_OWNER_PATTERNS = PATTERNS.map((pt) => {
   return [pt[0], (m, d4, off, str) => (/^\d/.test(m) && (RECEIPT_BEFORE.test(str.slice(Math.max(0, off - 6), off)) || CODE_LABEL_RE.test(idBefore(str, off)) || idCodeColumn(str, off)) ? m : /^\d/.test(m) ? idLabel8(m, d4, off, str) : 'DNI ****' + d4), 'id'];
 });
 export function redactModelOwner(value) {
-  let out = supQuotes(collapseWs(String(value ?? '')));
+  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
   const kw = PIN_GATE.test(out); for (const [re, label] of MODEL_OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return out;
+  return pinNameRestore(out);
 }
 // ¿Quedó algo tapado? («****», «[dato del dueño]», «[oculto]», «[imagen omitida]», «[correo oculto]»…): en una tarjeta ese campo va VACÍO
 // (Bot 5 sobre 58200f60) también máscaras no ASCII: «∗∗∗∗6789», «＊＊6789», «••••6789», «●●●●6789», «**6789», «…6789», «xxxx6789», «(oculto)».
@@ -706,9 +715,9 @@ export function redactModelOwner(value) {
 export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
-  let out = supQuotes(collapseWs(String(value ?? '')));
+  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
   const kw = PIN_GATE.test(out); for (const [re, label] of OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return out;
+  return pinNameRestore(out);
 }
 // Bot 5 + sala: para un EMPLEADO se tapa SOLO EL MONTO de un dato del dueño (la palabra queda: «El costo es [dato del dueño]»).
 // Lectura de izquierda a derecha con un estado chico: una palabra del dueño (costo, costó, costaron, cto., c. unit, precio de compra,
@@ -733,7 +742,7 @@ const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:l
 const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precios?\\s+(?:(?:anterior|actual|habitual|normal|real|unitario|viejo|nuevo)(?:e?s)?\\s+)?(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron)' +
   // Frases de bodega del dueño (17-10): «lo que pagué», «pagué», «me salió a», «me sale a», «lo traje a». «me costó», «nos costó», «mi costo» ya entran por «costó»/«costo»;
   // «lo compré a» por BUY_WORD. «pagó» (el cliente pagó, pagó con Yape) NO es palabra del dueño; «pague» sin tilde solo dentro de «lo que pague».
-  '|lo\\s+que\\s+pagu[eé]|pagué|pagamos|(?:lo|la|los|las)\\s+pag(?:u[eé]|amos|aron)\\s+a|(?:me|nos)\\s+(?:sale|salen|sali[óo]|salieron|sal[íi]an?)\\s+a|te\\s+(?:sali[óo]|salieron)\\s+a|(?:lo|la|los|las)\\s+traj(?:e|imos|eron)\\s+a|(?:lo|la|los|las)\\s+consegu(?:í|i|imos|ieron|ió|io)\\s+a)' + NOT_LETTER;
+  '|(?:te|me|nos)\\s+(?:cuestan?|costar(?:[áa]n?|[íi]an?))|gan(?:as|an|ar[íi]as?|ar[áa]s)|lo\\s+que\\s+pagu[eé]|pagué|pagamos|(?:lo|la|los|las)\\s+pag(?:u[eé]|amos|aron)\\s+a|(?:me|nos)\\s+(?:sale|salen|sali[óo]|salieron|sal[íi]an?)\\s+a|te\\s+(?:sali[óo]|salieron)\\s+a|(?:lo|la|los|las)\\s+traj(?:e|imos|eron)\\s+a|(?:lo|la|los|las)\\s+consegu(?:í|i|imos|ieron|ió|io)\\s+a)' + NOT_LETTER;
 const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó|aste)' + NOT_LETTER;
 const UNIT = '(?:unidad(?:es)?|unid|unds?|uds?|u|cajas?|cjs?|docenas?|kg|kilos?|g|gr|gramos?|paquetes?|pqts?|piezas?|pzas?|frascos?|sobres?|bl[íi]sters?|tabletas?|pastillas?|bolsas?|litros?|lts?|l|ml|botellas?|latas?|packs?|cientos?)' + NOT_LETTER;
 const NUM = '(?:\\d{1,3}(?:[.,]\\d{3})+|\\d{1,6})(?:[.,]\\d{1,2})?(?!\\d)';
@@ -1338,7 +1347,11 @@ function longRuns(v) { let o = ''; const st = createLongRunStage((x) => { o += x
 const longLabel = (v) => v.replace(LONG_SEP_RE, LONG_RUN_LABEL).replace(LONG_SEP2_RE, '');
 export function redactEmployeeText(v) { return longLabel(redactText(longRuns(v))); } // etapa de datos sensibles del empleado
 const redactEmployee = (v) => redactOwnerData(redactEmployeeText(v));
-export function redactFor(role) { return role === 'owner' ? redactOwnerText : redactEmployee; }
+// (auditoría 500, 8) la respuesta al celular además tapa el DNI y el nombre tras «señora/sr./don…» escritos por el modelo (maskReplyPeople);
+// «cliente #C-000N» queda igual: el celular lo traduce al nombre con su lista local.
+const redactReplyOwner = (v) => maskReplyPeople(redactOwnerText(v));
+const redactReplyEmployee = (v) => maskReplyPeople(redactEmployee(v));
+export function redactFor(role) { return role === 'owner' ? redactReplyOwner : redactReplyEmployee; }
 // redactText en cada texto de un objeto/lista (claves intactas); para resúmenes que van al modelo.
 // fn: el redactor de cada texto (por defecto redactText; los resúmenes pasan uno que protege «producto #código»)
 export function redactDeep(v, depth = 0, fn = redactText) {
@@ -1349,6 +1362,30 @@ export function redactDeep(v, depth = 0, fn = redactText) {
 }
 function cleanText(value, max) {
   return redactText(String(value ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).slice(0, max).trim();
+}
+// (auditoría 500, SEG) Solo para lo que ESCRIBE la persona (texto y turnos del usuario), ANTES del filtro de siempre y del modelo: tras
+// «pin», «clave», «contraseña» o «password» se tapa el número o la clave mixta que venga en los ~80 caracteres siguientes, aunque haya un «?»,
+// «…» o varias palabras en medio («¿el pin de la caja? creo q era 4321»). No cruza un salto de línea. Precios (S/ 4.50, decimales), cantidades
+// con unidad y frases sin esas palabras quedan igual. Las respuestas siguen con el filtro de siempre (redactText / redactModelOwner).
+const CRED_WORD = /(?<![a-záéíóúñü])(?:pin(?:es)?|claves?|clabes?|contrase[ñn]as?|password|passwd)(?![a-záéíóúñü])/giu;
+const CRED_SPAN = 80;
+const CRED_NUM = /(?<![\w.,/$€]|S\/\s?|S\/\.\s?|PEN\s?|\$\s)\d{4,8}(?![\w.,]\d|\w|\s*(?:soles?|sol\b|unid|und|kg|kilos?|gr\b|g\b|litros?|lt?\b|ml\b|cajas?|paquetes?|bolsas?|sacos?|%|x\s*\d))/gu;
+const CRED_MIX = /(?<![\wáéíóúñü])(?=[a-zñ]*\d)(?=\d*[a-zñ])[a-zñ0-9]{4,24}(?![\wáéíóúñü])/giu;
+const CRED_MASK = '[clave oculta]';
+export function maskCredentialValues(value) {
+  const s = String(value ?? ''), src = s;
+  if (!CRED_WORD.test(s)) return s;
+  CRED_WORD.lastIndex = 0;
+  const spans = []; let m;
+  while ((m = CRED_WORD.exec(src))) { const a = m.index + m[0].length, nl = s.indexOf('\n', a); spans.push([a, Math.min(s.length, a + CRED_SPAN, nl < 0 ? Infinity : nl)]); }
+  let out = '', pos = 0;
+  for (const [a0, b] of spans) {
+    const a = Math.max(a0, pos); if (a >= b) continue;
+    out += s.slice(pos, a);
+    out += s.slice(a, b).replace(CRED_NUM, CRED_MASK).replace(CRED_MIX, (w) => (/^(?:\d+(?:ml|g|gr|kg|l|lt|cm|mm|x\d+))$/i.test(w) ? w : CRED_MASK));
+    pos = b;
+  }
+  return out + s.slice(pos);
 }
 // rol del SERVIDOR (nunca un dato del aparato ni del modelo): dueño → redactModelOwner; cualquier otro → redactText completo
 function cleanFor(role, value, max) {
@@ -1532,7 +1569,7 @@ export function employeeToolGuard(role) {
   return (c) => {
     if (!c || !TOOL_DEFS.some((t) => t.name === c.name)) return null;
     if (!toolAllowed(role, c.name)) return c.name === 'preparar_documento' ? 'forbidden_document' : c.name === 'configurar_app' && serverKeyArg(c.arguments) ? 'config_forbidden' : 'forbidden_role';
-    if (c.name === 'configurar_app') { const m = /"ajuste"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !isServerKey(m[1])) return 'forbidden_role'; } // claves de #972: solo Admin
+    if (c.name === 'configurar_app') { const m = /"ajuste"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !isServerKey(m[1])) return 'forbidden_role'; if (m && !employeeServerKey(m[1])) return 'config_admin_only'; } // claves de #972 y «avisos»: solo Admin
     if (c.name === 'preparar_documento') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !docAllowed(role, m[1])) return 'forbidden_document'; }
     if (c.name === 'consultar') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && ADMIN_ONLY_QUERY_TYPES.includes(m[1])) return 'query_admin_only'; }
     if (c.name === 'consultar') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && SUMMARY_TYPES.includes(m[1])) return 'forbidden_summary'; if (m && !costQueryAllowed(role, m[1])) return 'forbidden_costs'; }
@@ -2413,18 +2450,48 @@ export function streamHoldStatus(emit) { return emit && emit.sent && emit.sent()
 // más en partes; el Worker cierra el texto recién cuando sabe si hay tarjeta de cambio (flush({ noChange })) y el filtro final del texto entero
 // (finalReplyFilter, el mismo que usa la respuesta completa) quita la frase. Así «pulsa Confirmar» nunca se pinta si no hay nada que confirmar.
 export const CONFIRM_GATE = /puls/i;
+// (auditoría 500, punto 8) filtro final de la respuesta: un DNI escrito por el modelo (8 dígitos con «DNI»/«documento» delante) y un nombre
+// de persona tras «señora/señor/sra./sr./srta./don/doña» se tapan para TODOS (también el Admin). «cliente #C-0001» no se toca: el aparato
+// del Admin lo traduce al nombre de SU lista. Solo actúa si el texto trae una palabra de REPLY_PEOPLE_GATE (la misma que retiene el texto en
+// partes, como la clave): sin ella el texto sale idéntico y lo ya pintado en vivo es siempre prefijo del texto final.
+export const REPLY_PEOPLE_GATE = /dni|d\.\s?n\.\s?i|documento|se(?:ñ|n\u0303|n)or|sra|srta|(?<![a-záéíóúñ])sr(?![a-záéíóúñ])|do(?:ñ|n\u0303|n)a|(?<![a-záéíóúñ])don(?![a-záéíóúñ])/i;
+export const NAME_MASK = '[nombre oculto]';
+const DNI_REPLY_RE = /((?<![\p{L}\d])(?:dni|d\.\s?n\.\s?i\.?|documento(?:\s+de\s+identidad)?)(?![\p{L}\d])[^\d\n]{0,24}?)(\d{8})(?![\d.,]\d|\d)/giu;
+const HONORIFIC_RE = /(?<![\p{L}\d])(se(?:ñ|n\u0303|n)or(?:it)?a?|sra|srta|sr|do(?:ñ|n\u0303|n)a|don)(\.?)([ \t]+)/giu;
+const NAME_NOT = new Set(['que', 'de', 'del', 'la', 'el', 'los', 'las', 'lo', 'le', 'les', 'y', 'e', 'o', 'u', 'a', 'al', 'en', 'con', 'por', 'para', 'sin', 'su', 'sus', 'mi', 'tu',
+  'un', 'una', 'es', 'era', 'fue', 'ya', 'no', 'si', 'sí', 'se', 'me', 'te', 'nos', 'cliente', 'clientes', 'tiene', 'debe', 'pagó', 'pago', 'compró', 'dueño', 'dueña', 'admin',
+  'administrador', 'administradora', 'mismo', 'misma', 'otro', 'otra', 'como', 'cuando', 'donde', 'quien', 'quién', 'cual', 'cuál', 'aquí', 'ahí', 'allí', 'también', 'tambien',
+  'muy', 'más', 'mas', 'menos', 'todo', 'toda', 'todos', 'todas', 'este', 'esta', 'ese', 'esa', 'aquel', 'aquella', 'usted', 'ustedes', 'vendedor', 'vendedora', 'cajero', 'cajera']);
+const NAME_WORD_RE = /^[\p{L}][\p{L}'’-]*/u;
+export function maskReplyPeople(value) {
+  const s = String(value ?? '');
+  if (!REPLY_PEOPLE_GATE.test(s)) return s;
+  let out = s.replace(DNI_REPLY_RE, (m, pre, d) => pre + '****' + d.slice(4));
+  HONORIFIC_RE.lastIndex = 0; let res = '', pos = 0, m;
+  while ((m = HONORIFIC_RE.exec(out)) !== null) {
+    const after = m.index + m[0].length, w1 = NAME_WORD_RE.exec(out.slice(after));
+    if (!w1 || NAME_NOT.has(w1[0].toLowerCase())) continue;
+    let end = after + w1[0].length, k = 0, nx;
+    while (k < 3 && (nx = /^[ \t]+(\p{Lu}[\p{L}'’-]*)/u.exec(out.slice(end))) && !NAME_NOT.has(nx[1].toLowerCase())) { end += nx[0].length; k++; }
+    res += out.slice(pos, after) + NAME_MASK; pos = end; HONORIFIC_RE.lastIndex = end;
+  }
+  return res + out.slice(pos);
+}
 export function finalReplyFilter(text, { change = true } = {}) { return change ? String(text ?? '') : stripConfirmHint(text); }
 export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false) {
+  const people = redact === redactReplyOwner || redact === redactReplyEmployee; // (auditoría 500, 8)
+  if (people) redact = redact === redactReplyOwner ? redactOwnerText : redactEmployee;
   const stages = redact === redactText || redact === redactOwnerText || redact === redactModelOwner ? 1 : redact === redactEmployee ? 2 : 0; // (r8) redactModelOwner también por el camino incremental (paridad en las 4 vías)
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
-  const wholeOf = stages === 2 ? (t) => redactOwnerData(redactEmployeeText(t), prime) : redact; // el filtro del texto entero (capReply aparte, en deliver)
+  const wholeOf0 = stages === 2 ? (t) => redactOwnerData(redactEmployeeText(t), prime) : redact; // el filtro del texto entero (capReply aparte, en deliver)
+  const wholeOf = people ? (t) => maskReplyPeople(wholeOf0(t)) : wholeOf0; // (auditoría 500, 8) DNI y nombres tras «señora…»: retenido desde la palabra (REPLY_PEOPLE_GATE)
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
   let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
   // acc: texto limpio llegado (lo que filtra wholeOf); lab: salida de la etapa de espacios aún sin pasar a sq (más la cola); out: lo ya puesto en ready
   let acc = '', lab = '', danger = false, conf = false, out = '';
   const gate = (x) => { if (danger || conf) return; lab += x;
-    if (PIN_GATE.test(lab)) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas
+    if (PIN_GATE.test(lab) || (people && REPLY_PEOPLE_GATE.test(lab))) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas (clave, DNI o «señora…»)
     if (CONFIRM_GATE.test(lab)) { conf = true; lab = ''; return; } // «pulsa Confirmar»: igual, se decide al cerrar (finalReplyFilter)
     const n = lab.length - LABEL_TAIL; if (n > 0) { const pass = lab.slice(0, n); lab = lab.slice(n); sq.push(pass); } };
   const finish = (noChange = false) => { if (cut) return; const zf = finalReplyFilter(wholeOf(acc), { change: !noChange }); conf = false; // al cerrar: el filtro entero de todo, una vez
@@ -2664,6 +2731,7 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   if ((await proposalHash(body.proposal)) !== tok.h) return json({ error: 'proposal_changed' }, 409);
   // Tarjeta «configuracion»: solo las del servidor (negocio y ticket) las aplica quien no es Admin; las del aparato (#972) siguen solo del Admin.
   if (tok.t === CONFIG_CARD && role !== 'owner' && !(body.proposal.destino === CONFIG_DEST && isServerKey(body.proposal.ajuste))) return json({ error: 'forbidden_role' }, 403);
+  if (tok.t === CONFIG_CARD && role !== 'owner' && !employeeServerKey(body.proposal.ajuste)) return json(CONFIG_ADMIN_ONLY, 403); // «avisos»: solo Admin (SEG 500)
   // Doble barrera: una tarjeta masiva firmada nunca la aplica quien no es Admin (aunque tenga «costos y cambios»).
   if (!bulkAllowed(role) && isBulkProposal(body.proposal)) return json({ error: 'bulk_admin_only', message: BULK_ADMIN_ONLY_TEXT }, 403);
   const store = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null);
@@ -2776,7 +2844,7 @@ const ERR_STATUS = { upstream_busy: 503, upstream_error: 502, upstream_timeout: 
 // role: el del SERVIDOR (sesión autenticada). Sin rol (o cualquier otro): lo más estricto (redactText). Dueño: redactModelOwner.
 export function parseChatBody(body, role = null) {
   if (!body || typeof body !== 'object') return { error: 'bad_request' };
-  const text = cleanFor(role, body.text, ASSISTANT_LIMITS.maxMessageChars);
+  const text = cleanFor(role, maskCredentialValues(body.text), ASSISTANT_LIMITS.maxMessageChars); // PIN/clave tapados antes del modelo (SEG 500)
   let image = null;
   if (body.image != null) {
     if (typeof body.image !== 'string' || body.image.length > ASSISTANT_LIMITS.maxImageChars) return { error: 'image_too_large' };
@@ -2791,7 +2859,7 @@ export function parseChatBody(body, role = null) {
     .map((m) => (m && typeof m === 'object' && m.role === 'nota' && role === 'owner' && typeof m.content === 'string' ? { role: 'user', content: noteTurn(m.content, (v, n) => cleanFor(role, v, n)) } : m))
     .map((m) => (m && typeof m === 'object' ? { ...m, raw: typeof m.content === 'string' ? m.content : null, cut: m.cut === true, sig: typeof m.sig === 'string' ? m.sig.slice(0, 128) : null, n: okInt(m.n) ? m.n : null, iat: okInt(m.iat) ? m.iat : null } : m))
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-    .map((m) => ({ role: m.role, content: cleanFor(role, m.content, ASSISTANT_LIMITS.maxMessageChars), raw: m.raw, cut: m.cut === true, sig: m.sig, n: m.n, iat: m.iat })).filter((m) => m.content);
+    .map((m) => ({ role: m.role, content: cleanFor(role, m.role === 'user' ? maskCredentialValues(m.content) : m.content, ASSISTANT_LIMITS.maxMessageChars), raw: m.raw, cut: m.cut === true, sig: m.sig, n: m.n, iat: m.iat })).filter((m) => m.content);
   return { text, image, history, context: body.context, stream: body.stream === true, resumen: readResumenField(body.resumen), overflow: Math.max(0, all.length - ASSISTANT_LIMITS.maxHistory), cards: parseCards(body.cards) };
 }
 // Estado de las tarjetas que el aparato tiene en pantalla (solo tipo y estado, de listas cerradas). Sin campo = aparato viejo: null.
@@ -3032,6 +3100,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (result.forbidden === 'forbidden_summary') return json(SUMMARY_ADMIN_ONLY, 403);
     if (result.forbidden === 'forbidden_costs') return json(COSTS_ADMIN_ONLY, 403);
     if (result.forbidden === 'config_forbidden') return json(CONFIG_FORBIDDEN, 403);
+    if (result.forbidden === 'config_admin_only') return json(CONFIG_ADMIN_ONLY, 403);
     preDropped = { dropped: 'forbidden_role', tool: 'cut_mid_stream' }; result = { content: '', calls: [], usage: result.usage };
   }
   // Herramientas o búsquedas por delante y todavía sin texto: «buscando» enseguida y cada pocos segundos hasta el primer texto.
@@ -3045,6 +3114,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
   // Configuración sin el permiso «cambios»: 403 antes de leer nada de la base y sin segunda llamada al modelo.
   if (dropped.some((d) => d.dropped === 'config_forbidden')) { if (emit) { emit.drop(); emit.reset(); } return json(CONFIG_FORBIDDEN, 403); }
+  if (dropped.some((d) => d.dropped === 'config_admin_only')) { if (emit) { emit.drop(); emit.reset(); } return json(CONFIG_ADMIN_ONLY, 403); }
   // Cambios masivos (una tarjeta que cambia más de un producto): solo el Admin. Empleado: fuera, con frase simple (pos-assistant-levels.js).
   const bulkDropped = dropBulkProposals(role, proposals, dropped) > 0;
   await resolveLevelProposals(deps.db, proposals, dropped); // tarjetas de nivel: persona por etiqueta o código (pos-assistant-levels-route.js)
@@ -3129,7 +3199,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const ownerText = (c) => redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
   // Dueño con resumen: los «producto #código» de la respuesta quedan como código (la respuesta vuelve al modelo como historial;
   // el nombre se ve solo en la tabla de la tarjeta).
-  const finalText = (c) => { const f = !seesOwnerData(role) ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c); const r = capReply(f); capped = r !== f ? r : null; return r; };
+  const finalText = (c) => { const f = maskReplyPeople(!seesOwnerData(role) ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c)); const r = capReply(f); capped = r !== f ? r : null; return r; };
   let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
@@ -3189,6 +3259,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
   // (lote en vivo 22-10) borrar todo o reiniciar: el asistente nunca lo ofrece ni lo hace; sin tarjetas.
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
+  // (auditoría 500, SEG) varias tarjetas de cambio de producto en una respuesta: el servidor dice cuántas son y que cada una se aplica aparte
+  // (no depende del modelo). Si el texto ya cortado era el del tope, sigue marcado como cortado.
+  if (!resetAsk) { const was = capped !== null && reply === capped; const r2 = withChangeCount(reply, proposals); if (r2 !== reply) { reply = r2; if (was) capped = reply; } }
   tm.ms_db = Math.round(dbMs); tm.db_stmts = dbc.n; tm.ms_total = ms(t0); // antes de la bitácora (su escritura: +1 sentencia)
   const times = timingFields(tm); logTimings(tm);
   // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos. La primera fila lleva los tiempos del pedido (sin migración:
@@ -3219,6 +3292,16 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 
+// Tarjetas de cambio de UN producto cada una (precio, costo, stock, producto nuevo). Con 2 o más, la respuesta lo dice con una frase fija.
+const PER_PRODUCT_CARDS = new Set(['precio', 'costo', 'ajuste', 'producto']);
+const CHANGE_COUNT_RE = /\s*Son \d+ productos; cada uno se aplica aparte con su «(?:Confirmar|Aplicar)»\./g;
+export function changeCountText(n) { return 'Son ' + n + ' productos; cada uno se aplica aparte con su «Aplicar».'; }
+export function withChangeCount(reply, proposals) {
+  const n = (proposals || []).filter((p) => p && p.needsConfirm && PER_PRODUCT_CARDS.has(p.type)).length;
+  if (n < 2) return reply;
+  const base = String(reply || '').replace(CHANGE_COUNT_RE, '').trim();
+  return (base ? base + (/[.!?…:]$/.test(base) ? ' ' : '. ') : '') + changeCountText(n);
+}
 // Pedidos de borrar todo o reiniciar el sistema (no un producto o una venta puntual).
 // (lote 3, MEM-005/006) «¿a cuánto vendo el arroz jairito?»: antes de contestar se buscan por nombre (coincidencia parcial) los productos
 // reales del sistema y su precio va al modelo; el costo SOLO para el Admin. Así no dice «no tengo el precio» de algo que su tarjeta muestra.
@@ -3234,7 +3317,25 @@ export function priceLookupMessage(role, text, products) {
 export const RESET_REFUSAL_TEXT = 'Eso necesita la clave del Admin. Yo no borro ni reinicio el sistema, y los registros quedan como están.';
 const RESET_VERB = /\b(?:reset(?:ea|ear|eas|ees|ee|é|e)?|resete[aeo]\w*|reinici\w*|formate\w*|borr\w*|elimin\w*|limpi\w*|vac[ií]\w*|wipe)\b/i;
 const RESET_ALL = /\b(?:todo|toda|todos|todas|sistema|base\s+de\s+datos|bd|registros|desde\s+cero|de\s+f[aá]brica|el\s+pos|la\s+app|la\s+aplicaci[oó]n|el\s+programa)\b/i;
+// (auditoría 500, SEG) «limpia el inventario», «vacía la caja», «pon todo en 0», «deja el stock en cero»: también es borrar todo. Con faltas
+// comunes («linpia», «inbentario», «baciar», «kaja») y sin tildes. Un producto puntual («pon el arroz en 0», «el stock del arroz») o una
+// pregunta («¿qué productos están en 0?») no entran: el destino tiene que ser el inventario/stock/caja/productos ENTEROS o «todo».
+const WIPE_TARGET = '(?:tod[oa]s?\\s+)?(?:(?:el|la|los|las|mi|mis)\\s+)?(?:in[vb]e?n?t?a?r[iy]?[oy]s?|e?sto?c?k|existencias|mercaderias?|productos|[ck]aja)\\b(?!\\s+(?:de|del)\\s)';
+const WIPE_TARGET_NO_CAJA = WIPE_TARGET.replace('|[ck]aja', '');
+const WIPE_ALL = new RegExp('\\b(?:l[iy]n?mpi|linpi|[vb]a[cs]i|borr|elimin)\\w*\\s+(?:(?:me|nos|le)\\s+)?' + WIPE_TARGET);
+const WIPE_RESET = new RegExp('\\b(?:reset|resete|reinici|formate)\\w*\\s+(?:(?:me|nos|le)\\s+)?' + WIPE_TARGET_NO_CAJA);
+const ZERO_VERB = '\\b(?:pon|ponme|ponle|ponlo|ponlos|poner|ponga|pongan|ponerle|deja|dejame|dejalo|dejalos|dejar|dejen|setea|setear|seteame)\\s+(?:(?:me|nos|le)\\s+)?';
+const ZERO = '(?:en|a)\\s+(?:0|cero)\\b';
+const WIPE_ZERO = new RegExp(ZERO_VERB + '(?:tod[oa]s?|' + WIPE_TARGET + ')\\s+' + ZERO + '|' + ZERO_VERB + ZERO + '\\s+(?:' + WIPE_TARGET + '|tod[oa]s?\\s*(?:$|[.,;!]|por\\b|porfa|ya\\b))');
+const WIPE_QUESTION = /^\s*¿?\s*(?:que|cual(?:es)?|cuant[oa]s?|como|por\s*que|donde|cuando|hay|muestra\w*|ver)\b/;
+const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function isWipeRequest(text) {
+  const t = fold(text);
+  if (WIPE_QUESTION.test(t)) return false;
+  return WIPE_ALL.test(t) || WIPE_RESET.test(t) || WIPE_ZERO.test(t);
+}
 export function isResetRequest(text) {
+  if (isWipeRequest(text)) return true;
   const t = String(text || '').toLowerCase();
   if (!RESET_VERB.test(t)) return false;
   if (/\b(?:reset(?:ea|ear)?|resete\w*|reinici\w*|formate\w*)\b/i.test(t) && /\b(?:sistema|todo|pos|app|aplicaci[oó]n|programa|base|f[aá]brica|cero)\b/i.test(t)) return true;

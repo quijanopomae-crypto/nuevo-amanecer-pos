@@ -546,7 +546,7 @@ test('20) Bot 5: una etiqueta de clave/pin/token, RUC, DNI o data: que espera su
   for (const [label, rest, secret] of CASES) for (const role of ['owner', EMP]) {
     const t = label + rest, red = redactFor(role); let o = ''; const em = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red);
     let i = 0; for (; i < t.length; i++) { em.push(t[i]); const pendingWs = i >= label.length && !/\S/.test(t.slice(label.length, i + 1).replace(/\bes\b/, '')); if (pendingWs) assert.ok(o.length <= label.length, role + ' ' + label + ': soltó ' + o.length + ' caracteres con la etiqueta esperando'); }
-    em.flush(); assert.ok(role === 'owner' && /^(?:RUC|DNI)/.test(label) ? secret.test(o) : !secret.test(o), role + ' ' + label + ' -> ' + o); // el dueño ve DNI/RUC (Bot 2 sobre 25ffde10) assert.equal(o, red(t), role + ' ' + label + ': igual al texto entero');
+    em.flush(); assert.ok(role === 'owner' && /^RUC/.test(label) ? secret.test(o) : !secret.test(o), role + ' ' + label + ' -> ' + o); // el dueño ve el RUC (Bot 2 sobre 25ffde10); el DNI ya no (auditoría 500, 8) assert.equal(o, red(t), role + ' ' + label + ': igual al texto entero');
   }
 });
 test('20) Bot 3: un tramo de solo espacios no pasa por redactText (mismo resultado); con una etiqueta esperando su valor no se suelta', () => {
