@@ -1,0 +1,32 @@
+{
+  "id": "P-015",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:00 Lima",
+      "pregunta": "si la caja de leche gloria me cuesta 85 y trae 24 a cuanto vendo cada una pa ganar 20%",
+      "imagen": false,
+      "status": 200,
+      "ms": 8430,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 8423,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": null,
+      "precios_del_sistema": "<precios_del_sistema>{\"productos\":[{\"nombre\":\"Leche Gloria Evaporada 395 g (caja x24)\",\"precio\":4.2,\"costo\":3.5}]}</precios_del_sistema>",
+      "boleta_recordada": null,
+      "respuesta": "Admin, cada lata te cuesta S/ 3.54; para ganar 20% sobre el costo, véndela a **S/ 4.25**.\nEn el sistema está a S/ 4.20.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

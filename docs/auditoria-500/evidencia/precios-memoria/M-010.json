@@ -1,0 +1,58 @@
+{
+  "id": "M-010",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:08 Lima",
+      "pregunta": "cuanto trae el paquete de fideos?",
+      "imagen": false,
+      "status": 200,
+      "ms": 3714,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3708,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, según tu última aclaración, cada paquete de fideos trae **5 unidades**, no 6.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:09 Lima",
+      "pregunta": "cuanto trae el paquete de fideos?",
+      "imagen": false,
+      "status": 200,
+      "ms": 2544,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 2539,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, según lo que me enseñaste hoy, el paquete de fideos trae 6 unidades.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

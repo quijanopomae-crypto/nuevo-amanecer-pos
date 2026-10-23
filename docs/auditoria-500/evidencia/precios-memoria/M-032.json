@@ -1,0 +1,416 @@
+{
+  "id": "M-032",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:37 Lima",
+      "pregunta": "cuanto vendi ayer en efectivo",
+      "imagen": false,
+      "status": 200,
+      "ms": 3483,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3476,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"ventas_periodo\",\"producto\":\"\",\"periodo\":\"ayer\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Ventas 2026-10-22: S/ 11.50 en 1 venta. Ticket promedio S/ 11.50.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:38 Lima",
+      "pregunta": "consulta de relleno numero 1 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3333,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3329,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"agua\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:39 Lima",
+      "pregunta": "consulta de relleno numero 2 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3294,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3292,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:40 Lima",
+      "pregunta": "consulta de relleno numero 3 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3154,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3151,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:41 Lima",
+      "pregunta": "consulta de relleno numero 4 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3378,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3374,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:42 Lima",
+      "pregunta": "consulta de relleno numero 5 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3697,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3692,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:43 Lima",
+      "pregunta": "consulta de relleno numero 6 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3284,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3280,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:44 Lima",
+      "pregunta": "consulta de relleno numero 7 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3673,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3668,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:45 Lima",
+      "pregunta": "consulta de relleno numero 8 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3355,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3351,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:46 Lima",
+      "pregunta": "consulta de relleno numero 9 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 4230,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 4226,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:47 Lima",
+      "pregunta": "consulta de relleno numero 10 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3185,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3182,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:48 Lima",
+      "pregunta": "consulta de relleno numero 11 sobre el stock de agua",
+      "imagen": false,
+      "status": 200,
+      "ms": 3407,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3404,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Agua Cielo 625 ml\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Agua Cielo 625 ml (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    },
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:49 Lima",
+      "pregunta": "q fue lo primero q te pregunte hoy",
+      "imagen": false,
+      "status": 200,
+      "ms": 3690,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 3686,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\",\"quien te dijo q la caja de gloria trae 24 y cuando\",\"el paquete de fideos trae 6\",\"la caja de cerveza pilsen trae 12\",\"la cerveza pilsen cuesta 5.40 por botella\",\"mi proveedor de gaseosas es distribuidora el sol\",\"al arroz jairito se lo compro a distribuidora san juan\",\"recuerda: al #C0012 no le fíes más de 100\",\"la caja de leche gloria trae 48\",\"recuerda que siempre redondeo los precios a 10 centimos para arriba\",\"de ahora en adelante el proveedor de gaseosas es otro, ya no es el de antes, es comercial lima norte\",\"el dni de mi proveedor es [oculto] anotalo\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, lo primero que me preguntaste hoy fue: «cuánto vendí ayer en efectivo».",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

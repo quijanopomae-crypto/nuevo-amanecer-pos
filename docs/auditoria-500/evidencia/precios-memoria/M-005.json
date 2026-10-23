@@ -1,0 +1,32 @@
+{
+  "id": "M-005",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:03 Lima",
+      "pregunta": "cuantas latas trae la caja de gloria 395",
+      "imagen": false,
+      "status": 200,
+      "ms": 2989,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 2986,
+          "status": 200,
+          "tool_calls": []
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"ojo la caja de galleta soda field trae 30 paquetitos\",\"la caja de leche gloria de 395 trae 24 latas\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": null,
+      "boleta_recordada": null,
+      "respuesta": "Admin, la caja de Leche Gloria de 395 g trae 24 latas.",
+      "error": null,
+      "proposals": [],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}

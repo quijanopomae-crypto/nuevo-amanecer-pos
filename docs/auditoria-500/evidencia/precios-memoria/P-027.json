@@ -1,0 +1,38 @@
+{
+  "id": "P-027",
+  "modo": "REAL_MODEL gpt-6.1-sol (ohmyagent) + base/catálogo sintéticos",
+  "turnos": [
+    {
+      "quien": "owner",
+      "rol": "owner",
+      "hora_simulada": "2026-10-23 10:04 Lima",
+      "pregunta": "pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50",
+      "imagen": false,
+      "status": 200,
+      "ms": 4146,
+      "llamadas_modelo": [
+        {
+          "host": "ohhmyagent.com",
+          "model": "gpt-6.1-sol",
+          "ms": 4141,
+          "status": 200,
+          "tool_calls": [
+            "consultar {\"tipo\":\"stock_producto\",\"producto\":\"Fideo Don Vittorio\",\"periodo\":\"hoy\",\"fecha\":\"\",\"desde\":\"\",\"hasta\":\"\",\"cliente_id\":\"\"}"
+          ]
+        }
+      ],
+      "ensenado": "<ensenado_por_usuario>\n{\"dicho_por_el_usuario\":[\"si la caja de leche gloria me cuesta 85 y trae 24 a cuanto vendo cada una pa ganar 20%\",\"la leche gloria evaporada de 24 latas x 395gr me cuesta 93 la caja, a cuanto me sale cada lata\",\"el saco de azucar rubia de 50 kilos me cuesta 170 y la vendo a 4 el kilo, cuanto gano\"]}\n</ensenado_por_usuario>",
+      "precios_del_sistema": "<precios_del_sistema>{\"productos\":[{\"nombre\":\"Fideo Don Vittorio Spaghetti 500 g\",\"precio\":2.6,\"costo\":1.9},{\"nombre\":\"Fideo Don Vittorio Tallarin 500 g\",\"precio\":2.6,\"costo\":1.9},{\"nombre\":\"Fideo paquete 250 g\",\"precio\":1.5,\"costo\":1},{\"nombre\":\"Galleta Soda Field x6 paquetes\",\"precio\":4.5,\"costo\":3.6}]}</precios_del_sistema>",
+      "boleta_recordada": null,
+      "respuesta": "Fideo Don Vittorio Spaghetti 500 g (S/ 2.60): sin control de stock. Fideo Don Vittorio Tallarin 500 g (S/ 2.60): sin control de stock. Fideo paquete 250 g (S/ 1.50): sin control de stock.",
+      "error": null,
+      "proposals": [
+        {
+          "type": "consulta"
+        }
+      ],
+      "dropped": [],
+      "nota": null
+    }
+  ]
+}
