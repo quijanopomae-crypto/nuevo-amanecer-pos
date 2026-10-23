@@ -136,7 +136,7 @@
 
   function render(cat) {
     var cont = doc.getElementById('cfgContent'); if (!cont) return false;
-    if (cat === 'usuarios') cont.innerHTML = usuariosHtml();
+    if (cat === 'usuarios') { cont.innerHTML = usuariosHtml(); try { if (root.NA_EMPLOYEE_PERMS_UI) root.NA_EMPLOYEE_PERMS_UI.mount(cont); } catch (_) {} }
     else if (cat === 'aparatos') { cont.innerHTML = aparatosHtml(); loadDevices(); }
     else if (cat === 'respaldo') cont.innerHTML = respaldoHtml();
     else if (cat === 'reseteo') cont.innerHTML = reseteoHtml();
@@ -488,5 +488,39 @@
     if (!cloud() || !R()) return { ok: true, local: true };
     return pushSettings();
   }
-  root.NA_CONFIG_G = { flush: flush, savePin: savePin, loadDevices: loadDevices, render: render, unconfirmedSales: unconfirmedSales, pullSettings: pullSettings, pushSettings: pushSettings, sharedKeys: function () { return Object.keys(SHARED); }, conflictMessage: CONFLICT_MSG, discountLog: function () { return JSON.parse(JSON.stringify(discountLog())); } };
+  // Un ajuste cotidiano pedido en el chat. Se cambia SOLO una bandera del grupo,
+  // contra la revisión recién leída, sin enviar otros grupos ni cambios pendientes.
+  async function setAssistantFlag(field,value,expected) {
+    var allowed=['stockMin','stockAlertActive','printAuto'];
+    if(allowed.indexOf(field)<0||(field==='stockMin'?!(Number.isInteger(value)&&value>=0&&value<=100000):typeof value!=='boolean')) return {ok:false,msg:'Ese ajuste no está disponible desde el chat.'};
+    if(!R()||!R().isOwner()||!R().confirmed||!cloud()||!appReady) return {ok:false,msg:'Revisa la conexión y entra como Admin.'};
+    if(pendingBase) return {ok:false,msg:'Hay cambios de configuración pendientes. Guárdalos antes de aplicar esta tarjeta.'};
+    var c=cfg(); if(!c) return {ok:false,msg:'No se pudo leer la configuración.'};
+    var local=SHARED['pos.flags'].get(c),known=confirmed['pos.flags'];
+    if(known&&!sameKey('pos.flags',local,known.value)) return {ok:false,msg:'Hay cambios de configuración pendientes. Guárdalos primero.'};
+    try {
+      var out=await R().api('/settings',null,'GET');
+      var row=(out&&out.settings||[]).filter(function(r){return r.key==='pos.flags';})[0];
+      if(!row||!row.value||typeof row.value!=='object'||Array.isArray(row.value)||!Number.isInteger(row.revision)) return {ok:false,msg:'Primero sincroniza Configuración con el servidor.'};
+      if(!R().isOwner()||!R().confirmed) return {ok:false,msg:'Solo el Admin puede cambiar la configuración.'};
+      if(pendingBase||!sameKey('pos.flags',SHARED['pos.flags'].get(c),local)) return {ok:false,msg:'La configuración cambió mientras revisabas. Pide la tarjeta de nuevo.'};
+      var actual=row.value[field];
+      if(actual!==expected&&actual!==value) return {ok:false,msg:'Otro aparato cambió este ajuste. Pide la tarjeta de nuevo.'};
+      var next=Object.assign({},row.value);next[field]=value;
+      var revision=row.revision;
+      if(actual!==value) {
+        var saved=await R().api('/settings',{key:'pos.flags',value:next,expected_revision:row.revision});
+        if(!saved||!Number.isInteger(saved.revision)) return {ok:false,msg:'No pude comprobar el guardado. Reintenta para verificarlo.'};
+        revision=saved.revision;
+      }
+      confirmed['pos.flags']={value:copy(next),revision:revision};server['pos.flags']=copy(confirmed['pos.flags']);
+      // No pisa una edición local que empezó durante el POST.
+      Object.keys(next).forEach(function(k){if(c[k]===local[k]) c[k]=next[k];});
+      try {root.localStorage.setItem(CACHE_KEY,JSON.stringify(server));}catch(_){}
+      try {root._naApplyConfigUI();}catch(_){}
+      try {if(baseSave) await baseSave();}catch(_){}
+      return {ok:true,msg:'Guardado en todos los aparatos.'};
+    } catch(e) {return {ok:false,msg:e&&e.message==='revision_conflict'?'Otro aparato guardó antes. Pide la tarjeta de nuevo.':'No pude comprobar el guardado. Reintenta para verificarlo.'};}
+  }
+  root.NA_CONFIG_G = { setAssistantFlag:setAssistantFlag, flush: flush, savePin: savePin, loadDevices: loadDevices, render: render, unconfirmedSales: unconfirmedSales, pullSettings: pullSettings, pushSettings: pushSettings, sharedKeys: function () { return Object.keys(SHARED); }, conflictMessage: CONFLICT_MSG, discountLog: function () { return JSON.parse(JSON.stringify(discountLog())); } };
 })(window);
