@@ -135,6 +135,40 @@ function badDateText(d) {
   const largo = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return 'El ' + dd + ' de ' + MESES[m - 1] + ' de ' + y + ' no existe (' + MESES[m - 1] + ' tiene ' + largo + ' días). Dime otra fecha.';
 }
+// ---------- Avisos que también ve el empleado (revisión de alfa, PR #984) ----------
+// resumen.aviso puede venir de cualquier consulta y traer montos: al empleado NO se le copia. Los avisos de fechas y conteos (fecha que no
+// existe, fecha o mes futuro, período que termina en el futuro, período recortado, lista cortada) van además ESTRUCTURADOS bajo la clave
+// símbolo NOTICES del resumen: [{ tipo, ...solo fechas AAAA-MM-DD y enteros }]. El símbolo no sale en JSON (ni al modelo ni a la pantalla),
+// solo lo puede poner quien importe NOTICES, y employeeNoticeText vuelve a revisar cada campo y rearma el texto desde ahí con noticeText.
+export const NOTICES = Symbol('avisos_fechas_conteos');
+const isDay = (v) => typeof v === 'string' && DATE.test(v), isCount = (v) => Number.isInteger(v) && v >= 0;
+const NOTICE_FIELDS = Object.freeze({
+  fecha_invalida: { fecha: isDay }, fecha_futura: { desde: isDay, hasta: isDay, hoy: isDay },
+  mes_futuro: { mes: (v) => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v), hoy: isDay }, hasta_futuro: { hasta: isDay, hoy: isDay },
+  periodo_recortado: { pedido_desde: isDay, pedido_hasta: isDay, desde: isDay, hasta: isDay, max_dias: isCount }, lista_cortada: { mostrados: isCount, total: isCount } });
+export const EMPLOYEE_NOTICE_KINDS = Object.freeze(Object.keys(NOTICE_FIELDS));
+// Copia limpia (solo los campos del tipo, cada uno validado) o null.
+export function cleanNotice(n) {
+  const spec = n && typeof n === 'object' && Object.hasOwn(NOTICE_FIELDS, n.tipo) ? NOTICE_FIELDS[n.tipo] : null; if (!spec) return null;
+  const out = { tipo: n.tipo }; for (const [k, ok] of Object.entries(spec)) { if (!ok(n[k])) return null; out[k] = n[k]; } return out;
+}
+export function noticeText(n) {
+  const c = cleanNotice(n); if (!c) return null;
+  switch (c.tipo) {
+    case 'fecha_invalida': return badDateText(c.fecha);
+    case 'fecha_futura': return futureNote(c.desde === c.hasta ? 'El ' + fechaLarga(c.desde) + ' es una fecha futura' : 'El período del ' + fechaLarga(c.desde) + ' al ' + fechaLarga(c.hasta) + ' es futuro', c.hoy);
+    case 'mes_futuro': return futureNote(MESES[Number(c.mes.slice(5, 7)) - 1].replace(/^./, (x) => x.toUpperCase()) + ' de ' + c.mes.slice(0, 4) + ' es un mes futuro', c.hoy);
+    case 'hasta_futuro': return 'El período pedido termina en una fecha futura (' + c.hasta + '): conté hasta hoy (' + c.hoy + ').';
+    case 'periodo_recortado': return 'El período pedido (' + c.pedido_desde + ' a ' + c.pedido_hasta + ') pasa de ' + c.max_dias + ' días: conté solo del ' + c.desde + ' al ' + c.hasta + '.';
+    case 'lista_cortada': return 'Mostrando ' + c.mostrados + ' de ' + c.total + ' productos vendidos.';
+  }
+  return null;
+}
+// El aviso que puede ver el empleado: solo los avisos estructurados de NOTICES, rearmados. Nada del texto de resumen.aviso. Sin ninguno: undefined.
+export function employeeNoticeText(resumen) {
+  const list = resumen && Array.isArray(resumen[NOTICES]) ? resumen[NOTICES] : [];
+  return list.map(noticeText).filter(Boolean).join(' ') || undefined;
+}
 // Revisa las fechas de una consulta de ventas ANTES de leer la base:
 // - fecha que no existe → { aviso, fecha_invalida: true } (no se lee nada; antes salía «No hay ventas registradas 2026-09-31»)
 // - período entero en el futuro («mañana», 2026-10-24) → { aviso, fecha_futura: true } (antes «mañana» se volvía hoy en silencio)
@@ -143,17 +177,17 @@ export function periodCheck(args, nowMs) {
   const today = limaToday(nowMs), word = dateWordRange(args?.periodo, nowMs, { future: true });
   const used = word ? [] : DATE.test(args?.fecha || '') ? [args.fecha] : [args?.desde, args?.hasta].filter((v) => DATE.test(v || ''));
   const bad = used.find((v) => !isRealDate(v));
-  if (bad) return { fecha_invalida: true, aviso: badDateText(bad) };
-  const raw = rawRange(args, nowMs, true), avisos = [];
+  if (bad) { const notice = { tipo: 'fecha_invalida', fecha: bad }; return { fecha_invalida: true, aviso: noticeText(notice), notice }; }
+  const raw = rawRange(args, nowMs, true), notices = [];
   if (raw.desde > today) {
-    const cual = raw.desde === raw.hasta ? 'El ' + fechaLarga(raw.desde) + ' es una fecha futura' : 'El período del ' + fechaLarga(raw.desde) + ' al ' + fechaLarga(raw.hasta) + ' es futuro';
-    return { fecha_futura: true, desde: raw.desde, hasta: raw.hasta, aviso: futureNote(cual, today) };
+    const notice = { tipo: 'fecha_futura', desde: raw.desde, hasta: raw.hasta, hoy: today };
+    return { fecha_futura: true, desde: raw.desde, hasta: raw.hasta, aviso: noticeText(notice), notice };
   }
   let hasta = raw.hasta;
-  if (hasta > today) { avisos.push('El período pedido termina en una fecha futura (' + raw.hasta + '): conté hasta hoy (' + today + ').'); hasta = today; }
+  if (hasta > today) { notices.push({ tipo: 'hasta_futuro', hasta: raw.hasta, hoy: today }); hasta = today; }
   const desde = capDesde(raw.desde, hasta);
-  if (desde !== raw.desde) avisos.push('El período pedido (' + raw.desde + ' a ' + raw.hasta + ') pasa de ' + QUERY_LIMITS.maxDays + ' días: conté solo del ' + desde + ' al ' + hasta + '.');
-  return { p: limaBounds(desde, hasta), avisos, pedido: desde !== raw.desde ? { desde: raw.desde, hasta: raw.hasta } : null };
+  if (desde !== raw.desde) notices.push({ tipo: 'periodo_recortado', pedido_desde: raw.desde, pedido_hasta: raw.hasta, desde, hasta, max_dias: QUERY_LIMITS.maxDays });
+  return { p: limaBounds(desde, hasta), avisos: notices.map(noticeText), notices, pedido: desde !== raw.desde ? { desde: raw.desde, hasta: raw.hasta } : null };
 }
 
 // ---------- Resúmenes del día y del mes (helpers) ----------
@@ -207,9 +241,9 @@ export function summaryPeriods(tipo, args, nowMs) {
   let ref = w ? w.hasta : DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
   // (seguimiento PR #984) fecha futura: el período sigue quedando en hoy (forma de siempre), pero va «futuro» con el aviso y summaryQuery
   // contesta con él en vez del resumen de hoy. Día: después de hoy. Mes: un mes después del actual (un día futuro del mes en curso = este mes).
-  const futuro = (tipo === 'resumen_dia' ? ref > today : ref.slice(0, 7) > today.slice(0, 7)) && isRealDate(ref)
-    ? { desde: ref, aviso: tipo === 'resumen_dia' ? futureNote('El ' + fechaLarga(ref) + ' es una fecha futura', today)
-      : futureNote(MESES[Number(ref.slice(5, 7)) - 1].replace(/^./, (c) => c.toUpperCase()) + ' de ' + ref.slice(0, 4) + ' es un mes futuro', today) } : null;
+  const fNotice = (tipo === 'resumen_dia' ? ref > today : ref.slice(0, 7) > today.slice(0, 7)) && isRealDate(ref)
+    ? (tipo === 'resumen_dia' ? { tipo: 'fecha_futura', desde: ref, hasta: ref, hoy: today } : { tipo: 'mes_futuro', mes: ref.slice(0, 7), hoy: today }) : null;
+  const futuro = fNotice ? { desde: ref, aviso: noticeText(fNotice), notice: fNotice } : null;
   if (ref > today) ref = today;
   if (tipo === 'resumen_dia') return { actual: mkPeriod(ref, ref), anterior: mkPeriod(addDays(ref, -1), addDays(ref, -1)), en_curso: ref === today, futuro };
   const ym = ref.slice(0, 7), end = monthEnd(ym), enCurso = today.slice(0, 7) === ym, hasta = enCurso ? today : end;
@@ -598,14 +632,15 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   if (!tipo || !DATE_CHECK_TYPES.includes(tipo)) return runQuery(reader, args, nowMs, null);
   const chk = periodCheck(args, nowMs);
   if (chk.aviso) return { tipo, titulo: TITLES[tipo], columnas: [], filas: [], texto: chk.aviso,
-    resumen: { ...(chk.fecha_futura ? { desde: chk.desde, hasta: chk.hasta, fecha_futura: true } : { fecha_invalida: true }), aviso: chk.aviso } };
+    resumen: { ...(chk.fecha_futura ? { desde: chk.desde, hasta: chk.hasta, fecha_futura: true } : { fecha_invalida: true }), aviso: chk.aviso, [NOTICES]: [chk.notice] } };
   // Recortado: las demás consultas reciben las fechas ya recortadas (mismo período que dice el aviso).
   const a = chk.avisos.length ? { ...args, periodo: undefined, fecha: undefined, desde: chk.p.desde, hasta: chk.p.hasta } : args;
   const r = await runQuery(reader, a, nowMs, chk.p);
   if (r && !r.error && chk.avisos.length) {
     const aviso = chk.avisos.join(' ');
     r.texto = (typeof r.texto === 'string' && r.texto ? r.texto + ' ' : '') + aviso;
-    r.resumen = { ...(r.resumen || {}), aviso: [r.resumen?.aviso, aviso].filter(Boolean).join(' '), ...(chk.pedido ? { periodo_pedido: chk.pedido } : {}) };
+    r.resumen = { ...(r.resumen || {}), aviso: [r.resumen?.aviso, aviso].filter(Boolean).join(' '), ...(chk.pedido ? { periodo_pedido: chk.pedido } : {}),
+      [NOTICES]: [...(Array.isArray(r.resumen?.[NOTICES]) ? r.resumen[NOTICES] : []), ...chk.notices] };
   }
   return r;
 }
@@ -675,11 +710,11 @@ async function runQuery(reader, args, nowMs, checked) {
     // (VEN-040) cuántos productos se vendieron en total (lo cuenta el lector). Antes la lista se cortaba en N sin decirlo.
     // Sin cuenta del lector: si vino menos de N, la lista está completa; si no, no se sabe (null).
     const total = Number.isInteger(raw.total) ? Math.max(raw.total, filas.length) : raw.length < N ? filas.length : null, cut = total != null && total > filas.length;
-    const corte = cut ? 'Mostrando ' + filas.length + ' de ' + total + ' productos vendidos.' : null;
+    const corteN = cut ? { tipo: 'lista_cortada', mostrados: filas.length, total } : null, corte = corteN ? noticeText(corteN) : null;
     return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta, total,
       texto: (filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.') + (corte ? ' ' + corte : ''),
       // filas_en_pantalla: la tarjeta puede tener más filas que «top» (al modelo van M): así no cuenta «otros siete» si hay 9.
-      resumen: { desde: p.desde, hasta: p.hasta, filas_en_pantalla: filas.length, productos_vendidos: total, lista_cortada: cut, ...(corte ? { aviso: corte } : {}),
+      resumen: { desde: p.desde, hasta: p.hasta, filas_en_pantalla: filas.length, productos_vendidos: total, lista_cortada: cut, ...(corte ? { aviso: corte, [NOTICES]: [corteN] } : {}),
         top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
   }
   if (SUMMARY_TYPES.includes(tipo)) return summaryQuery(reader, tipo, args, nowMs, base);
@@ -795,7 +830,7 @@ async function cajaAbierta(reader, base) {
 // SOLO totales, conteos y «producto #código» (sin nombres de producto ni datos de clientes). Nada aquí escribe en la base.
 async function summaryQuery(reader, tipo, args, nowMs, base) {
   const per = summaryPeriods(tipo, args, nowMs);
-  if (per.futuro) return { ...base, columnas: [], filas: [], texto: per.futuro.aviso, resumen: { desde: per.futuro.desde, fecha_futura: true, aviso: per.futuro.aviso } };
+  if (per.futuro) return { ...base, columnas: [], filas: [], texto: per.futuro.aviso, resumen: { desde: per.futuro.desde, fecha_futura: true, aviso: per.futuro.aviso, [NOTICES]: [per.futuro.notice] } };
   if (typeof reader.periodSummary !== 'function') return { error: 'no_summary' };
   const [cur, prev] = await reader.periodSummary([per.actual, per.anterior]);
   const names = new Map((await reader.products()).map((x) => [String(x.id), x.nombre]));
