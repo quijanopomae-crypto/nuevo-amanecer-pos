@@ -160,13 +160,31 @@ test('revisión #1006: ningún paso ni botón del asistente dice «Abonar» (no 
   assert.ok(!BUTTON.test('Anular abono') && !BUTTON.test('sus abonos') && !BUTTON.test('el cliente abona'), 'el filtro no toca «abono»');
 });
 
-// (revisión #1006) La regla VARIOS CLIENTES (con los pasos a mano) es solo del Admin: el empleado no consulta deudas de clientes.
-test('revisión #1006: VARIOS CLIENTES y sus pasos a mano solo van en el prompt del Admin', () => {
+// (regla del dueño 23-10) El empleado también ve en pantalla el nombre real del cliente: la regla VARIOS CLIENTES (preguntar cuál, con
+// los pasos a mano) va también en el prompt del empleado. A la IA siguen yendo solo códigos neutros. Los permisos de consultas no cambian:
+// el empleado no consulta deudas de clientes (deuda_cliente), así que su regla no le pide consultar a todos ni nombra deuda_cliente.
+test('regla del dueño 23-10: VARIOS CLIENTES y sus pasos a mano van al Admin y también al empleado', () => {
   const owner = systemPrompt('owner', {}, ROSA);
-  assert.match(owner, /VARIOS CLIENTES/); assert.match(owner, /HISTORIAL DE PAGOS/); assert.match(owner, /Registrar pago/);
+  assert.match(owner, /VARIOS CLIENTES/); assert.match(owner, /HISTORIAL DE PAGOS/); assert.match(owner, /Registrar pago/); assert.match(owner, /consulta a todos/);
   for (const role of ['empleado:consultas', 'empleado', 'empleado:costos']) {
     const p = systemPrompt(role, {}, ROSA);
-    assert.ok(!/VARIOS CLIENTES|HISTORIAL DE PAGOS|pasos a mano/.test(p), role);
+    assert.match(p, /VARIOS CLIENTES/, role); assert.match(p, /HISTORIAL DE PAGOS/, role); assert.match(p, /Registrar pago/, role);
+    assert.ok(!/consulta a todos|deuda_cliente/.test(p.slice(p.indexOf('VARIOS CLIENTES'), p.indexOf('VARIOS CLIENTES') + 600)), role + ': la regla del empleado no pide consultar deudas');
+    assert.ok(!/VARIOS CLIENTES/.test(systemPrompt(role, {}, '¿cuánto vendí hoy?')), role);
+  }
+});
+
+test('regla del dueño 23-10: el empleado con dos clientes del mismo nombre recibe la pregunta y los pasos a mano; a la IA solo códigos', async () => {
+  for (const stream of [false, true]) {
+    const { r, cap } = await route(ROSA, (i, body) => { const [a, c] = neutralCodes(body); return ({ content: '¿El pago es de cliente #' + a + ' o de cliente #' + c + '?' }); }, { role: 'empleado:consultas', stream });
+    const text = await r.text(); assert.equal(r.status, 200, text.slice(0, 300));
+    const b = stream ? sseEvents(text).find((e) => e.e === 'final').d : JSON.parse(text);
+    assert.match(b.reply, /cliente #1 o de cliente #13/);
+    assert.match(b.reply, /Clientes > toque al cliente \(Ficha financiera\) > HISTORIAL DE PAGOS/); assert.match(b.reply, /Registrar pago/);
+    assert.match(b.reply, /no cambia deudas/); assert.ok(!/Abonar/.test(b.reply), b.reply);
+    assert.deepEqual(neutralCodes(cap[0]), ['C-0001', 'C-0002']);
+    assert.match(JSON.parse(cap[0]).messages.find((m) => m.role === 'system').content, /VARIOS CLIENTES/);
+    noNames(cap);
   }
 });
 
