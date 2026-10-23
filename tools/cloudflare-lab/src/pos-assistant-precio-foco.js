@@ -118,6 +118,16 @@ export function tiedProducts(products, text) {
   const top = score(ranked[0]);
   return ranked.filter((p) => score(p) === top);
 }
+// De los empatados, los que comparten con el producto de la tarjeta una palabra de la frase (dos «arroz»). Productos distintos con su propia
+// palabra («el arroz … y saca 2 de azúcar») no son «¿cuál?»: cada uno tiene la suya.
+export function rivalsOf(hits, text, id) {
+  const stem = (w) => (w.length >= 5 && w.endsWith('es') && !/[aeiou]es$/.test(w) ? w.slice(0, -2) : w.length >= 4 && w.endsWith('s') ? w.slice(0, -1) : w);
+  const words = fold(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3).map(stem);
+  const own = (hits || []).find((h) => String(h.id) === String(id)); if (!own) return [];
+  const mine = words.filter((w) => fold(own.nombre).includes(w));
+  const rivals = hits.filter((h) => h !== own && mine.some((w) => fold(h.nombre).includes(w)));
+  return rivals.length ? [own, ...rivals] : [];
+}
 const lastAmount = (text) => { const m = fold(text).match(/\d+(?:[.,]\d+)?/g); return m ? Number(m[m.length - 1].replace(',', '.')) : null; };
 
 // Antes de dedupeActions: «11.90… no, mejor 11.50» con dos tarjetas del mismo producto -> queda la del último precio.
@@ -152,8 +162,9 @@ export function settlePriceCards({ proposals, dropped, text, products, lastAssis
   if (priceAmountMissing(text)) { drop(() => true, 'price_amount_missing'); out.reply = amountAskText(hits); out.note = null; return out; }
   const answered = /\bcual\b/.test(fold(lastAssistant)); // ya se preguntó «¿cuál?» y esto es la respuesta
   const one = cards();
-  if (!answered && one.length === 1 && hits.length > 1 && hits.some((h) => String(h.id) === String(one[0].product_id))) {
-    drop(() => true, 'ambiguous_product'); out.reply = whichProductText(hits); out.note = null; return out;
+  const rivals = one.length === 1 ? rivalsOf(hits, text, one[0].product_id) : [];
+  if (!answered && rivals.length > 1) {
+    drop(() => true, 'ambiguous_product'); out.reply = whichProductText(hits.filter((h) => rivals.includes(h))); out.note = null; return out;
   }
   if (!one.length && hits.length > 1 && !answered) { out.reply = whichProductText(hits); out.note = null; return out; }
   const plus = costPlus(text);

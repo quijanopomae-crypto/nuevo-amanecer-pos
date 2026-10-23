@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { assistantChatRoute, createMemoryUsageStore } from '../../tools/cloudflare-lab/src/pos-assistant.js';
-import { precioPromptLines, OFFER_TEXT, DISCOUNT_DATA_TEXT, DISCOUNT_NOTE, BOX_PRICE_TEXT, BOX_PRICE_NOTE, BOX_READ_NOTE, ZERO_PRICE_TEXT } from '../../tools/cloudflare-lab/src/pos-assistant-precio-foco.js';
+import { rivalsOf, precioPromptLines, OFFER_TEXT, DISCOUNT_DATA_TEXT, DISCOUNT_NOTE, BOX_PRICE_TEXT, BOX_PRICE_NOTE, BOX_READ_NOTE, ZERO_PRICE_TEXT } from '../../tools/cloudflare-lab/src/pos-assistant-precio-foco.js';
 const require = createRequire(import.meta.url);
 const C = require('../../POS/js/modules/asistente/asistente-core.js');
 
@@ -162,4 +162,21 @@ test('empleado: «pon la leche gloria a 4.20» no abre la herramienta de precio 
   quiet(t); const bodies = [];
   await chat('pon la leche gloria a 4.20', [tools(consult('leche gloria')), answer('Eso lo cambia el dueño.')], bodies, 'employee');
   for (const b of bodies.slice(1)) assert.ok(!toolNames(b).includes('proponer_cambio_precio'));
+});
+
+// Mezcla con #987 (seguridad, prueba 4): «sube el arroz a 4.50 y saca 2 de azúcar» son DOS productos distintos, cada uno con su palabra;
+// el empate de puntaje entre ellos no es «¿cuál?». Solo es ambiguo si otro producto comparte la palabra de la tarjeta (dos «arroz»).
+const ajusteCall = (product_id, cantidad, index = 1) => ({ index, id: 'a' + index, function: { name: 'proponer_ajuste_stock', arguments: JSON.stringify({ product_id, tipo: 'salida', cantidad, motivo: 'merma' }) } });
+test('precio + ajuste de productos distintos en una frase: las dos tarjetas quedan (sin «¿Cuál de estos?»)', async (t) => {
+  quiet(t);
+  const f = await chat('sube el detergente a 9 y saca 2 de atún', [tools(precio('D1', 9), ajusteCall('T1', 2))], []);
+  assert.deepEqual(cards(f).map((p) => p.product_id), ['D1'], f.reply); // (la tarjeta de ajuste de este arnés no trae el producto en el contexto del aparato)
+  assert.doesNotMatch(f.reply, /¿Cuál de estos\?/);
+  // la misma regla en las tarjetas de ajuste (pos-assistant-ajuste-foco.js usa rivalsOf)
+  const H = PRODUCTS.filter((p) => ['A1', 'A2', 'T1', 'D1'].includes(p.id));
+  assert.deepEqual(rivalsOf(H, 'saca 2 de atún y sube el detergente a 9', 'T1'), []);
+  assert.deepEqual(rivalsOf(H, 'saca 2 de arroz y 1 de atún', 'A1').map((p) => p.id), ['A1', 'A2']);
+  // dos «arroz» con una tarjeta: sigue siendo «¿cuál?»
+  const h = await chat('sube el arroz a 4 y saca 2 de atún', [tools(precio('A1', 4), ajusteCall('T1', 2))], []);
+  assert.equal(cards(h).length, 0); assert.match(h.reply, /^¿Cuál de estos\? .*Costeño.*Faraón/); assert.doesNotMatch(h.reply, /Atún/);
 });

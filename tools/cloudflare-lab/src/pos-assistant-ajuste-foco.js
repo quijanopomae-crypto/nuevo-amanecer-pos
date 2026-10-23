@@ -5,7 +5,7 @@
 // - Conteo («conté 15», «pon el stock en 20»): la tarjeta lleva la DIFERENCIA con el stock actual, nunca 15 como entrada.
 // - Salida que deja el stock negativo: se avisa en el texto (la tarjeta ya lo marca).
 // Alcance: solo la tarjeta del chat. La confirmación (y su 409 «el stock cambió») no se toca aquí.
-import { tiedProducts } from './pos-assistant-precio-foco.js';
+import { tiedProducts, rivalsOf } from './pos-assistant-precio-foco.js';
 
 const fold = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const qtyTxt = (v) => String(Math.round(Number(v) * 1000) / 1000);
@@ -43,7 +43,8 @@ export function settleAdjustCards({ proposals, dropped, text, products, lastAssi
   const cards = () => proposals.filter((p) => p.type === 'ajuste');
   const drop = (pred, why) => { for (let k = proposals.length - 1; k >= 0; k--) if (proposals[k].type === 'ajuste' && pred(proposals[k])) { proposals.splice(k, 1); dropped.push({ dropped: why, tool: 'proponer_ajuste_stock' }); } };
   const hits = tiedProducts(products, text), answered = /\bcual\b/.test(fold(lastAssistant)), one = cards();
-  if (!answered && one.length === 1 && hits.length > 1 && hits.some((h) => String(h.id) === String(one[0].product_id))) { drop(() => true, 'ambiguous_product'); out.reply = whichStockText(hits); return out; }
+  const rivals = one.length === 1 ? rivalsOf(hits, text, one[0].product_id) : [];
+  if (!answered && rivals.length > 1) { drop(() => true, 'ambiguous_product'); out.reply = whichStockText(hits.filter((h) => rivals.includes(h))); return out; }
   if (!one.length) { if (hits.length > 1 && !answered) out.reply = whichStockText(hits); return out; }
   const n = countedTarget(text);
   if (n != null && one.length === 1 && one[0].stock_actual != null) {
