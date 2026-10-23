@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 195: lote asistente (#962 #958 #929 #960 #957 #969 #963 #959 #932, merge 4f08b5f8). Backend Worker 73 run 39881912812 success y salud verificada. Respaldo DB run 39881741834. CI crítico, E2E y visual success en cada PR. Sin migraciones ni datos comerciales. Rollback web a 8c9452a2 (Web 194, ops #965).",
-  "retry_attempt": 195,
-  "retry_reason": "Owner autorizó 2026-10-22: aprobado publiquen todo lo ya terminaron. Rollback a 8c9452a2.",
-  "requested_at_utc": "2026-10-23T01:05:34Z",
-  "approved_base": "e2c662a5ecb3d7c68a2df268830900a19584bb73"
+  "note": "Web196: configuración desde chat, PR972 merge b67ffeb9. Suite asistente1006/1006, CANON Critical CI/E2E/Visual success y revisión independiente/forensic sin P0/P1. Aplicar este trigger solo tras Worker74 run39923085018 success y salud verificada. Sin migraciones ni datos comerciales. Rollback web873f5fd6 (Web195). Prueba interactiva de producción pendiente: navegador sin activación.",
+  "retry_attempt": 196,
+  "retry_reason": "Owner solicita configurar sistema desde chat. Alcance diez preferencias existentes; autorización de implementación vigente. Rollback Web195 873f5fd6.",
+  "requested_at_utc": "2026-10-23T08:13:24.925Z",
+  "approved_base": "3f30522be2a6c1df75a2e5c84b61be65935b7de4"
 }
