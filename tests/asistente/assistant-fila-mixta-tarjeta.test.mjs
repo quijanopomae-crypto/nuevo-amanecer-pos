@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { makeDoc, Node_ } from './fake-dom.mjs';
 import { purchasesRoute } from '../../tools/cloudflare-lab/src/pos-purchases.js';
 import { MISSING_BOX_TEXT } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 const require = createRequire(import.meta.url);
@@ -38,9 +39,54 @@ test('tarjeta: una fila con cantidad y algo raro sigue con «Está bien» y «Qu
   assert.match(h, /data-accept="0">Está bien</); assert.match(h, /data-drop="0">Quitar fila</); assert.doesNotMatch(h, /data-(?:accept|drop)="1"/);
   assert.match(h, /<td>500 × Leche Gloria 395g/); assert.match(h, /<td>2 × Leche Gloria 395g/);
 });
-test('422 del servidor (markRows): a una fila sin cantidad tampoco se le ofrece «Está bien»', () => {
-  const m = sliceFn(UI, '    function markRows(idx, limit) {', '    // «Pedir de nuevo»');
-  assert.match(m, /limit \|\| noQty\(p\.lineas && p\.lineas\[i\]\) \? '' : '<button type="button" data-accept=/);
+// 422 del servidor: markRows REAL (sacado de asistente-ui.js) sobre el DOM de prueba (fake-dom.mjs), con querySelector mínimo.
+function shimDom() {
+  const doc = makeDoc(), P = Node_.prototype;
+  const match = (n, sel) => { if (n.nodeType !== 1) return false; if (sel[0] === '.') return n._cls.has(sel.slice(1));
+    const m = /^tr\[data-row="(\d+)"\]$/.exec(sel); if (m) return n.tagName === 'TR' && (n.dataset.row === m[1] || n.attrs['data-row'] === m[1]);
+    return n.tagName === sel.toUpperCase(); };
+  P.querySelectorAll = function (sel) { if (sel === 'table tr') return this.byTag('table').flatMap((t) => t.byTag('tr')); return this.all().filter((n) => match(n, sel)); };
+  P.querySelector = function (sel) { return this.querySelectorAll(sel)[0] || null; };
+  P.removeAttribute = function (k) { delete this.attrs[k]; if (k.startsWith('data-')) delete this.dataset[k.slice(5)]; };
+  return doc;
+}
+function cardDom(doc, lineas, flaggedAtRender) {
+  const c = doc.createElement('div'), table = doc.createElement('table'); c.appendChild(table);
+  const head = doc.createElement('tr'); head.appendChild(doc.createElement('th')); table.appendChild(head);
+  lineas.forEach((l, i) => { const tr = doc.createElement('tr'), td = doc.createElement('td'); td.textContent = (l.cantidad == null ? 'Falta la cantidad · ' : l.cantidad + ' × ') + l.nombre; tr.appendChild(td); table.appendChild(tr);
+    if (flaggedAtRender.includes(i)) { tr.classList.add('flag'); tr.dataset.row = String(i); const t = doc.createElement('div'); t.className = 'flag-t'; t.textContent = 'Revisa este dato: algo'; td.appendChild(t);
+      const a = doc.createElement('div'); a.className = 'flag-a'; td.appendChild(a); } });
+  return c;
+}
+function runMarkRows(lineas, idx, limit, flaggedAtRender = []) {
+  const doc = shimDom(), c = cardDom(doc, lineas, flaggedAtRender), decided = { 0: 'accept', 1: 'accept' };
+  const ctx = vm.createContext({ doc, c, p: { type: 'compra', lineas }, decided, String, Number });
+  vm.runInContext(sliceFn(UI, '  function el(tag, cls, html) {', '\n') + '\n' + sliceFn(UI, '  var REVIEW_TEXT = ', '\n') + '\n' +
+    sliceFn(UI, '  function noQty(l) {', '  function cardHtml(p) {') + sliceFn(UI, '    function markRows(idx, limit) {', '    // «Pedir de nuevo»'), ctx);
+  ctx.markRows(idx, limit);
+  const rows = c.querySelectorAll('table tr').slice(1);
+  return { decided, rows: rows.map((tr) => ({ flag: tr._cls.has('flag'), notice: tr.querySelector('.flag-t')?.textContent ?? null, buttons: tr.querySelector('.flag-a')?.innerHTML ?? null })) };
+}
+const OK = { product_id: 'P1', nombre: 'Leche', cantidad: 500, costo_unitario: 3.5, costo_actual: 3.4, revisar: ['cantidad'] };
+
+test('422 (markRows real): fila sin cantidad -> conserva su aviso «Falta cuántas trae la caja» y solo «Quitar fila»', () => {
+  for (const flaggedAtRender of [[], [0]]) { // marcada por el servidor recién en el 422, o ya marcada al dibujar la tarjeta
+    const r = runMarkRows([MIX, OK], [0, 1], false, flaggedAtRender);
+    const [mix, ok] = r.rows;
+    assert.ok(mix.flag);
+    assert.match(mix.notice, /Falta cuántas trae la caja/, 'el aviso propio de la fila: ' + mix.notice);
+    assert.notEqual(mix.notice, 'Revisa este dato');
+    assert.doesNotMatch(mix.buttons, /data-accept/); assert.match(mix.buttons, /data-drop="0">Quitar fila</);
+    assert.equal(ok.notice, 'Revisa este dato', 'fila con cantidad: igual que antes');
+    assert.match(ok.buttons, /data-accept="1">Está bien</); assert.match(ok.buttons, /data-drop="1">Quitar fila</);
+    assert.deepEqual({ ...r.decided }, {}, 'el 422 borra las decisiones previas de esas filas');
+  }
+  const bare = runMarkRows([{ ...MIX, revisar: undefined }], [0], false).rows[0]; // sin «revisar»: igual dice qué falta
+  assert.match(bare.notice, /Falta la cantidad/); assert.doesNotMatch(bare.buttons, /data-accept/);
+});
+test('422 de límite (markRows real): el texto de límite y solo «Quitar fila», con o sin cantidad', () => {
+  const r = runMarkRows([MIX, OK], [0, 1], true);
+  for (const [i, row] of r.rows.entries()) { assert.equal(row.notice, 'Fuera del límite: quita la fila o corrige la factura'); assert.equal(row.buttons, '<button type="button" data-drop="' + i + '">Quitar fila</button>'); }
 });
 
 // «Nueva compra»: una fila sin cantidad no se registra (readLines la marca como mala; el botón Registrar muestra «Revisa la línea N»).
