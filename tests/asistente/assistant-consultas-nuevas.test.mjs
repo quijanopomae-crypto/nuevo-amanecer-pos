@@ -292,7 +292,10 @@ test('antier = hoy − 2 y mismo_dia_semana_pasada = mismo día de la semana 7 d
 test('alias: antier, anteayer, antes de ayer, «era antier», «el mismo día de la otra semana»; fecha AAAA-MM-DD exacta', () => {
   for (const w of ['antier', 'Anteayer', 'antes de ayer', 'ante ayer', 'era antier', 'antier?']) assert.equal(dateWord(w), 'antier', w);
   for (const w of ['mismo_dia_semana_pasada', 'el mismo día de la otra semana', 'mismo día de la semana pasada', 'hoy hace una semana', 'hace 7 días']) assert.equal(dateWord(w), 'mismo_dia_semana_pasada', w);
-  assert.equal(dateWord('ayer'), 'ayer'); assert.equal(dateWord('mañana'), null);
+  assert.equal(dateWord('ayer'), 'ayer');
+  // (auditoría VEN-028) «mañana» ya no se descarta (antes null → la consulta contaba HOY en silencio): se reconoce y la consulta avisa que es futura.
+  // Sigue fuera de DATE_WORDS (el enum del esquema no cambia).
+  assert.equal(dateWord('mañana'), 'manana'); assert.ok(!DATE_WORDS.includes('manana'));
   assert.ok(DATE_WORDS.includes('antier') && DATE_WORDS.includes('mismo_dia_semana_pasada'));
   const now = lima('2026-10-22', 15);
   assert.deepEqual([period({ fecha: '2026-10-07' }, now).desde, period({ fecha: '2026-10-07' }, now).hasta], ['2026-10-07', '2026-10-07']);
