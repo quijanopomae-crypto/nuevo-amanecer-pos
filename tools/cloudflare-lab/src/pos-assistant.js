@@ -25,7 +25,7 @@ import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel, brandNoticeOf, BRAND_NOTICE, BRAND_NOTICE_LEAD, saysNoBrand } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
@@ -2719,7 +2719,8 @@ function employeeQueryText(r, e) {
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   if (r.tipo === 'stock_producto' && iP >= 0 && iS >= 0) {
     if (!e.filas.length) return 'No encontré ese producto.';
-    return employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
+    // INV-047 / INV-008: marca que la tienda no tiene. Texto fijo: nunca repite la palabra escrita (revisión de #1001)
+    return (brandNoticeOf(r.resumen) ? BRAND_NOTICE_LEAD : '') + employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
   }
   if (r.tipo === 'stock_producto' && !e.filas.length) return 'No encontré ese producto.';
   if (r.tipo === 'bajo_stock' && iP >= 0 && iS >= 0) {
@@ -3324,7 +3325,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     return json(COSTS_ADMIN_ONLY, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
-  const consultas = [], toolMsgs = [], refIds = new Set(); let queryCut = false;
+  const consultas = [], toolMsgs = [], refIds = new Set(); let queryCut = false, brandMissing = false;
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
   if (!seesOwnerData(role)) for (const p of proposals.filter((x) => x.type === 'documento')) {
     let d; try { d = reader ? await timed(() => employeeDocumentRows(reader, p.tipo)) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
@@ -3343,6 +3344,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (!costQueryAllowed(role, p.query?.tipo)) r = { error: COSTS_ADMIN_ONLY.error };
     else try { r = reader ? await timed(() => runAssistantQuery(reader, p.query, now)) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
     if (r && r.truncado) queryCut = true;
+    if (r && !r.error && brandNoticeOf(r.resumen)) brandMissing = true; // INV-047 / INV-008
     if (!seesOwnerData(role)) r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null, ...(r.truncado === true ? { truncado: true } : {}) };
     consultas.push(p);
@@ -3390,6 +3392,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (emit && !second.error && !confirmHeld(emit)) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);
     }
+    // (INV-047 / INV-008) marca que la tienda no tiene: si la respuesta no lo dice, el servidor pone el aviso en su propia línea, antes.
+    // Texto fijo «No tengo esa marca…»: nunca lleva la palabra que escribió la persona (revisión de #1001).
+    if (brandMissing && !saysNoBrand(reply)) reply = BRAND_NOTICE + (reply ? '\n' + reply : '');
   }
   for (const p of proposals) delete p._call;
   // Id único de propuesta: lo genera el SERVIDOR y queda firmado dentro del token (pid). El cliente nunca lo arma.
