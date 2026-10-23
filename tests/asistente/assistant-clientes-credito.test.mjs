@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { assistantChatRoute, createMemoryUsageStore, toolsForRole, toProposal, employeeToolGuard, ADMIN_ONLY_QUERY_TYPES, systemPrompt } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { memoryReader, canonicalReader, runAssistantQuery, QUERY_TYPES } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import { mockAssistantReply } from '../../tools/cloudflare-lab/src/pos-assistant-mock.js';
+import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
 
 const SECRET = 'secreto-de-prueba-0123456789abcdef';
 const NOW = Date.parse('2026-10-23T20:00:00.000Z'); // viernes 23-10-2026, 15:00 en Lima (semana: 19 al 23)
@@ -44,12 +45,12 @@ const DATA = {
 const ENV = { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, OHMYAGENT_API_KEY: 'k-ohmy', ROUTEWAY_API_KEY: 'k-rw' };
 const q = (args, data = DATA) => runAssistantQuery(memoryReader(data), args, NOW);
 
-async function route(text, responses, role = 'owner') {
+async function route(text, responses, role = 'owner', data = DATA) {
   const cap = [];
   const f = async (url, init) => { cap.push(String(init.body)); const r = responses[Math.min(cap.length - 1, responses.length - 1)]; return msg(r); };
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ context: { products: DATA.products }, text }) }),
     ENV, { principalId: 'session:x', posRole: role }, json,
-    { store: createMemoryUsageStore(), resolveRole: async () => role, fetch: f, reader: memoryReader(DATA), audit: async () => {}, mockChunkMs: 0, now: () => NOW });
+    { store: createMemoryUsageStore(), resolveRole: async () => role, fetch: f, reader: memoryReader(data), audit: async () => {}, mockChunkMs: 0, now: () => NOW });
   return { r, cap };
 }
 const noNames = (cap) => { for (const b of cap) assert.ok(!NAMES.test(b), 'llegó un nombre a la IA: ' + b.slice(0, 300)); };
@@ -229,4 +230,140 @@ test('modo demostración: cobros de fiados y límite de fiado van a su consulta'
   assert.equal(tipoOf('cuanto me abonaron hoy').tipo, 'cobros_creditos');
   assert.deepEqual(tipoOf('cuanto le puedo fiar al cliente #7'), { tipo: 'deuda_cliente', cliente_id: '7' });
   assert.equal(tipoOf('quien me debe mas').tipo, 'deudas_clientes');
+});
+
+// ---------- Revisión del PR #995 ----------
+// Cobros con anulación: la anulación (fila negativa) descuenta el monto y el cobro. +20, −20, +5 = S/ 5.00 en 1 cobro.
+// Cada crédito trae su id (credito) y cada cobro el id del crédito (credit_id): así se separan los cobros de UN cliente.
+const DATA_CR = {
+  ...DATA,
+  credits: [
+    { credito: 'CR3a', cliente: '3', saldo: 100, vence: '2026-11-01' }, { credito: 'CR3b', cliente: '3', saldo: 50, vence: '2026-11-10' },
+    { credito: 'CR5', cliente: '5', saldo: 80, vence: '2026-11-05' }, { credito: 'CR7', cliente: '7', saldo: 0, vence: '2026-10-01' }
+  ],
+  payments: [
+    { credit_id: 'CR5', payment_timestamp: '2026-10-20T16:00:00.000Z', amount_cents: 2000 },
+    { credit_id: 'CR5', payment_timestamp: '2026-10-20T16:30:00.000Z', amount_cents: -2000 }, // anulación del cobro anterior
+    { credit_id: 'CR5', payment_timestamp: '2026-10-21T16:00:00.000Z', amount_cents: 500 },
+    { credit_id: 'CR3a', payment_date: '2026-10-22', amount_cents: 1400 },
+    { credit_id: 'CR3b', payment_timestamp: '2026-10-23T14:00:00.000Z', amount_cents: 1000 },
+    { credit_id: 'CR5', payment_timestamp: '2026-10-16T16:00:00.000Z', amount_cents: 9900 }
+  ]
+};
+
+test('#995 cobros netos: +20, −20 (anulación), +5 = S/ 5.00 en 1 cobro; la anulación descuenta monto y cuenta', async () => {
+  const data = { ...DATA, payments: [
+    { payment_timestamp: '2026-10-21T15:00:00.000Z', amount_cents: 2000 },
+    { payment_timestamp: '2026-10-21T15:10:00.000Z', amount_cents: -2000 },
+    { payment_timestamp: '2026-10-21T16:00:00.000Z', amount_cents: 500 }
+  ] };
+  const r = await q({ tipo: 'cobros_creditos', fecha: '2026-10-21' }, data);
+  assert.equal(r.texto, 'Cobros de fiados 2026-10-21: S/ 5.00 en 1 cobro.');
+  assert.equal(r.resumen.cobros_soles, 5); assert.equal(r.resumen.cobros, 1);
+  // Semana de toda la tienda con anulación: 20 − 20 + 5 + 14 + 10 = 29 en 3 cobros (4 cobros − 1 anulado).
+  const w = await q({ tipo: 'cobros_creditos', periodo: 'esta_semana' }, DATA_CR);
+  assert.equal(w.texto, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.');
+  // Un cobro anulado solo, sin otro: no hubo cobros (nunca un conteo negativo).
+  const anul = await q({ tipo: 'cobros_creditos', fecha: '2026-10-20' }, { ...DATA, payments: data.payments.slice(0, 2).map((x) => ({ ...x, payment_timestamp: x.payment_timestamp.replace('21', '20') })) });
+  assert.match(anul.texto, /^No hubo cobros de fiados 2026-10-20\./);
+});
+
+test('#995 lector canónico real: cobros vivos con anulación (COMPENSATION) dan S/ 5.00 en 1 cobro; por cliente vía credit_id', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
+  const db = f.database;
+  const promo = db.prepare('SELECT active_promotion_id AS p FROM canonical_control WHERE id=1').get().p;
+  const cr = db.prepare('SELECT credit_id, customer_id FROM credits WHERE promotion_id=?').all(promo);
+  assert.equal(cr.length, 1);
+  // Solo prueba: eventos insertados directo (sin las validaciones del flujo de cobro, que tiene sus propias pruebas).
+  db.exec('PRAGMA foreign_keys=OFF');
+  for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='canonical_financial_events'").all()) db.exec('DROP TRIGGER ' + name);
+  const ev = db.prepare('INSERT INTO canonical_financial_events(event_id,operation_id,promotion_id,event_type,credit_id,credit_provenance,credit_delta_cents,payment_method,reason,compensates_operation_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+  ev.run('E1', 'o1', promo, 'PAYMENT', cr[0].credit_id, 'IMPORT', -2000, 'efectivo', null, null, '2026-10-21T15:00:00.000Z');
+  ev.run('E2', 'o2', promo, 'COMPENSATION', cr[0].credit_id, 'IMPORT', 2000, null, 'Anulación del cobro', 'o1', '2026-10-21T15:10:00.000Z');
+  ev.run('E3', 'o3', promo, 'PAYMENT', cr[0].credit_id, 'IMPORT', -500, 'yape', null, null, '2026-10-21T16:00:00.000Z');
+  const rd = canonicalReader(f.env.nuevo_amanecer_lab);
+  const pays = (await rd.creditPayments()).filter((x) => x.dia === '2026-10-21');
+  assert.deepEqual(pays.map((x) => x.c), [20, -20, 5]);
+  assert.ok(pays.every((x) => x.cr === cr[0].credit_id), 'cada cobro trae su crédito');
+  assert.equal((await rd.credits())[0].credito, cr[0].credit_id);
+  const todo = await runAssistantQuery(rd, { tipo: 'cobros_creditos', fecha: '2026-10-21' }, NOW);
+  assert.equal(todo.texto, 'Cobros de fiados 2026-10-21: S/ 5.00 en 1 cobro.');
+  const uno = await runAssistantQuery(rd, { tipo: 'cobros_creditos', fecha: '2026-10-21', cliente_id: cr[0].customer_id }, NOW);
+  assert.equal(uno.texto, `Cobros de fiados de cliente #${cr[0].customer_id} 2026-10-21: S/ 5.00 en 1 cobro.`);
+  const otro = await runAssistantQuery(rd, { tipo: 'cobros_creditos', fecha: '2026-10-21', cliente_id: 'NADIE' }, NOW);
+  assert.ok(!/S\/ 5\.00/.test(otro.texto), otro.texto);
+});
+
+test('#995 cobros_creditos con cliente_id: solo los cobros de ESE cliente, nunca el total de la tienda', async () => {
+  const r = await q({ tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: '5' }, DATA_CR);
+  assert.equal(r.texto, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.');
+  assert.equal(r.resumen.cliente, 'cliente #5'); assert.equal(r.resumen.cobros_soles, 5);
+  const tres = await q({ tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: 'cliente #3' }, DATA_CR);
+  assert.equal(tres.texto, 'Cobros de fiados de cliente #3 2026-10-19 a 2026-10-23: S/ 24.00 en 2 cobros.');
+  const nada = await q({ tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: '7' }, DATA_CR);
+  assert.match(nada.texto, /^No hubo cobros de fiados de cliente #7 2026-10-19 a 2026-10-23\./);
+  // Sin forma de separar por cliente (cobros sin crédito): lo dice; nunca el total de la tienda como si fuera del cliente.
+  const sin = await q({ tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: '5' });
+  assert.ok(!/S\/ \d/.test(sin.texto), sin.texto); assert.match(sin.texto, /cliente #5/); assert.match(sin.texto, /ficha del cliente/);
+});
+
+test('#995 toProposal pasa cliente_id en cobros_creditos; un código desconocido no se convierte en el total de la tienda', () => {
+  const p = toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: '5' }) }, 'owner', { products: [] }, 1);
+  assert.equal(p.query.cliente_id, '5');
+  const u = toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: '#?' }) }, 'owner', { products: [] }, 1);
+  assert.equal(u.dropped, 'unknown_customer');
+  const c = toolsForRole('owner').find((t) => t.function.name === 'consultar').function;
+  assert.ok(c.parameters.properties.cliente_id.description.includes('el código de «cliente #CODIGO», sin el nombre.'));
+  assert.match(c.parameters.properties.cliente_id.description, /cobros_creditos/);
+});
+
+test('#995 chat del Admin: «cuánto me pagó cliente #5 de su deuda esta semana» da SOLO lo de cliente #5 (ventas_periodo, cobros_creditos con y sin cliente_id)', async () => {
+  const text = '¿cuánto me pagó cliente #5 de su deuda esta semana?';
+  const want = 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.';
+  for (const args of [{ tipo: 'ventas_periodo', periodo: 'esta_semana' }, { tipo: 'cobros_creditos', periodo: 'esta_semana', cliente_id: 'C-0001' }, { tipo: 'cobros_creditos', periodo: 'esta_semana' }]) {
+    const { r, cap } = await route(text, [{ content: '', tool_calls: [call('consultar', args)] }], 'owner', DATA_CR);
+    assert.equal(r.status, 200); const d = await r.json();
+    assert.equal(d.reply.trim(), want, JSON.stringify(args));
+    assert.ok(!/29\.00|Ventas/.test(d.reply), 'nunca el total de la tienda: ' + JSON.stringify(args));
+    noNames(cap);
+    assert.ok(!/cliente #5/.test(cap[0]), 'a la IA solo el código neutral');
+  }
+  const m = JSON.parse(mockAssistantReply({ role: 'owner', ctx: { products: [] }, text }).calls[0].arguments);
+  assert.deepEqual([m.tipo, m.cliente_id], ['cobros_creditos', '5']);
+});
+
+test('#995 saldo a favor: deudas 80 y −30 con límite 100 = puede fiarle S/ 50.00', async () => {
+  const data = { ...DATA, credits: [{ cliente: '5', saldo: 80 }, { cliente: '5', saldo: -30 }] };
+  const r = await q({ tipo: 'deuda_cliente', cliente_id: '5' }, data);
+  assert.match(r.texto, /puede fiarle hasta S\/ 50\.00 más/);
+  assert.equal(r.resumen.disponible_fiado_soles, 50);
+  // Solo saldo a favor: el disponible nunca pasa del límite.
+  const favor = await q({ tipo: 'deuda_cliente', cliente_id: '5' }, { ...DATA, credits: [{ cliente: '5', saldo: -30 }] });
+  assert.equal(favor.resumen.disponible_fiado_soles, 100);
+});
+
+test('#995 creditPolicy no distingue mayúsculas: «cliente #c7» encuentra el límite de C7', async () => {
+  const data = { ...DATA, customers: [{ id: 'C7', nombre: 'Carmen Flores' }], credits: [{ cliente: 'C7', saldo: 30 }], creditPolicies: { C7: { mode: 'MANUAL', manual_limit_cents: 20000 } } };
+  const r = await q({ tipo: 'deuda_cliente', cliente_id: 'c7' }, data);
+  assert.match(r.texto, /Límite de fiado registrado: S\/ 200\.00/);
+  assert.equal(r.resumen.disponible_fiado_soles, 170);
+  assert.deepEqual(await memoryReader(data).creditPolicy('c7'), { mode: 'MANUAL', limite: 200 });
+});
+
+test('#995 límite de fiado con «fío», «fía», «fiarle»; «cuánto fío a la semana» no', () => {
+  for (const text of ['¿hasta cuánto le fío al cliente #7?', '¿cuánto le fía al cliente #7?', '¿cuánto es lo máximo para fiarle al cliente #7?']) {
+    assert.match(systemPrompt('owner', { products: [] }, text), /LÍMITE DE FIADO/, text);
+    assert.deepEqual(JSON.parse(mockAssistantReply({ role: 'owner', ctx: { products: [] }, text }).calls[0].arguments), { tipo: 'deuda_cliente', cliente_id: '7' }, 'mock ' + text);
+  }
+  assert.ok(!/LÍMITE DE FIADO/.test(systemPrompt('owner', { products: [] }, '¿cuánto fío a la semana?')));
+});
+
+test('#995 «registra un pago de deuda de cliente #5» es una acción: sin regla de COBROS ni cambio a cobros_creditos', async () => {
+  for (const text of ['registra un pago de deuda de cliente #5 por 20 soles', 'anota el abono de crédito de cliente #5: 20 soles']) {
+    assert.ok(!/COBROS DE FIADOS/.test(systemPrompt('owner', { products: [] }, text)), text);
+    const { r } = await route(text, [{ content: '', tool_calls: [call('consultar', { tipo: 'ventas_periodo', periodo: 'hoy' })] }], 'owner', DATA_CR);
+    const d = await r.json(); assert.ok(!/Cobros de fiados/.test(d.reply), text + ' -> ' + d.reply);
+    const m = mockAssistantReply({ role: 'owner', ctx: { products: [] }, text });
+    assert.ok(!(m.calls || []).some((c) => /cobros_creditos/.test(c.function?.arguments ?? c.arguments ?? JSON.stringify(c))), 'mock ' + text);
+  }
 });
