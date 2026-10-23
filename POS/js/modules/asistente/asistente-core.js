@@ -8,6 +8,7 @@
   var PATTERNS = [
     // (auditoría 500, OCR-023) «pin» + espacio + palabra de solo letras («CHUPETIN PIN POP», «pin pon») es nombre de producto: no se tapa.
     [/\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\b(\s*(?:es|era|de|:|=)?\s*)([^\s,.;]{3,})/gi, function (m, k, sep, val) {
+      if (HELD.test(val)) return m; // una marca ya tapada («[clave oculta]» → «[oculto]»+carácter mientras corren los patrones)
       return /^pin$/i.test(k) && /^[ \t]+$/.test(sep) && !/\d/.test(val) && !/^(?:es|era|de|actual|nuevo|nueva|secreto)$/i.test(val) ? m : k + sep + '[oculto]'; }],
     [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[correo oculto]'],
     [/\b(?:RUC\s*(?:N[°º.]?\s*)?[:#-]?\s*)?(?:10|15|17|20)\d{9}\b/gi, '[RUC oculto]'],
@@ -18,16 +19,32 @@
     [/(?<![0-9.,])(?:DNI\s*[:#-]?\s*)?(?:\d{2}\.\d{3}\.\d{3}|\d{4}[ .]\d{4}|\d{2} \d{3} \d{3})(?![0-9]|[.,]\d)/gi, '[DNI oculto]'],
     [/(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}[ \t]{0,3}(?:[(\[{][ \t]{0,2}(?:at|arroba)[ \t]{0,2}[)\]}]|[ \t]arroba[ \t]|[ \t]@[ \t]?|@[ \t])[ \t]{0,3}(?:[A-Za-z0-9-]{1,63}[ \t]{0,3}(?:\.|[(\[{][ \t]{0,2}(?:dot|punto)[ \t]{0,2}[)\]}]|[ \t](?:dot|punto)[ \t])[ \t]{0,3}){1,8}[A-Za-z]{2,24}\b/gi, '[correo oculto]']
   ];
-  function redactText(v) { var s = String(v == null ? '' : v); PATTERNS.forEach(function (p) { s = s.replace(p[0], p[1]); }); return s; }
+  // (igual que #994 en el servidor) Las marcas que ya puso otro filtro («[clave oculta]», «[nombre oculto]», «[correo oculto]»…) llevan
+  // «clave» u «oculto» dentro: los patrones las volvían a tapar a medias («la clave es [clave oculta]» → «la clave es [oculto] oculta]»).
+  // Mientras corren los patrones cada marca entera se cambia por «[oculto]» + un carácter privado que dice cuál era (\uF8E0–\uF8E9);
+  // «[oculto]» ya no se vuelve a tapar, y al final vuelve a ser la marca. Si un patrón se llevara el «[oculto]», el carácter suelto se quita.
+  // Lo de afuera nunca trae esos caracteres (se cambian por un espacio antes). Una clave real al lado de una marca se sigue tapando.
+  var MASK_HOLDERS = ['[clave oculta]', '[nombre oculto]', '[correo oculto]', '[teléfono oculto]', '[imagen omitida]', '[mensaje anterior omitido]', '[texto largo omitido]', '[dato del dueño]', '[dato del Admin]'];
+  var MASK_HOLD_RE = new RegExp(MASK_HOLDERS.map(function (x) { return x.replace(/[[\]]/g, '\\$&'); }).join('|'), 'g');
+  function maskHoldShield(v) {
+    var s = /[\uF8E0-\uF8E9]/.test(v) ? v.replace(/[\uF8E0-\uF8E9]/g, ' ') : v;
+    return s.indexOf('[') >= 0 ? s.replace(MASK_HOLD_RE, function (m) { return '[oculto]' + String.fromCharCode(0xF8E0 + MASK_HOLDERS.indexOf(m)); }) : s;
+  }
+  function maskHoldRestore(v) {
+    if (!/[\uF8E0-\uF8E9]/.test(v)) return v;
+    return v.replace(/\[oculto\]([\uF8E0-\uF8E9])/g, function (_m, c) { return MASK_HOLDERS[c.charCodeAt(0) - 0xF8E0]; }).replace(/[\uF8E0-\uF8E9]/g, '');
+  }
+  var HELD = /^\[oculto\][\uF8E0-\uF8E9]?$/;
+  function redactText(v) { var s = maskHoldShield(String(v == null ? '' : v)); PATTERNS.forEach(function (p) { s = s.replace(p[0], p[1]); }); return maskHoldRestore(s); }
   // (Bot 2 sobre 6280deae) contexto del DUEÑO: RUC de empresa (20/15/17) y 8 dígitos junto a «código», «cód.», «EAN» o «barra(s)» van exactos.
   // RUC 10 y 8 dígitos sueltos, tapados. El servidor vuelve a filtrar según el rol de SU sesión (esto solo es lo que manda el aparato).
   var CODE_LABEL = /(?:^|[^a-záéíóúñü])(?:c[óo]d(?:igos?)?\.?|ean(?:-?(?:13|8))?|barras?)(?![a-záéíóúñü])[^\n\d]{0,24}$/i;
-  function redactOwnerContext(v) { var s = String(v == null ? '' : v);
+  function redactOwnerContext(v) { var s = maskHoldShield(String(v == null ? '' : v));
     PATTERNS.forEach(function (p, i) {
       if (i === 2) s = s.replace(p[0], function (m) { return /^(?:20|15|17)/.test(m.replace(/^\D+/, '')) ? m : '[RUC oculto]'; });
       else if (i === 4) s = s.replace(p[0], function (m, off, str) { return /^\d/.test(m) && CODE_LABEL.test(str.slice(Math.max(0, off - 48), off)) ? m : '[DNI oculto]'; });
       else s = s.replace(p[0], p[1]); });
-    return s; }
+    return maskHoldRestore(s); }
   // (Bot 2 sobre 6280deae) Tarjeta de compra: un campo que el servidor dejó vacío (tenía algo tapado) se completa a mano. Borde de alerta,
   // «Complete este dato», foco en el primero y «Confirmar» apagado hasta llenarlos. Solo createElement / textContent. Lo escrito queda en
   // state (fuera de la propuesta firmada) y lo usa fillPurchase; nunca se escribe una máscara.
