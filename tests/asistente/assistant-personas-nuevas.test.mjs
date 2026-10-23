@@ -19,7 +19,12 @@ const DATA = {
     { id: 'P1', nombre: 'Arroz Costeño 1 kg', precio: 4.5, costo: 3.8, stock: 30, min: 0, controla: true },
     { id: 'P2', nombre: 'Fideo Don Vittorio spaghetti 500 g', precio: 2.6, costo: 1.9, stock: 30, min: 0, controla: true },
     { id: 'P3', nombre: 'Leche Gloria evaporada 395 g', precio: 4.2, costo: 3.6, stock: 48, min: 0, controla: true },
-    { id: 'P4', nombre: 'Gaseosa Bolívar 500 ml', precio: 2, costo: 1.5, stock: 20, min: 0, controla: true }],
+    { id: 'P4', nombre: 'Gaseosa Bolívar 500 ml', precio: 2, costo: 1.5, stock: 20, min: 0, controla: true },
+    // (revisión de alfa) marcas y proveedor que deben quedar enteros tras «rebaja a», «dale a», «le debo a»…
+    { id: 'P5', nombre: 'Chocolate Sublime 30 g', precio: 1.5, costo: 1.1, stock: 40, min: 0, controla: true },
+    { id: 'P6', nombre: 'Cerveza Pilsen Callao 630 ml', precio: 6, costo: 4.8, stock: 24, min: 0, controla: true },
+    { id: 'P7', nombre: 'Gaseosa Inca Kola 500 ml', precio: 2.5, costo: 1.9, stock: 24, min: 0, controla: true },
+    { id: 'P8', nombre: 'Mayonesa Alacena Alicorp 100 g', precio: 3, costo: 2.2, stock: 12, min: 0, controla: true }],
   customers: [{ id: 'C1', nombre: 'Marta Lucía Ccori' }], // Rosa Quispe y Juan Pérez NO están: personas nuevas
   credits: [], sales: [], saleItems: []
 };
@@ -144,4 +149,95 @@ test('lecciones, memoria FIRMADA (invoice_memory.taught) sin el nombre', { todo:
 });
 test('limpieza (pedido de alfa): HISTORY_DON_CUE ya no existe (maskHistoryPeople tapa siempre con la regla compartida)', () => {
   assert.equal('HISTORY_DON_CUE' in A, false);
+});
+
+// ---------- (revisión de alfa sobre #1011: cambios pedidos) ----------
+// Cada frase se mira en el cuerpo EXACTO que iría al modelo (assistantChatRoute), en partes y entero.
+// [frase, nombres que no pueden llegar]
+const LEAKS = [
+  // a) texto entre la señal y el nombre
+  ['cliente: Rosa Quispe', /Rosa|Quispe/], ['el cliente se llama Rosa Quispe', /Rosa|Quispe/], ['agrega un cliente nuevo Rosa Quispe', /Rosa|Quispe/],
+  // b) partículas dentro del nombre
+  ['cliente María del Carmen', /Mar[ií]a|Carmen/], ['agrega cliente Juan de Dios Pérez', /Juan|Dios|P[eé]rez/], ['registra a María de los Ángeles Quispe', /Mar[ií]a|[ÁA]ngeles|Quispe/],
+  // c) nombre largo
+  ['Rosa Quispe Mamani Huamán me debe 5', /Rosa|Quispe|Mamani|Huam[aá]n/],
+  // d) palabras entre el nombre y el verbo; dos personas
+  ['Rosa Quispe ya pagó', /Rosa|Quispe/], ['Rosa Quispe, cliente nueva, me debe 2 kg', /Rosa|Quispe/], ['Rosa Quispe y Juan Pérez me deben', /Rosa|Quispe|Juan|P[eé]rez/],
+  // e) minúsculas con señal fuerte
+  ['le fié a oscar aguilar', /oscar|aguilar/i], ['le vendí a vicente alvarado', /vicente|alvarado/i], ['le fié a concepción mamani', /concepci[oó]n|mamani/i], ['oscar me debe 10', /oscar/i]];
+const INTACT = ['¿cuánto me debe cliente #5?', '¿cuánto me deben?', 'Cuánto pagó cliente #5', 'cuantos me deben', 'cual me debe más', 'qué me debe cliente #5',
+  'rebaja a Sublime a 1', 'dále a Pilsen precio de 5.50', 'rebájale a Gloria 20 céntimos', 'registra a Gloria como proveedor', 'el cliente #5 pagó Inca Kola',
+  'pagué a Gloria 500', 'le debo a Alicorp 300', 'cuánto vendí a Gloria', 'clientes morosos', 'clientes deudores', 'clientes activos',
+  'cámbiale el precio a Gloria a 4.50', 'sube a Pilsen 6 soles', 'compré a Alicorp', 'vendí a granel', 'debe pagar a Sunat'];
+const code = (x) => x.replace(/cliente #[\w-]+/g, 'cliente #X');
+test('revisión 1) fugas: cada frase llega al modelo sin el nombre, Admin y empleado (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const role of ['owner', EMP]) for (const stream of [true, false]) for (const [text, re] of LEAKS) {
+    const r = await chat(text, { role, stream });
+    assert.equal(r.bodies.length, 1, role + ' stream=' + stream + ' «' + text + '»: ' + r.raw.slice(0, 200));
+    assert.doesNotMatch(r.bodies[0], re, role + ' stream=' + stream + ': «' + text + '» llegó como «' + r.lastUser + '»');
+    assert.match(r.lastUser, /\[nombre oculto\]/, role + ' stream=' + stream + ': ' + r.lastUser);
+  }
+});
+test('revisión 1) las mismas frases en el historial y el resumen del teléfono (Admin) llegan tapadas (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const history = LEAKS.flatMap(([u]) => [{ role: 'user', content: u }, { role: 'assistant', content: 'Anotado.' }]).slice(-16);
+    const resumen = LEAKS.slice(0, 8).map(([u]) => u).join('. ');
+    const r = await chat('¿y qué más?', { stream, history, resumen });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ': ' + r.raw.slice(0, 200));
+    for (const [u, re] of LEAKS) {
+      const inHist = history.some((m) => m.content === u), inRes = resumen.includes(u);
+      if (inHist || inRes) assert.doesNotMatch(r.bodies[0], re, 'stream=' + stream + ': «' + u + '» llegó con el nombre desde ' + (inHist ? 'el historial' : 'el resumen'));
+    }
+  }
+});
+test('revisión 1) historial FIRMADO del empleado: las frases nuevas vuelven tapadas (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) for (const [u, re] of [LEAKS[1], LEAKS[5], LEAKS[6], LEAKS[9], LEAKS[10]]) {
+    const iat = NOW - 1000, a = 'Anotado.', sig = await A.signTurnPair(SECRET, 'empleado', 'session:personas-nuevas', 0, iat, u, a);
+    const h = await chat('¿y qué más?', { role: EMP, stream, history: [{ role: 'user', content: u, sig, n: 0, iat }, { role: 'assistant', content: a, sig, n: 0, iat }] });
+    assert.equal(h.bodies.length, 1, 'stream=' + stream + ': ' + h.raw.slice(0, 200));
+    assert.ok(JSON.parse(h.bodies[0]).messages.some((m) => String(m.content).includes('[nombre oculto]')), 'stream=' + stream + ': el turno firmado no volvió tapado («' + u + '»)');
+    assert.doesNotMatch(h.bodies[0], re, 'stream=' + stream + ': «' + u + '»');
+  }
+});
+test('revisión 1) lecciones: «recuerda que oscar aguilar me debe 2 kg» se guarda tapado', async (t) => {
+  quiet(t);
+  assert.doesNotMatch(A.sanitizeLesson('recuerda que oscar aguilar me debe 2 kg', [], DATA.products), /oscar|aguilar/i);
+  const store = A.createMemoryUsageStore();
+  const r = await chat('recuerda que oscar aguilar me debe 2 kg', { stream: false, store });
+  assert.equal(r.status, 200);
+  const saved = (await store.get(await A.lessonsKey({ principalId: 'session:personas-nuevas' })))?.value?.items || [];
+  assert.equal(saved.length, 1, JSON.stringify(saved));
+  assert.doesNotMatch(saved[0], /oscar|aguilar/i, saved[0]); assert.match(saved[0], /me debe 2 kg/, saved[0]);
+  assert.doesNotMatch(r.bodies[0], /oscar|aguilar/i, 'al modelo tampoco');
+});
+test('revisión 2) y 3) quedan enteras: preguntas con «cuánto/cuál/qué», marcas y proveedores del catálogo, «clientes morosos…» (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const text of INTACT) assert.equal(A.maskCuedPeople(text, DATA.products), text, 'maskCuedPeople cambió «' + text + '»');
+  for (const role of ['owner', EMP]) for (const stream of [true, false]) for (const text of INTACT) {
+    const r = await chat(text, { role, stream });
+    if (!r.bodies.length) continue; // atajo del servidor o pedido que el empleado no puede hacer: no hubo modelo
+    assert.ok(code(r.lastUser).includes(code(text)), role + ' stream=' + stream + ': «' + text + '» cambió: ' + r.lastUser);
+    assert.doesNotMatch(r.lastUser, /\[nombre oculto\]/, role + ' stream=' + stream + ': ' + r.lastUser);
+  }
+});
+test('revisión 4) empleado: la regla #998 completa (don/doña/señora) más la persona nueva (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) for (const [text, re] of [['le vendí a doña Rosa 2 kg', /Rosa/], ['la señora Rosa Quispe llevó arroz', /Rosa|Quispe/], ['le fié a Rosa Quispe', /Rosa|Quispe/]]) {
+    const r = await chat(text, { role: EMP, stream });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ' «' + text + '»: ' + r.raw.slice(0, 200));
+    assert.doesNotMatch(r.bodies[0], re, 'stream=' + stream + ': «' + text + '» llegó como «' + r.lastUser + '»');
+    assert.match(r.lastUser, /\[nombre oculto\]/, 'stream=' + stream + ': ' + r.lastUser);
+  }
+});
+test('revisión (no bloqueante): 3000 productos y 50 KB de texto se tapan rápido (catálogo preparado una vez por llamada)', () => {
+  const prods = Array.from({ length: 3000 }, (_, i) => ({ nombre: 'Producto Marca' + i + ' Linea' + (i % 97) + ' 500 g' }));
+  const chunk = 'le vendí a Rosa Quispe 2 kg, rebaja a Marca17 a 3, Juan Pérez me debe 5, cliente Ana Torres. ';
+  const text = chunk.repeat(Math.ceil(50000 / chunk.length)); // 50 KB o un poco más, en frases enteras
+  const t0 = performance.now(), out = A.maskCuedPeople(text, prods), ms = performance.now() - t0;
+  assert.ok(text.length >= 50000); const leak = out.match(/Rosa|Quispe|Juan|P[eé]rez|Ana Torres/); assert.equal(leak, null, 'quedó: ' + (leak && out.slice(Math.max(0, leak.index - 40), leak.index + 40)));
+  assert.match(out, /rebaja a Marca17 a 3/);
+  assert.ok(ms < 3000, 'tardó ' + Math.round(ms) + ' ms');
 });
