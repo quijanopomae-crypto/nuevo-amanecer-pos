@@ -312,7 +312,13 @@
   // es del POS y no lleva la hoja del asistente garantizada). «U+202E 1234-100F» ya llega normalizado («1234-100F»); esto cubre lo que trae la propuesta.
   function ltrIsolate(n) { if (!n || !n.setAttribute) return n; n.setAttribute('dir', 'ltr'); if (n.classList) n.classList.add('na-asst-ltr'); else n.className = (n.className ? n.className + ' ' : '') + 'na-asst-ltr';
     if (n.style) { n.style.unicodeBidi = 'isolate'; n.style.direction = 'ltr'; } return n; }
+  async function configurationApi() {
+    if(!isOwnerAccess()) return null;
+    try { if(!root.NA_CONFIG_V9&&root.NA_CONFIG_V9_BOOT) await root.NA_CONFIG_V9_BOOT.load(); } catch (_) { return null; }
+    return isOwnerAccess()?root.NA_CONFIG_V9:null;
+  }
   var deps = {
+    applyConfiguration: async function(p) { var api=await configurationApi(); return api&&api.assistantApply?api.assistantApply(p):{ok:false,msg:'No se pudo cargar Configuración.'}; },
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
@@ -515,6 +521,7 @@
           : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
         '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') +
         (tot.filas[i] != null ? '<div class="lt" data-lt="' + i + '">Total ' + soles(tot.filas[i]) + '</div>' : '') + '</td></tr>'; }).join('') + totalRow(tot);
+    if (p.type === 'configuracion') rows = '<tr><td>'+E(p.nombre)+'<div class="note">'+E(p.alcance)+'</div></td><td>'+E(typeof p.antes==='boolean'?(p.antes?'Activado':'Desactivado'):p.antes)+' → <b>'+E(typeof p.valor==='boolean'?(p.valor?'Activado':'Desactivado'):p.valor)+'</b></td></tr>';
     if (p.type === 'precio') rows = '<tr><td>' + E(p.nombre) + '</td><td class="r">' + soles(p.precio_actual) + ' → <b>' + soles(p.precio_nuevo) + '</b></td></tr>';
     if (p.type === 'costo') rows = '<tr><td>' + E(p.nombre) + '<div class="note">Costo</div></td><td class="r">' + (p.costo_actual != null ? soles(p.costo_actual) : 'sin costo') + ' → <b>' + soles(p.costo_nuevo) + '</b></td></tr>';
     if (p.type === 'ajuste') rows = '<tr><td>' + E(p.nombre) + '<div class="note">' + E(p.motivo) + '</div></td><td class="r">' + (p.tipo === 'entrada' ? '+' : '−') + E(p.cantidad) + '</td></tr>' +
@@ -532,6 +539,7 @@
     if (p.type === 'producto' && p.parecidos && p.parecidos.length) warn += '<div class="warn">Ya hay productos parecidos: ' + E(p.parecidos.join(', ')) + '.</div>';
     if (p.type === 'producto' && p.revisar) warn += '<div class="warn">Precio o costo fuera de lo normal. Revisa bien.</div>';
     var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
+      configuracion: 'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
@@ -973,6 +981,12 @@
     var role = isOwnerAccess() ? 'owner' : 'employee', mreq = null;
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos(), deps.proveedores ? deps.proveedores() : []) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
+    if (isOwnerAccess()) {
+      var configPanel=panelEl, configApi=root.NA_CONFIG_V9;
+      if(!configApi&&/configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/i.test(text)) configApi=await configurationApi();
+      if(panelEl!==configPanel) return;
+      if(isOwnerAccess()&&configApi&&configApi.assistantSnapshot) body.context.settings=configApi.assistantSnapshot();
+    }
     if (gate.summary) body.cards = gate.summary(); // (fix/asist-compras-borrador) estado real de las tarjetas: una cancelada no vuelve como pendiente
     if (mem && C.memRequest) { mreq = C.memRequest(history, mem, { role: role, now: Date.now() + clockOffset, bodyBase: body }); body.history = mreq.history; if (mreq.resumen) body.resumen = mreq.resumen; }
     if (image) { body.image = image; invoiceMemory = null; }

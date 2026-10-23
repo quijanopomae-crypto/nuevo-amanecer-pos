@@ -185,7 +185,7 @@
   // ¿Puede ESTE aparato ejecutar ESTA propuesta? (el Worker ya filtró y vuelve a revisar al confirmar; esto es la segunda barrera).
   // Dueño: sí. Empleado: solo si el SERVIDOR le dio un nivel (roles.level viene del último ping, nunca de una caché local);
   // y aun así NO recibe tarjetas que cambian algo (solo el dueño confirma). Documentos del empleado: solo lista de precios y pedido.
-  var TYPES = ['compra', 'precio', 'costo', 'ajuste', 'producto', 'documento', 'consulta', 'pasos'];
+  var TYPES = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto', 'documento', 'consulta', 'pasos'];
   var EMP_LEVELS = ['consultas', 'consultas_documentos'], EMP_DOCS = ['lista_precios', 'lista_pedido'];
   function canExecute(roles, proposal) {
     var role = roles && roles.role;
@@ -295,6 +295,7 @@
 
   // Ejecutores: usan SOLO funciones existentes del POS, inyectadas (deps) para poder probarlos.
   var EXECUTORS = {
+    configuracion: function (p,d) { return d.applyConfiguration ? d.applyConfiguration(p) : {ok:false,msg:'No se pudo abrir la configuración. Intenta de nuevo.'}; },
     compra: function (p, d) {
       var w = d.openPurchase();
       if (!w) return { ok: false, msg: 'No se pudo abrir «Nueva compra».' };
@@ -772,7 +773,7 @@
   var ROLE_LOST_MSG = 'Esta sesión ya no es de Admin. Vuelva a entrar como Admin y pida la compra de nuevo.';
   // borra lo escrito a mano (sin dejar copia) y suelta la propuesta
   function wipeManual(p) { var m = p && p._manual; if (m && typeof m === 'object') Object.keys(m).forEach(function (k) { m[k] = ''; delete m[k]; }); if (p) { try { delete p._manual; } catch (_) {} } }
-  var CARD_TIPOS = ['compra', 'precio', 'costo', 'ajuste', 'producto'];
+  var CARD_TIPOS = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto'];
   // Total de cada fila (cantidad × costo unitario) y total de la compra, en céntimos para no arrastrar decimales. Fila sin costo: sin total.
   function purchaseTotals(p) {
     var rows = [], cents = 0, sinCosto = 0;
