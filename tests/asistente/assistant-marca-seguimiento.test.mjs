@@ -113,3 +113,60 @@ test('chat Admin y empleado: «pan de molde» muestra el pan sin «No tengo»', 
     if (role !== 'owner') assert.ok(!d.raw.includes('1.11'));
   }
 });
+
+// ---------- revisión de #1005 (autor de caja) con el catálogo de referencia de AV ----------
+// El filtro por tipo tomaba la primera palabra EXACTA del nombre: «FID. DON VITTORIO», «DET BOLIVAR», «JAB.BOLIVAR» quedaban fuera y
+// «fideo don vittorio» daba 2 fideos de otra marca sin aviso. Decisión de alfa: el tipo solo acota «lo más parecido» cuando la marca no
+// está; si la marca sí está, sale todo igual que en la base. El tipo se reconoce por la palabra entera o por su abreviatura de 3+ letras
+// (FID., DET, JAB.), con o sin punto y sin importar tildes. Los totales de la base (e26d2326) se midieron con este mismo catálogo.
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+const AV = (() => {
+  const ctx = vm.createContext({});
+  new vm.Script(readFileSync(new URL('../../POS/js/catalog/reference-catalog-data.js', import.meta.url), 'utf8') + ';this.D = _NA_REFERENCE_CATALOG_DATA;').runInContext(ctx);
+  return ctx.D.rows.map((r, i) => P('av' + i, r.NOMBRE_LIMPIO_SEGURO, 5, 1));
+})();
+const avReader = { products: async () => AV.map((p) => ({ ...p })) };
+const av = (producto) => runAssistantQuery(avReader, { tipo: 'stock_producto', producto });
+
+test('AV: si la marca está, sale lo mismo que en la base («fideo don vittorio» 47, «fideo espiga de oro» 71)', async () => {
+  const d = await av('fideo don vittorio'); noAviso(d, 'fideo don vittorio'); assert.equal(d.total, 47);
+  assert.ok(d.filas.every((f) => /DON VITTORIO/.test(f[0])), JSON.stringify(d.filas.map((f) => f[0])));
+  const e = await av('fideo espiga de oro'); noAviso(e, 'fideo espiga de oro'); assert.equal(e.total, 71);
+  assert.ok(e.filas.every((f) => /ESPIGA DE ORO/.test(f[0])), JSON.stringify(e.filas.map((f) => f[0])));
+});
+
+test('AV: «detergente bolivar», «jabon bolivar», «jabón bolívar» y «gaseosa kola real» sin aviso, igual que la base', async () => {
+  for (const [q, total, re] of [['detergente bolivar', 42, /DET BOLIVAR/], ['jabon bolivar', 76, /BOLIVAR/], ['jabón bolívar', 76, /BOLIVAR/], ['gaseosa kola real', 53, /KOLA/]]) {
+    const r = await av(q); noAviso(r, q); assert.equal(r.total, total, q); assert.match(r.texto, re, q);
+  }
+});
+
+test('AV: «fideo marcos» y «atun marcos» dan lista y nunca repiten «marcos»', async () => {
+  for (const q of ['fideo marcos', 'atun marcos', 'tienes fideos marcos?']) {
+    const r = await av(q); assert.ok(r.filas.length > 0, q);
+    assert.ok(!/marcos/i.test(r.texto + JSON.stringify(r.resumen)), q + ': ' + r.texto);
+  }
+  const f = await av('fideo marcos'); assert.ok(!/ATUN/.test(f.texto), f.texto);
+});
+
+test('AV: «lavagi», «glora», «sal», «pan» y «cerveza pilsen» siguen como en #1001', async () => {
+  const l = await av('fideo lavagi'); noAviso(l, 'fideo lavagi'); assert.match(l.texto, /^[^:]*LAVAGGI/, l.texto);
+  const g = await av('leche glora'); noAviso(g, 'leche glora'); assert.match(g.texto, /^LECHE GLORIA/, g.texto);
+  const s = await av('sal'); assert.ok(!/\bSOL\b/.test(s.texto), s.texto);
+  const p = await av('pan'); assert.ok(!/\bPIN\b/.test(p.texto), p.texto);
+  const c = await av('cerveza pilsen'); noAviso(c, 'cerveza pilsen');
+});
+
+test('marca que no está: «lo más parecido» se queda con el tipo, también abreviado (FID., DET, JAB.)', async () => {
+  const rd = { products: async () => [P('a', 'FID. ANITA CODO 250GR', 3, 2), P('b', 'FIDEO NICOLINI TALLARIN', 3, 3), P('c', 'ATUN FLORIDA 170G', 3, 6),
+    P('d', 'DET BOLIVAR 730GR', 3, 9), P('e', 'DETERGENTE ARIEL 780GR', 3, 9), P('f', 'JAB.BOLIVAR 190GR', 3, 2), P('g', 'JABON TROME 190GR', 3, 2), P('h', 'SAL EMSAL 1KG', 3, 1)].map((p) => ({ ...p })) };
+  const q = (producto) => runAssistantQuery(rd, { tipo: 'stock_producto', producto });
+  const f = await q('fideo pastalindo');
+  assert.match(f.texto, /^No tengo esa marca; lo más parecido es: /); assert.ok(!/pastalindo/i.test(f.texto + JSON.stringify(f.resumen)));
+  assert.deepEqual(f.filas.map((x) => x[0]).sort(), ['FID. ANITA CODO 250GR', 'FIDEO NICOLINI TALLARIN']);
+  const d = await q('detergente zorrito'); assert.match(d.texto, /^No tengo esa marca/);
+  assert.deepEqual(d.filas.map((x) => x[0]).sort(), ['DET BOLIVAR 730GR', 'DETERGENTE ARIEL 780GR']);
+  const j = await q('jabón zorrito'); assert.deepEqual(j.filas.map((x) => x[0]).sort(), ['JAB.BOLIVAR 190GR', 'JABON TROME 190GR']);
+  const b = await q('detergente bolivar'); noAviso(b, 'detergente bolivar'); assert.ok(b.texto.startsWith('DET BOLIVAR'), b.texto);
+});
