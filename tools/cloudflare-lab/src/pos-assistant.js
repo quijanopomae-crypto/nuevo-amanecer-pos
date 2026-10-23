@@ -25,7 +25,7 @@ import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
@@ -2568,6 +2568,7 @@ export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
 }
 // Bot 5: lo que un EMPLEADO puede recibir de una consulta (pantalla y modelo). Lista blanca por tipo; todo lo demás (costos, márgenes,
 // ganancia, inversión, caja, deudas) se quita ANTES de mandar cualquier trozo y antes de dárselo al modelo.
+// «aviso» no va en esta lista: el del empleado se rearma aparte, solo con avisos de fechas y conteos (ver withNotice / employeeNoticeText).
 const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'precio', 'stock', 'minimo', 'estado'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
 export const OWNER_ONLY_KEY = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles/i;
 const OWNER_ONLY_KEY_MODEL = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles|proveedor|supplier|compra|purchase|precio_compra/i;
@@ -2577,13 +2578,16 @@ export function stripOwnerKeys(v, depth = 0) {
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).filter(([k]) => !OWNER_ONLY_KEY_MODEL.test(k)).map(([k, x]) => [k, stripOwnerKeys(x, depth + 1)]));
   return v;
 }
+// (revisión de alfa, PR #984) «aviso» NO está en la lista blanca: puede venir de cualquier consulta y traer montos. Al empleado solo le llega
+// el aviso rearmado desde los avisos estructurados de fechas y conteos (NOTICES, ver employeeNoticeText): nunca plata.
+const withNotice = (res, aviso) => (aviso ? { ...res, aviso } : res);
 export function employeeQueryResult(r) {
   if (!r || r.error) return r;
   const keep = (v) => Array.isArray(v) ? v.map(keep) : v && typeof v === 'object'
     ? Object.fromEntries(Object.entries(v).filter(([k]) => EMPLOYEE_QUERY_FIELDS.resumen.includes(k) && !OWNER_ONLY_KEY.test(k)).map(([k, x]) => [k, keep(x)])) : v;
   const cols = Array.isArray(r.columnas) ? r.columnas : [], idx = cols.map((c, i) => EMPLOYEE_QUERY_FIELDS.columnas.includes(c) ? i : -1).filter((i) => i >= 0);
   return { tipo: r.tipo, titulo: r.titulo, columnas: idx.map((i) => cols[i]), filas: (Array.isArray(r.filas) ? r.filas : []).map((f) => idx.map((i) => f[i])),
-    texto: r.texto, total: typeof r.total === 'number' ? r.total : null, resumen: keep(r.resumen || {}) };
+    texto: r.texto, total: typeof r.total === 'number' ? r.total : null, resumen: withNotice(keep(r.resumen || {}), employeeNoticeText(r.resumen)) };
 }
 
 // ---------- Rol para el asistente ----------
