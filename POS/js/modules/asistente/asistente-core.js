@@ -771,6 +771,17 @@
   var ROLE_LOST_MSG = 'Esta sesión ya no es de Admin. Vuelva a entrar como Admin y pida la compra de nuevo.';
   // borra lo escrito a mano (sin dejar copia) y suelta la propuesta
   function wipeManual(p) { var m = p && p._manual; if (m && typeof m === 'object') Object.keys(m).forEach(function (k) { m[k] = ''; delete m[k]; }); if (p) { try { delete p._manual; } catch (_) {} } }
+  var CARD_TIPOS = ['compra', 'precio', 'costo', 'ajuste', 'producto'];
+  // Total de cada fila (cantidad × costo unitario) y total de la compra, en céntimos para no arrastrar decimales. Fila sin costo: sin total.
+  function purchaseTotals(p) {
+    var rows = [], cents = 0, sinCosto = 0;
+    ((p && p.lineas) || []).forEach(function (l) {
+      var q = Number(l && l.cantidad), c = l && l.costo_unitario != null ? Number(l.costo_unitario) : NaN;
+      if (!isFinite(q) || q <= 0 || !isFinite(c) || c < 0) { rows.push(null); sinCosto++; return; }
+      var t = Math.round(q * c * 100); rows.push(t / 100); cents += t;
+    });
+    return { filas: rows, total: Math.round(cents) / 100, sinCosto: sinCosto };
+  }
   function createGate(deps) {
     var items = Object.create(null);
     function forget(it) { if (!it) return; wipeManual(it.p); wipeManual(it.applied); if (it.sent && it.sent.manual && typeof it.sent.manual === 'object') Object.keys(it.sent.manual).forEach(function (k) { delete it.sent.manual[k]; }); delete items[it.key]; it.state = 'forgotten'; it.p = null; it.applied = null; it.review = null; it.sent = null; it.onRetry = null; }
@@ -839,7 +850,16 @@
       proposal: function (key) { return items[key] ? items[key].p : null; },
       state: function (id) { return items[id] ? items[id].state : null; },
       operationId: function (id) { return items[id] ? items[id].operationId : null; },
-      cancel: function (id) { if (items[id] && items[id].state === 'pending') items[id].state = 'cancelled'; },
+      cancel: function (id, why) { if (items[id] && items[id].state === 'pending') { items[id].state = 'cancelled'; items[id].why = why === 'vencida' ? 'vencida' : null; } },
+      // (fix/asist-compras-borrador) estado de las tarjetas que viaja con el próximo mensaje: solo tipo y estado. Así el asistente sabe que
+      // una compra cancelada o vencida ya no existe y no la vuelve a dar por pendiente. Las olvidadas (forget) ya no están.
+      summary: function () {
+        var map = { pending: 'pendiente', running: 'pendiente', done: 'confirmada', denied: 'no_permitida' }, out = [];
+        Object.keys(items).forEach(function (k) { var it = items[k]; if (!it || !it.p || !it.p.needsConfirm || out.length >= 10) return;
+          if (CARD_TIPOS.indexOf(it.p.type) < 0) return;
+          out.push({ tipo: it.p.type, estado: it.state === 'cancelled' ? (it.why === 'vencida' ? 'vencida' : 'cancelada') : (map[it.state] || 'cancelada') }); });
+        return out;
+      },
       forget: function (id) { forget(items[id]); },
       // (Bots 3/4/5 sobre d72b7601) ¿hay un cuerpo guardado tras un corte? (los campos siguen bloqueados y «Reintentar» lo reenvía igual)
       locked: function (id) { return !!(items[id] && items[id].sent); },
@@ -1131,7 +1151,7 @@
     } else if (redactText(u.content) !== u.content || redactText(a.content) !== a.content || !u.sig) h.splice(h.length - 2, 2);
   }
 
-  var api = { MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -90,7 +90,10 @@ test('si la segunda llamada falla, la respuesta usa el texto de la consulta (no 
 test('foto de factura: compara costo actual y de factura; «Actualizar costo» es tarjeta aparte; la confirma solo la sesión dueño, de un toque', async () => {
   const lines = [{ product_id: 'P1', cantidad: 10, costo_unitario: 0.25 }, { product_id: 'P2', cantidad: 5, costo_unitario: 0.3 }, { nombre: 'Nuevo', cantidad: 1, costo_unitario: 1 }];
   const cap = [];
-  const r = await chat({ text: 'lee', image: 'data:image/jpeg;base64,AAAA' }, { fetch: scripted([{ content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Dist', lineas: lines })] }], cap) }, env({ DEEPSEEK_API_KEY: 'k' }));
+  // (fix/asist-compras-borrador) la tarjeta de costo aparte sale solo si lo piden: al registrar la compra el POS ya guarda el costo.
+  const solo = await chat({ text: 'lee', image: 'data:image/jpeg;base64,AAAA' }, { fetch: scripted([{ content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Dist', lineas: lines })] }], []) }, env({ DEEPSEEK_API_KEY: 'k' }));
+  assert.deepEqual(solo.body.proposals.map((p) => p.type), ['compra']);
+  const r = await chat({ text: 'lee y actualiza los costos', image: 'data:image/jpeg;base64,AAAA' }, { fetch: scripted([{ content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Dist', lineas: lines })] }], cap) }, env({ DEEPSEEK_API_KEY: 'k' }));
   const [compra, costo] = r.body.proposals;
   assert.equal(compra.type, 'compra'); assert.equal(compra.lineas[0].costo_actual, 0.2);
   assert.equal(costo.type, 'costo'); assert.equal(costo.product_id, 'P1'); assert.equal(costo.costo_nuevo, 0.25); assert.ok(costo.confirm_token);
