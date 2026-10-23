@@ -162,13 +162,14 @@ function personAt(toks, i, ck) {
   return { len: best, hits };
 }
 // Cambia los nombres de clientes de la lista (y su «don/doña» delante) por [nombre oculto]: lo que va al modelo.
-export function scrubClientNames(value, customers) {
+// codes: (red de seguridad) un nombre de UN solo cliente va como «cliente #código» (el envío a la IA lo cambia por el neutro C-000N); con varios, [nombre oculto].
+export function scrubClientNames(value, customers, { codes = false } = {}) {
   const s = String(value ?? ''), ck = personKeys(customers); if (!ck.length || !s) return s;
   const toks = personTokens(s); let out = '', at = 0;
   for (let i = 0; i < toks.length; i++) {
-    const { len } = personAt(toks, i, ck); if (!len) continue;
+    const { len, hits } = personAt(toks, i, ck); if (!len) continue;
     const st = i > 0 && PAYER_HON.has(toks[i - 1].f) && toks[i - 1].sent === toks[i].sent ? toks[i - 1].s : toks[i].s;
-    out += s.slice(at, st) + NAME_MASK; at = toks[i + len - 1].e; i += len - 1;
+    out += s.slice(at, st) + (codes && hits.length === 1 ? 'cliente #' + String(hits[0].id) : NAME_MASK); at = toks[i + len - 1].e; i += len - 1;
   }
   return out + s.slice(at);
 }
@@ -3507,7 +3508,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const cs = await (async () => { try { return rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; } catch { return null; } })();
     hasList = Array.isArray(cs);
     payer = clientCodesInText(parsed.text).length ? null : resolvePayerNames(parsed.text, hasList ? cs : null, { strict: !creditAsk });
-    if (creditAsk || payer) { if (hasList) { known.customers = cs; custRead = true; scrub = (v) => scrubClientNames(v, cs); } } else hasList = false;
+    // (red de seguridad) Leída la lista, ningún nombre de Clientes va a la IA (mensaje, historial, resumen), sea cual sea el verbo o la oración.
+    if (hasList) scrub = (v) => scrubClientNames(v, cs, { codes: true });
+    if (creditAsk || payer) { if (hasList) { known.customers = cs; custRead = true; } } else hasList = false;
     if (payer?.kind === 'uno') parsed.text = payer.text;
     turnText = payer?.masked ?? (scrub ? scrub(parsed.text) : null);
   }
