@@ -1784,8 +1784,23 @@ function wordIn(w, words) { return words.some((x) => x === w || (w.length >= 4 &
 function sameItem(itemName, lineName) { const a = nameWords(itemName), b = nameWords(lineName); return a.length > 0 && a.every((w) => wordIn(w, b)); }
 // (auditoría 500, CP-003/006/025) ¿el modelo ya puso este renglón? Mismo nombre en cualquier sentido («Chizito grande» dentro del texto)
 // o el mismo producto del catálogo. Así una fila que el modelo cubre nunca se duplica.
+// Tamaño dicho en el nombre («1.5 L», «litro y medio», «500 ml», «inca kola 500»): dos tamaños distintos no son la misma fila.
+function sizeOf(v) {
+  const t = foldText(v).replace(/\blitro\s+y\s+medio\b/g, '1.5 l').replace(/\bmedio\s+litro\b/g, '500 ml').replace(/\bmedio\s+kilo\b/g, '500 g');
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|l|lt|lts|litros?|g|gr|grs|gramos?|kg|kilos?)?\b/);
+  if (!m) return null;
+  const raw = Number(m[1].replace(',', '.')), u = m[2] || '';
+  if (/^(?:l|lt|lts|litros?)$/.test(u)) return { raw, v: raw * 1000, u: 'ml' };
+  if (/^(?:kg|kilos?)$/.test(u)) return { raw, v: raw * 1000, u: 'g' };
+  return { raw, v: raw, u: u ? (/^(?:ml|cc)$/.test(u) ? 'ml' : 'g') : null };
+}
+function sameSize(a, b) {
+  const x = sizeOf(a), y = sizeOf(b);
+  if (!x || !y) return true;
+  return x.u && y.u ? x.u === y.u && Math.abs(x.v - y.v) < 0.001 : Math.abs(x.raw - y.raw) < 0.001 || Math.abs(x.v - y.v) < 0.001;
+}
 function coveredBy(it, l, ctx) {
-  if (sameItem(it.nombre, l.nombre) || sameItem(l.nombre, it.nombre)) return true;
+  if ((sameItem(it.nombre, l.nombre) || sameItem(l.nombre, it.nombre)) && sameSize(it.nombre, l.nombre)) return true;
   const p = l.product_id ? uniqueProduct(it.nombre, ctx) : null;
   return !!(p && String(p.id) === String(l.product_id));
 }
@@ -1831,17 +1846,19 @@ export function statedNumbers(texts) {
   return out.filter((n) => Number.isFinite(n) && n > 0);
 }
 // ¿el costo unitario sale de algo que dijo la persona? Directo, total entre la cantidad o en céntimos.
-export function costIsStated(cost, cantidad, nums) {
+// packs: unidades por caja o paquete del nombre («Leche Gloria … (caja 24)»: «a 74.40 la caja» = 3.10 cada una).
+export function costIsStated(cost, cantidad, nums, packs = []) {
   const c = Number(cost), q = Number(cantidad), near = (a) => Math.abs(a - c) < 0.006;
-  return nums.some((n) => near(n) || near(n / 100) || (q > 0 && near(n / q)));
+  return nums.some((n) => near(n) || near(n / 100) || (q > 0 && near(n / q)) || packs.some((k) => near(n / k)));
 }
+const packSizes = (name) => [...foldText(name).matchAll(/\b(?:caja|paquete|pack|bolsa|six|x)\s*(?:de\s+|x\s*)?(\d+)\b/g)].map((m) => Number(m[1])).filter((k) => k >= 2);
 // Pone en 0 (marcado «costo») el costo que el modelo puso sin que nadie lo dijera. Devuelve los nombres de esas filas.
 export function clearUnstatedCosts(proposals, texts) {
   const nums = statedNumbers(texts), names = [];
   for (const p of proposals) {
     if (p.type !== 'compra' || !Array.isArray(p.lineas)) continue;
     for (const l of p.lineas) {
-      if (!(Number(l.costo_unitario) > 0) || costIsStated(l.costo_unitario, l.cantidad, nums)) continue;
+      if (!(Number(l.costo_unitario) > 0) || costIsStated(l.costo_unitario, l.cantidad, nums, packSizes(l.nombre))) continue;
       l.costo_unitario = 0; l.revisar = [...new Set([...(l.revisar || []), 'costo'])]; names.push(l.nombre);
     }
     p.revisarFilas = p.lineas.filter((l) => l.revisar).length;
