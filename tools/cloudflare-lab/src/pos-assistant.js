@@ -2761,7 +2761,6 @@ export function safeProductName(nombre, customers = []) {
 }
 // (revisión #998) historial que manda el teléfono del Admin (mensajes anteriores, los escribe/guarda el aparato): antes del modelo, el nombre
 // tras «don/doña/señora…» se tapa con maskReplyPeople (misma regla isBrandDon); «fideo don vittorio» o un producto conocido quedan.
-export const HISTORY_DON_CUE = /(?<![\p{L}])do(?:ñ|n\u0303|n)a?[ \t]/iu;
 // (fix/asist-tapar-personas-nuevas) y luego la regla compartida maskCuedPeople: persona nueva tras «cliente», «registra a», «le vendí a»… o
 // antes de «me debe/pagó» («Rosa Quispe me debe»). known.products: el catálogo (las marcas quedan). known.cuedOnly (empleado): solo esta regla.
 export function maskHistoryPeople(history, known) {
