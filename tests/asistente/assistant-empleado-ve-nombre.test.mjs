@@ -1,4 +1,4 @@
-// Decisión del dueño de la tienda (Admin), 2026-10-23: el EMPLEADO también ve el nombre real del cliente y sus datos en el asistente
+// Decisión del Admin de la tienda, 2026-10-23: el EMPLEADO también ve el nombre real del cliente y sus datos en el asistente
 // (si alguien viene a pagar, «cliente #R7» no le dice quién es). Solo cambia la pantalla: hacia la IA el cliente sigue yendo como
 // «cliente #código» para todos. El empleado puede preguntar cuánto debe UN cliente (deuda_cliente con cliente_id = su código);
 // ganancia, totales de la tienda (deudas_clientes, caja, créditos atrasados, resúmenes) y costos siguen siendo solo del Admin.
@@ -77,7 +77,7 @@ function uiApi() {
   const api = new Function('root', 'doc', 'C', 'el', 'addMsg', 'deps', UI.slice(s0, s1) + '\nreturn { linkCustomers: linkCustomers };')({}, doc, C, el, () => {}, { clientes: () => LOCAL });
   return { doc, linkCustomers: api.linkCustomers };
 }
-// Empleado con el asistente: isAdmin() (acceso al panel) = true, isOwnerAccess() (dueño) = false. Admin: ambos true.
+// Empleado con el asistente: isAdmin() (acceso al panel) = true, isOwnerAccess() (Admin) = false. Admin: ambos true.
 const ROLES = { empleado: { isAdmin: () => true, isOwnerAccess: () => false }, admin: { isAdmin: () => true, isOwnerAccess: () => true } };
 
 test('(a) tabla de la consulta: el EMPLEADO también ve el nombre real del cliente (de la lista de ESTE aparato); el Admin igual', () => {
@@ -101,7 +101,7 @@ test('(b) burbuja de la respuesta: el EMPLEADO también ve el nombre real del cl
     new Function('C', 'd', 'deps', 'bubble', 'linkCustomers', 'isOwnerAccess', 'isAdmin', line)(C, { reply: bubble.textContent }, { clientes: () => LOCAL }, bubble, linkCustomers, g.isOwnerAccess, g.isAdmin);
     assert.ok(bubble.textContent.includes(NAME), who + ': nombre real en la burbuja: ' + bubble.textContent);
   }
-  assert.ok(!/isOwnerAccess\(\)/.test(line), 'la burbuja ya no depende de ser el dueño: ' + line);
+  assert.ok(!/isOwnerAccess\(\)/.test(line), 'la burbuja ya no depende de ser el Admin: ' + line);
 });
 
 test('(c) el nombre NUNCA llega a la IA en modo empleado (aparato -> «cliente #código»; servidor, con y sin partes)', async () => {
@@ -169,5 +169,52 @@ test('(e) empleado: ganancia, totales de la tienda y costos siguen bloqueados (4
     const c = toolsForRole(role).find((t) => t.function.name === 'consultar');
     assert.ok(!c.function.parameters.properties.tipo.enum.includes('deudas_clientes'), role + ': deudas_clientes sigue fuera');
     if (role !== 'empleado:completo+costos') assert.ok(!c.function.parameters.properties.tipo.enum.includes('ganancia'), role + ': ganancia sigue fuera');
+  }
+});
+
+// ---------- (f) dos clientes con el mismo nombre (revisión #1006, CLI-025) ----------
+// El aparato manda «cliente #R7 o cliente #R9» (mismo nombre en Clientes). Con deuda_cliente abierto al empleado, si la IA consulta
+// solo a uno, la tarjeta se quita y se pregunta cuál (dropOnePickedClient de #1006), no «No puedo hacer eso…»; si consulta a los dos,
+// salen las dos tarjetas. Esa parte llega con #1006 (clientAlternatives): sin ella la prueba se salta.
+const SRV_MOD = await import('../../tools/cloudflare-lab/src/pos-assistant.js');
+const HAS_1006 = typeof SRV_MOD.clientAlternatives === 'function';
+const LOCAL2 = [{ id: 'R7', nombre: NAME }, { id: 'R9', nombre: NAME }, { id: 'R8', nombre: 'Tito Inventado' }];
+const DATA2 = { ...DATA, customers: [...DATA.customers, { id: 'R9', nombre: NAME }], credits: [...DATA.credits, { cliente: 'R9', saldo: 20, vence: '2026-11-03', fecha: '2026-10-03' }] };
+const neutral = (body) => [...new Set([...JSON.parse(body).messages.filter((m) => m.role === 'user').map((m) => String(m.content)).join(' ')
+  .matchAll(/cliente #(C-\d{4})/g)].map((m) => m[1]))];
+async function chatPick(role, text, which, stream) {
+  const cap = []; let i = 0;
+  const qc = (id, n) => ({ id: 'call_' + n, type: 'function', function: { name: 'consultar', arguments: JSON.stringify({ tipo: 'deuda_cliente', cliente_id: id }) } });
+  const fetch = async (_u, init) => { const body = String(init.body); cap.push(body); const first = i++ === 0;
+    const calls = first ? which(neutral(body)).map(qc) : null;
+    if (!stream) return json({ choices: [{ message: calls ? { role: 'assistant', content: '', tool_calls: calls } : { role: 'assistant', content: 'Listo.' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    const chunks = calls ? [sse({ choices: [{ delta: { tool_calls: calls.map((c, k) => ({ index: k, ...c })) } }] }), sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })]
+      : [sse({ choices: [{ delta: { content: 'Listo.' } }] }), sse({ choices: [{ delta: {}, finish_reason: 'stop' }] })];
+    return new Response(new ReadableStream({ start(c) { for (const x of chunks) c.enqueue(enc.encode(x)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } }); };
+  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: { products: DATA2.products } }) }),
+    { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:x', posRole: 'empleado' }, json,
+    { store: createMemoryUsageStore(), resolveRole: async () => role, fetch, reader: memoryReader(DATA2), audit: async () => {}, now: () => NOW });
+  const raw = await r.text(); assert.equal(r.status, 200, raw.slice(0, 300));
+  if (!stream) return { b: JSON.parse(raw), cap };
+  const ev = []; const p = C.createSseParser((e, d) => ev.push({ e, d })); p.feed(raw);
+  assert.ok(!ev.some((x) => x.e === 'error'), JSON.stringify(ev).slice(0, 300));
+  return { b: ev.find((x) => x.e === 'final').d, cap };
+}
+
+test('(f) empleado, dos clientes con el mismo nombre: si la IA consulta a uno (pick1) -> «¿cuál?» con los códigos; a los dos -> dos tarjetas', { skip: !HAS_1006 && 'llega con #1006 (dropOnePickedClient)' }, async () => {
+  const text = C.maskCustomers('¿cuánto debe ' + NAME + '?', LOCAL2, DATA2.products, []).text; // lo que manda el aparato
+  assert.match(text, /cliente #R7 o cliente #R9|cliente #R9 o cliente #R7/, text);
+  for (const role of EMP) for (const stream of [false, true]) {
+    const tag = role + (stream ? ' (por partes)' : '');
+    const one = await chatPick(role, text, (codes) => { assert.equal(codes.length, 2, tag + ': ' + codes); return [codes[0]]; }, stream);
+    assert.match(one.b.reply, /¿es cliente #R\d o cliente #R\d\?/, tag + ': ' + one.b.reply);
+    assert.ok(!/No puedo hacer eso|solo para el Admin|S\/|\d+\.\d\d/.test(one.b.reply), tag + ': ' + one.b.reply);
+    assert.ok(!(one.b.proposals || []).some((p) => p.type === 'consulta'), tag + ': eligió uno: ' + JSON.stringify(one.b.proposals));
+    const both = await chatPick(role, text, (codes) => codes, stream);
+    const cards = (both.b.proposals || []).filter((p) => p.type === 'consulta');
+    assert.equal(cards.length, 2, tag + ': ' + JSON.stringify(both.b.proposals));
+    assert.deepEqual(cards.map((p) => p.query.cliente_id).sort(), ['R7', 'R9'], tag);
+    assert.ok(!/No puedo hacer eso|¿es cliente/.test(both.b.reply), tag + ': ' + both.b.reply);
+    for (const body of [...one.cap, ...both.cap]) assert.ok(!NAME_RE.test(body) && !/\bR[79]\b/.test(body), tag + ': nombre o código real hacia la IA');
   }
 });
