@@ -216,3 +216,16 @@ test('INV-027 (decisión del lead): en el turno siguiente el modelo ve solo «pr
     assert.equal(t2.final.reply, 'Remata primero el producto Lejía Sapolio 1 L.', 'en pantalla sigue el nombre (producto de la lista del sistema)');
   }
 });
+
+// Verbos de deuda/pago en presente/futuro tras «producto + don/doña + nombre»: siempre tapa (Admin; el empleado ya tapa siempre).
+const DEBT_NOW_OK = ['la leche doña Rosa debe 2 kg', 'fideo don vittorio pagará', 'fideo don lucho le fío 2 kg'];
+const DEBT_NOW_988 = ['el arroz don Pedro paga el viernes 20 soles', 'EL ARROZ DON PEDRO PAGA 20', 'aceite doña pepa abona 5', 'fideo don vittorio fía'];
+function checkDebtNow(list) {
+  for (const role of ROLES) for (const t of list) {
+    assert.match(whole(role, t), /\[nombre oculto\]/, role + ': ' + t);
+    for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step), whole(role, t), role + ' ' + step + ': ' + t);
+  }
+}
+test('verbo de deuda/pago en presente/futuro tras el nombre: tapado (entero y en partes 1/3/7)', () => checkDebtNow(DEBT_NOW_OK));
+// Depende de #988: la lista compartida de isBrandDon suma paga/pagará/abona/fía/le fío; hasta que #988 entre a la base queda como TODO (rojo esperado).
+test('verbo de deuda/pago en presente (paga, abona, fía): tapado — DEPENDE DE #988 (isBrandDon)', { todo: 'depende de #988: isBrandDon con paga/abona/fía' }, () => checkDebtNow(DEBT_NOW_988));
