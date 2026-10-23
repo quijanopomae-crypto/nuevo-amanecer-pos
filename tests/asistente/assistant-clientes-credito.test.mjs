@@ -938,6 +938,21 @@ test.skip('#995 (final 1) marcas: «leche Gloria», «Inca Kola», «cerveza Pil
   }
 });
 
+// (1) PENDIENTE para la ronda del punto 1 (revisión en 3a21c3a2): el apellido que no es de la lista («Ticona») y «que me pague» (fuera de los
+// verbos de cobro) hoy llegan a la IA. Quedan en skip junto a las otras dos de (1).
+test.skip('#995 (final 1) «¿cuánto pagó rosa ticona?»: ni «Rosa» ni el apellido «Ticona» llegan a la IA (con y sin partes)', async () => {
+  for (const stream of [false, true]) {
+    const { cap } = await askP('¿cuánto pagó rosa ticona?', { stream });
+    for (const b of userSide(cap)) assert.ok(!/Rosa|Ticona/i.test(b), 'stream=' + stream + ' -> ' + b.slice(0, 300));
+  }
+});
+test.skip('#995 (final 1) «que me pague rosa» con Rosa en Clientes: «Rosa» no llega a la IA (con y sin partes)', async () => {
+  for (const stream of [false, true]) {
+    const { cap } = await askP('que me pague rosa', { stream });
+    for (const b of userSide(cap)) assert.ok(!/Rosa|Huam/i.test(b), 'stream=' + stream + ' -> ' + b.slice(0, 300));
+  }
+});
+
 // (2) Pregunta de cobros: se busca un cliente en TODO el mensaje; si no hay, toda palabra que sobra (fuera de las conocidas) = «No encontré…».
 const PREP_ROSA = ['¿me pagó por fin Rosa?', '¿me pagó de una vez Rosa?', '¿me pagó con Yape Rosa?', '¿me pagaron hoy los de Rosa?', '¿me pagó la del puesto, Rosa?',
   '¿cuánto me pagó la vecina de al lado, Rosa?', '¿cuánto me pagó la tía Rosa?', '¿me pagó la casera Rosa?', '¿me pagó la señora Rosa?'];
@@ -1000,5 +1015,37 @@ test('#995 (final 2) sin «me»: «¿Rosa ya pagó?» = cliente #5; sin Rosa = �
     assert.equal((await askP('¿Rosa ya pagó?', { stream })).reply, ROSA_REPLY);
     const miss = await askP('¿Rosa ya pagó?', { stream, data: noRosa(DATA_CR) });
     assert.equal(miss.reply, NOT_FOUND_ROSA); assert.equal(miss.cap.length, 0);
+  }
+});
+
+// ===== (revisión en 3a21c3a2) =====
+// Verbo de pago sin «me/le/fiado/deuda»: toda palabra que sobra es un nombre, también en minúsculas. Sin Rosa = «No encontré…», sin IA ni total.
+const LOWER_ROSA = ['¿cuánto pagó rosa?', '¿ya pagó rosa?', 'rosa pagó?', '¿rosa ya abonó?', '¿cuánto ha pagado rosa?', '¿cuándo pagará rosa?', '¿pagaron los de rosa?'];
+test('#995 (revisión 3a21c3a2) «¿cuánto pagó rosa?», «¿ya pagó rosa?», «rosa pagó?»… en minúsculas y sin «me»: sin Rosa = «No encontré… Rosa» sin IA ni total; con Rosa = cliente #5', async () => {
+  for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    for (const text of LOWER_ROSA) {
+      const why = text + ' stream=' + stream + ' ' + args.tipo;
+      const miss = await askP(text, { stream, args, data: noRosa(DATA_CR) });
+      assert.equal(miss.reply, NOT_FOUND_ROSA, why); assert.equal(miss.cap.length, 0, why);
+      const hit = await askP(text, { stream, args });
+      assert.equal(hit.reply, ROSA_REPLY, why); noNamesP(hit.cap, why);
+    }
+    for (const data of [DATA_CR, noRosa(DATA_CR)]) {
+      const g = await askP('¿cuánto abonó gumercinda esta semana?', { stream, args, data });
+      assert.match(g.reply, /^No encontré a un cliente llamado Gumercinda\./, 'gumercinda stream=' + stream + ' ' + args.tipo); assert.equal(g.cap.length, 0);
+    }
+  }
+});
+test('#995 (revisión 3a21c3a2) «se pagó / se abonó de fiados» (impersonal) = total de la tienda, no «¿De qué cliente?»', async () => {
+  for (const text of ['¿cuánto se pagó de fiados esta semana?', 'cuanto se abono de fiados esta semana']) for (const stream of [false, true])
+    assert.equal((await askP(text, { stream })).reply, STORE29, text + ' stream=' + stream);
+});
+test('#995 (revisión 3a21c3a2) «rosa y elmer pagaron?» sin Rosa: «No encontré… Rosa», nunca solo lo de Elmer; con los dos = cuál', async () => {
+  for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = 'stream=' + stream + ' ' + args.tipo;
+    const miss = await askP('rosa y elmer pagaron?', { stream, args, data: noRosa(DATA_P) });
+    assert.match(miss.reply, /^No encontré a un cliente llamado Rosa\./, why); assert.ok(!/S\/ \d/.test(miss.reply), why); assert.equal(miss.cap.length, 0, why);
+    const both = await askP('rosa y elmer pagaron?', { stream, args, data: DATA_P });
+    assert.match(both.reply, /^¿De cuál cliente/, why); assert.equal(both.cap.length, 0, why);
   }
 });
