@@ -385,7 +385,7 @@ function quoteDecide(kw, mid, sep, art, op, body) {
     if (st < 0) { const lim = Math.min(body.length, PIN_WRAP_BODY); while (e < lim && e > 0 && !/\s/.test(body[e]) && !/\s/.test(body[e - 1])) e++; }
     core = body.slice(0, e); rest = body.slice(e); }
   const r = { closed, core, rest, fw, st, ok: false };
-  const bt = core.trim(); if (!bt || bt === '[oculto]' || (!closed && bt.startsWith('[oculto]')) || wrapMoney(bt)) return r;
+  const bt = core.trim(); if (!bt || bt === '[oculto]' || /^\[oculto\][\uF8E0-\uF8E9]$/.test(bt) || (!closed && bt.startsWith('[oculto]')) || wrapMoney(bt)) return r;
   if (/[—–]/.test(sep) && !pinDashOk(k, mid)) return r; // guion de inciso, no separador (ver pinDashOk)
   if (!/[\u0022'«»“”‘’‹›„‚]/.test(op)) { // envoltorio sin comilla: como pinAlpha
     const strong = k === 'password' || k.startsWith('contrase') || (mid && PIN_CRED_RE.test(mid)), colon = /[:=]/.test(sep);
@@ -633,12 +633,30 @@ const PIN_NAME_RE = /(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])([pP])([iI][nN
 const PIN_NAME_P = '\uF8F0', PIN_NAME_PU = '\uF8F1';
 function pinNameShield(v) { const s = /[\uF8F0\uF8F1]/.test(v) ? v.replace(/[\uF8F0\uF8F1]/g, ' ') : v; return /pin/i.test(s) ? s.replace(PIN_NAME_RE, (m, p, rest) => (p === 'p' ? PIN_NAME_P : PIN_NAME_PU) + rest) : s; }
 function pinNameRestore(v) { return /[\uF8F0\uF8F1]/.test(v) ? v.replace(/\uF8F0/g, 'p').replace(/\uF8F1/g, 'P') : v; }
+// (fix/asist-placeholder-doble) Las marcas de tapado que ya puso otro filtro («[clave oculta]» de maskCredentialValues, «[nombre oculto]»,
+// «[correo oculto]»…) llevan «clave» u «oculto» dentro: el filtro de siempre las volvía a tapar a medias («pin [clave oculta]» →
+// «pin [oculto] oculta]»; «la contraseña: [nombre oculto]» → «… [[oculto]]»). Mientras corren los patrones cada marca entera se cambia por
+// «[oculto]» + un carácter privado que dice cuál era (\uF8E0–\uF8E9; no choca con \uE000/\uE001 de protectProductRefs ni con
+// \uF8F0/\uF8F1 de pinNameShield). «[oculto]» ya es una marca que las reglas respetan, así que «pin [oculto]\uF8E0» queda igual y al final
+// vuelve a ser «pin [clave oculta]». Si una regla se llevara el «[oculto]», el carácter suelto se quita. Lo de afuera nunca trae esos
+// caracteres (se cambian por un espacio antes).
+const MASK_HOLDERS = ['[clave oculta]', '[nombre oculto]', '[correo oculto]', '[teléfono oculto]', '[imagen omitida]', '[mensaje anterior omitido]', '[texto largo omitido]', '[dato del dueño]', '[dato del Admin]'];
+const MASK_HOLD_RE = new RegExp(MASK_HOLDERS.map((x) => x.replace(/[[\]]/g, '\\$&')).join('|'), 'g');
+const MASK_HOLD_CH = /[\uF8E0-\uF8E9]/g;
+function maskHoldShield(v) {
+  const s = MASK_HOLD_CH.test(v) ? v.replace(MASK_HOLD_CH, ' ') : v; MASK_HOLD_CH.lastIndex = 0;
+  return s.includes('[') ? s.replace(MASK_HOLD_RE, (m) => '[oculto]' + String.fromCharCode(0xF8E0 + MASK_HOLDERS.indexOf(m))) : s;
+}
+function maskHoldRestore(v) {
+  if (!MASK_HOLD_CH.test(v)) { MASK_HOLD_CH.lastIndex = 0; return v; } MASK_HOLD_CH.lastIndex = 0;
+  return v.replace(/\[oculto\]([\uF8E0-\uF8E9])/g, (_m, c) => MASK_HOLDERS[c.charCodeAt(0) - 0xF8E0]).replace(MASK_HOLD_CH, '');
+}
 const WS_LONG = new RegExp('\\s{' + (WS_RUN_MAX + 1) + '}');
 function collapseWs(v) { if (!WS_LONG.test(v) && !WS_ZW.test(v)) return v; let o = ''; const st = createWsStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 export function redactText(value) {
-  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
+  let out = supQuotes(collapseWs(pinNameShield(maskHoldShield(String(value ?? '')))));
   const kw = PIN_GATE.test(out); for (const [re, label] of PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return pinNameRestore(out);
+  return maskHoldRestore(pinNameRestore(out));
 }
 // (Bot 2 sobre 6280deae, revisado por la sala) Lo que va AL MODELO cuando el rol del SERVIDOR es dueño (mensaje, historial, contexto) y los
 // campos proveedor/documento de su tarjeta de compra: igual que redactText, salvo
@@ -704,9 +722,9 @@ const MODEL_OWNER_PATTERNS = PATTERNS.map((pt) => {
   return [pt[0], (m, d4, off, str) => (/^\d/.test(m) && (RECEIPT_BEFORE.test(str.slice(Math.max(0, off - 6), off)) || CODE_LABEL_RE.test(idBefore(str, off)) || idCodeColumn(str, off)) ? m : /^\d/.test(m) ? idLabel8(m, d4, off, str) : 'DNI ****' + d4), 'id'];
 });
 export function redactModelOwner(value) {
-  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
+  let out = supQuotes(collapseWs(pinNameShield(maskHoldShield(String(value ?? '')))));
   const kw = PIN_GATE.test(out); for (const [re, label] of MODEL_OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return pinNameRestore(out);
+  return maskHoldRestore(pinNameRestore(out));
 }
 // ¿Quedó algo tapado? («****», «[dato del dueño]», «[oculto]», «[imagen omitida]», «[correo oculto]»…): en una tarjeta ese campo va VACÍO
 // (Bot 5 sobre 58200f60) también máscaras no ASCII: «∗∗∗∗6789», «＊＊6789», «••••6789», «●●●●6789», «**6789», «…6789», «xxxx6789», «(oculto)».
@@ -716,9 +734,9 @@ export function redactModelOwner(value) {
 export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
-  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
+  let out = supQuotes(collapseWs(pinNameShield(maskHoldShield(String(value ?? '')))));
   const kw = PIN_GATE.test(out); for (const [re, label] of OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return pinNameRestore(out);
+  return maskHoldRestore(pinNameRestore(out));
 }
 // Bot 5 + sala: para un EMPLEADO se tapa SOLO EL MONTO de un dato del dueño (la palabra queda: «El costo es [dato del dueño]»).
 // Lectura de izquierda a derecha con un estado chico: una palabra del dueño (costo, costó, costaron, cto., c. unit, precio de compra,
