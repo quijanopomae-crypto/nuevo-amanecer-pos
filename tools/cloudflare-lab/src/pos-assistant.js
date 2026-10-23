@@ -84,8 +84,9 @@ const SALES_MENTION_RE = /\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado
 export const asksCreditPayments = (text) => { const t = foldText(text); return asksCreditPaymentsRule(t) && !SALES_MENTION_RE.test(t); };
 // (CLI-024) El modelo pidió las ventas para «¿cuánto cobré de fiados…?»: va la consulta de cobros del mismo período. Solo el Admin (cobros_creditos
 // es solo suyo) y solo si el mensaje no pregunta también por ventas.
-function creditPaymentsNotSales(proposals, text, role) {
-  if (role !== 'owner' || !asksCreditPayments(text)) return;
+// (#995, 3ª revisión) force: «¿cuánto me abonó Rosa esta semana?» (verbo de pago + persona, sin «fiado/deuda») también es de cobros.
+function creditPaymentsNotSales(proposals, text, role, force = false) {
+  if (role !== 'owner' || !(force || asksCreditPayments(text))) return;
   for (const p of proposals) if (p.type === 'consulta' && p.query?.tipo === 'ventas_periodo') p.query = { ...p.query, tipo: 'cobros_creditos' };
 }
 // (#995) «¿cuánto me pagó cliente #5?» o «el cliente 5»: si el modelo no mandó cliente_id, va el código del mensaje (texto real, ya
@@ -98,7 +99,7 @@ const ONE_PAYER_NAME_RE = /\bpag[oó]\s+(?:el |la |a )?(?!Yape\b|Plin\b|Clientes
 function asksOnePayer(text) {
   return String(text ?? '').split(/[.?!¿¡;\n]+/).some((s) => { const f = foldText(s); return ONE_PAYER_VERB_RE.test(f) && (ONE_PAYER_WHO_RE.test(f) || ONE_PAYER_NAME_RE.test(s)); });
 }
-function creditPaymentsClient(proposals, text, role, hasList = false) {
+function creditPaymentsClient(proposals, text, role, hasList = false, onePayer = false) {
   if (role !== 'owner') return;
   const qs = proposals.filter((p) => p.type === 'consulta' && p.query?.tipo === 'cobros_creditos');
   if (!qs.length) return;
@@ -110,7 +111,7 @@ function creditPaymentsClient(proposals, text, role, hasList = false) {
       const { cliente_id: _c, ...rest } = p.query; p.query = { ...rest, falta_cliente: 'cual', opciones: codes };
     } else if (p.query.cliente_id) continue;
     else if (codes.length === 1) p.query = { ...p.query, cliente_id: codes[0] };
-    else if (asksOnePayer(text)) p.query = { ...p.query, falta_cliente: hasList ? 'nombre' : 'codigo' };
+    else if (onePayer || asksOnePayer(text)) p.query = { ...p.query, falta_cliente: hasList ? 'nombre' : 'codigo' };
   }
 }
 // (#995, regla del 23-10) Una persona nombrada sin código en una pregunta de cobros se resuelve AQUÍ con la lista de Clientes (las mismas
@@ -118,6 +119,7 @@ function creditPaymentsClient(proposals, text, role, hasList = false) {
 // cambia por «cliente #código» antes de la IA (a la IA va el código neutro) y en pantalla sale el nombre. Varios (o dos personas): se
 // pregunta cuál con los nombres completos. Ninguno: «No encontré a un cliente llamado …». Esas dos salen sin llamar a la IA. El nombre
 // nunca va a la IA: el mensaje, el historial y el resumen que van al modelo se pasan por scrub ([nombre oculto]). Sin lista: se pide el código.
+const PAYER_ASK_RE = /\b(pago|pagaron|abono|abonaron|cancelo|cancelaron|devolvio|devolvieron)\b/;
 const PAYER_VERBS = new Set(['pago', 'pagaron', 'abono', 'abonaron', 'cancelo', 'cancelaron', 'devolvio', 'devolvieron']);
 const PAYER_HON = new Set(['don', 'dona', 'sr', 'sra', 'srta', 'senor', 'senora', 'senorita']);
 const PAYER_GLUE = new Set(['me', 'le', 'nos', 'te', 'ya', 'ha', 'han', 'hoy', 'ayer']);
@@ -163,7 +165,9 @@ export function scrubClientNames(value, customers) {
 }
 const capName = (x) => x.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 // customers: la lista (null = no se pudo leer). Devuelve null (nada que hacer) o { kind: 'uno'|'cual'|'nadie'|'sin_lista', ... }.
-export function resolvePayerNames(text, customers) {
+// strict (sin «fiado/deuda» en el mensaje): solo cuentan las personas con señal clara (nombre de la lista, «doña …», junto al verbo);
+// una palabra con mayúscula sola («en Octubre», «Plaza Vea») no convierte la pregunta en cobros de alguien.
+export function resolvePayerNames(text, customers, { strict = false } = {}) {
   const s = String(text ?? ''), toks = personTokens(s);
   const paySent = new Set(toks.filter((t) => PAYER_VERBS.has(t.f)).map((t) => t.sent));
   if (!paySent.size) return null;
@@ -181,7 +185,7 @@ export function resolvePayerNames(text, customers) {
     let n = i + 1; while (same(n) && PAYER_GLUE.has(toks[n].f) && n < i + 3) n++;
     const nextVerb = same(n) && isVerb(n);
     const afterAnd = same(i - 1) && ['y', 'e'].includes(toks[i - 1].f) && ments.length && ments.at(-1).e <= toks[i - 1].s;
-    if (!(hon || prevVerb || nextVerb || afterAnd || /^\p{Lu}/u.test(t.w))) continue;
+    if (!(hon || prevVerb || nextVerb || afterAnd || (!strict && /^\p{Lu}/u.test(t.w)))) continue;
     let j = i; while (j + 1 < i + 3 && same(j + 1) && /^\p{Lu}/u.test(toks[j + 1].w) && !payerStop(toks[j + 1].f)) j++;
     ments.push({ s: start, e: toks[j].e, hits: [], name: capName(s.slice(t.s, toks[j].e)) }); i = j;
   }
@@ -3479,11 +3483,15 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // Códigos de cliente neutros (C-0001…) hacia la IA: un mapa para todo el pedido (primera y segunda llamada), ver pos-assistant-codigos.js.
   const ccfg = cfg.ok ? { ...cfg, codes: createCodeMap() } : cfg;
   // (#995, regla del 23-10) cobros de una persona nombrada: se resuelve con la lista de Clientes antes de la IA (resolvePayerNames).
+  // (3ª revisión) también sin «fiado/deuda»: verbo de pago + una persona («¿cuánto me abonó Rosa esta semana?») = cobros de ese cliente.
   let payer = null, scrub = null, turnText = null, hasList = false;
-  if (asksCreditPayments(parsed.text) && !parsed.image) {
+  const creditAsk = !parsed.image && asksCreditPayments(parsed.text), payAsk = !parsed.image && !creditAsk && PAYER_ASK_RE.test(foldText(parsed.text))
+    && !SALES_MENTION_RE.test(foldText(parsed.text)) && !CREDIT_PAYMENT_ACTION_RE.test(foldText(parsed.text)) && !clientCodesInText(parsed.text).length;
+  if (creditAsk || payAsk) {
     const cs = await (async () => { try { return rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; } catch { return null; } })();
-    hasList = Array.isArray(cs); if (hasList) { known.customers = cs; custRead = true; scrub = (v) => scrubClientNames(v, cs); }
-    payer = clientCodesInText(parsed.text).length ? null : resolvePayerNames(parsed.text, hasList ? cs : null);
+    hasList = Array.isArray(cs);
+    payer = clientCodesInText(parsed.text).length ? null : resolvePayerNames(parsed.text, hasList ? cs : null, { strict: !creditAsk });
+    if (creditAsk || payer) { if (hasList) { known.customers = cs; custRead = true; scrub = (v) => scrubClientNames(v, cs); } } else hasList = false;
     if (payer?.kind === 'uno') parsed.text = payer.text;
     turnText = payer?.masked ?? (scrub ? scrub(parsed.text) : null);
   }
@@ -3547,7 +3555,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
   arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
-  creditPaymentsNotSales(proposals, parsed.text, role); creditPaymentsClient(proposals, parsed.text, role, hasList); // (#995) cobros de UN cliente con su código.
+  creditPaymentsNotSales(proposals, parsed.text, role, !!payer); creditPaymentsClient(proposals, parsed.text, role, hasList, !!payer); // (#995) cobros de UN cliente con su código.
   // (auditoría 500, CLI-024) «¿cuánto cobré de fiados?» con ventas_periodo = cobros_creditos
   // (auditoría 500, CP-037) costo que nadie dijo (ni en este mensaje ni en los anteriores de la persona): queda vacío y marcado, no inventado.
   // Solo compras dictadas por texto («compré…», «me llegaron…»); una factura leída trae sus costos.
@@ -3771,9 +3779,13 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner}) : null;
   let shown = reply; // lo que ve el Admin en pantalla: los «producto #N» de resúmenes/consultas con su nombre; turns e historial siguen con el código
   if (role === 'owner' && refIds.size && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); shown = nameProductRefs(reply, known.names.filter((p) => !notRef(p))); }
-  // (#995) persona resuelta aquí: en pantalla el nombre (Admin y empleado); en reply/turns (historial que vuelve a la IA) solo el código.
-  if (payer?.kind === 'uno') { const c = payer.client; shown = shown.replace(new RegExp('cliente #' + c.cliente_id.replace(/[^A-Za-z0-9]/g, '\\$&') + '(?![A-Za-z0-9_-])', 'i'), c.nombre + ' (cliente #' + c.cliente_id + ')'); }
-  if (localPayer && payer.kind === 'cual') for (const o of payer.options) shown = shown.replace(new RegExp('cliente #' + o.cliente_id.replace(/[^A-Za-z0-9]/g, '\\$&') + '(?![A-Za-z0-9_-])'), o.nombre + ' (cliente #' + o.cliente_id + ')');
+  // (#995) persona resuelta aquí: un cliente queda «cliente #N» como toda respuesta (el aparato pone el nombre: linkCustomers; sin doble
+  // nombre). «¿De cuál…?» en pantalla con los nombres completos (aún no hay código elegido); si dos se llaman igual, con su código.
+  // reply/turns (historial que vuelve a la IA) solo con códigos.
+  if (localPayer && payer.kind === 'cual') {
+    const names = payer.options.map((o) => o.nombre), dup = (n) => names.filter((x) => foldText(x) === foldText(n)).length > 1;
+    shown = '¿De cuál cliente quiere los cobros: ' + payer.options.map((o) => (dup(o.nombre) ? 'cliente #' + o.cliente_id : o.nombre)).join(' o ') + '? Pregunte por uno a la vez.';
+  }
   if (localPayer && payer.kind === 'nadie') shown = shown.replace(NAME_MASK, payer.names.join(' ni a '));
   return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left, ...(localPayer && payer.kind === 'cual' ? { opciones: payer.options } : {}),
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });

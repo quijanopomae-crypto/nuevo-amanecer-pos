@@ -48,6 +48,12 @@ export function mockAssistantReply({ role, ctx, text, image }) {
     const cli = clientCodesInText(text); // «cliente #5» o «el cliente 5»
     return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), ...(cli.length === 1 ? { cliente_id: cli[0] } : {}) })] };
   }
+  // (#995, 3ª revisión) «¿cuánto me abonó cliente #5 esta semana?» (sin «fiado»; el chat ya cambió el nombre por el código): sus cobros.
+  { const cli = [...new Set(clientCodesInText(text))];
+    if (cli.length === 1 && /\b(pago|pagaron|abono|abonaron|cancelo|cancelaron|devolvio|devolvieron)\b/.test(tc) && !/\b(vend\w*|venta\w*)\b/.test(tc)
+      && !/\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b/.test(tc))
+      return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), cliente_id: cli[0] })] };
+  }
   { const cli = clientCodesInText(text); // solo el código («cliente #12», «cliente 12», «cliente nro. 12», «N° 12»), nunca el nombre
     const uno = [...new Set(cli.map((c) => c.toLowerCase()))].length === 1; // (#995, punto 3) «cliente #5 o el #9»: pregunta cuál, no elige el primero
     if (cli.length && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t))
