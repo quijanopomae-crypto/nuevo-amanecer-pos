@@ -18,14 +18,14 @@ import { SETTINGS_TOOL, SERVER_SETTINGS_TOOL, settingsSnapshot, settingsProposal
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
-import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
+import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, statedCost, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, COST_QUERY_TYPES, employeeDocumentRows, protectProductRefs, DATE_WORDS, dateWord, limaToday, limaCalendarLine, matchProducts, PRODUCT_MATCH_ROWS, employeeNoticeText, stockLabel, brandNoticeOf, BRAND_NOTICE, BRAND_NOTICE_LEAD, saysNoBrand } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
@@ -76,6 +76,14 @@ export const CONFIG_FORBIDDEN = Object.freeze({ error: 'config_forbidden', messa
 export const CONFIG_ADMIN_ONLY = Object.freeze({ error: 'config_forbidden', message: CONFIG_ADMIN_ONLY_TEXT });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
 const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
+// (auditoría 500, P-051/P-052) «Ventas bajo costo» pedida en el chat por un empleado SIN el permiso de costos («q productos estoy vendiendo
+// a perdida»): 403 below_cost_admin_only antes de abrir el canal, sin cupo ni modelo. Mismo patrón que el teléfono (BELOW_RE de asistente-ui.js),
+// Una baja «pasa 3 leches vencidas a pérdida» no entra: hace falta un verbo de venta (vendo, vendí, vendemos, vendiendo…) y hasta 3 palabras
+// antes de «a pérdida». Un mensaje con varios pedidos y uno de ellos sobre ventas bajo costo recibe el 403 completo (fijado en la prueba).
+// que al Admin y al nivel 3 con «costos y cambios» los manda directo a /auth/assistant/below-cost.
+export const BELOW_COST_DENIED = Object.freeze({ error: 'below_cost_admin_only', message: 'Las alertas de venta bajo costo son solo para el Admin.' });
+export const BELOW_COST_ASK_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bvend(?:o|es?|en|emos|[ií]|i[oó]|imos|ieron|iendo|ido|er|[ií]a[ns]?|[ií]amos)(?![a-záéíóúñ])(?:\s+[^\s.,;:!?¿¡]+){0,3}?\s+a\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
+export function employeeBelowCostDenied(role, text) { return String(role || '').startsWith('empleado:') && !seesOwnerData(role) && BELOW_COST_ASK_RE.test(String(text || '')); }
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
   const t = String(text || '');
@@ -2060,10 +2068,10 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'proponer_cambio_precio') {
     const p = idx.get(safeId(args.product_id)); const nuevo = money(args.precio_nuevo);
     if (!p || !nuevo || nuevo <= 0) return { dropped: 'bad_price', tool: name };
-    const delta = p.precio ? (nuevo - p.precio) / p.precio : null;
+    const delta = p.precio ? (nuevo - p.precio) / p.precio : null, quiso = decimalSlip(p.precio, nuevo);
     return { id, type: 'precio', needsConfirm: true, requiresRole: 'owner', title: 'Cambiar precio', product_id: p.id, nombre: p.nombre,
       precio_actual: p.precio, precio_nuevo: nuevo, motivo: cleanText(args.motivo, 160), cambioGrande: delta != null && Math.abs(delta) > 0.5,
-      bajoCosto: p.costo != null && nuevo < p.costo };
+      bajoCosto: p.costo != null && nuevo < p.costo, ...(quiso != null ? { quisoDecir: quiso } : {}) };
   }
   if (name === 'preparar_documento') {
     const tipo = DOC_TYPES.includes(args.tipo) ? args.tipo : null; if (!tipo) return { dropped: 'bad_document', tool: name };
@@ -2119,8 +2127,36 @@ export async function readLessons(store, auth, nowMs) {
 // (alfa, #957) lo guardado en pos_settings nunca lleva datos de clientes: nombres de la lista de clientes -> «cliente #código»; nombre tras
 // «cliente», «señora», «don»… -> se quita; DNI, RUC, teléfonos y correos con redactText (las mismas máscaras que van al modelo).
 const LESSON_FOLD = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr\w*|pag\w*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev\w*|quier\w*|pid\w*|tom(?:a|ó|o|an|aron)|recog\w*|llam\w*|dij\w*|tien\w*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad\w*|fi[oó]|encarg\w*|reserv\w*|apart\w*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
-export function sanitizeLesson(fact, customers = []) {
+const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr[\wÁÉÍÓÚÜÑáéíóúüñ]*|pag[\wÁÉÍÓÚÜÑáéíóúüñ]*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev[\wÁÉÍÓÚÜÑáéíóúüñ]*|quier[\wÁÉÍÓÚÜÑáéíóúüñ]*|pid[\wÁÉÍÓÚÜÑáéíóúüñ]*|tom(?:a|ó|o|an|aron)|recog[\wÁÉÍÓÚÜÑáéíóúüñ]*|llam[\wÁÉÍÓÚÜÑáéíóúüñ]*|dij[\wÁÉÍÓÚÜÑáéíóúüñ]*|tien[\wÁÉÍÓÚÜÑáéíóúüñ]*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad[\wÁÉÍÓÚÜÑáéíóúüñ]*|fi[oó]|encarg[\wÁÉÍÓÚÜÑáéíóúüñ]*|reserv[\wÁÉÍÓÚÜÑáéíóúüñ]*|apart[\wÁÉÍÓÚÜÑáéíóúüñ]*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
+// (auditoría 500, P-027; #988 revisión) Regla COMPARTIDA «don/doña» marca vs persona: la usan las lecciones (sanitizeLesson) y debe reusarla
+// el ocultado de respuestas (#998, maskReplyPeople).
+//   isBrandDon(text, start, end, known) -> true si el tramo text[start,end) («don/doña + nombre») es una MARCA y puede quedarse.
+//   - text: el texto completo; start/end: índices del tramo (empieza en «don»/«doña»); known: productos conocidos ({nombre} o strings).
+//   - Un verbo de deuda o pago cerca (hasta 4 palabras después del tramo o 3 antes: debe, paga, pagó, abonó, fía, le fié, me debe,
+//     cobrar a, prestar…) gana SIEMPRE: es persona.
+//   - Sin ese verbo, es marca si va justo después de una palabra de producto («fideo don …», «aceite doña …») o si «don/doña + primera
+//     palabra» está en el nombre de un producto conocido («Café Don Juan 250g»).
+//   - Nunca cuentan solos: las mayúsculas, un tamaño («2 KG», «X 20»), ni «producto» o «marca» como palabra antes.
+//   Los clientes de la lista se tapan ANTES, sin consultar esta función.
+const BRAND_CUE_RE = /^\s*(?:don|do[nñ]a)(?![a-zñ])/;
+const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada)\s+$/i;
+// sobre texto ya sin tildes y en minúsculas (LESSON_FOLD)
+const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|ara|aron|ar|ado)|fi(?:o|e|a|an|aron|amos|aste|ara|ar)|fiad[oa]s?\s+a|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
+const foldWords = (t) => LESSON_FOLD(t).split(/\s+/).filter(Boolean);
+export function isBrandDon(text, start, end, known = []) {
+  const all = String(text || ''), s = Math.max(0, start | 0), e = Math.max(s, Math.min(all.length, end | 0));
+  const span = LESSON_FOLD(all.slice(s, e));
+  if (!BRAND_CUE_RE.test(span)) return false;
+  const before = all.slice(0, s), after = all.slice(e);
+  if (DEBT_VERB.test(' ' + [...foldWords(before).slice(-3), ...foldWords(span), ...foldWords(after).slice(0, 4)].join(' ') + ' ')) return false;
+  if (PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before))) return true;
+  const w = span.replace(/[^a-z0-9ñ]+/g, ' ').trim().split(' '), key = w[0] + ' ' + (w[1] || '');
+  return (w[1] || '').length >= 3 && (Array.isArray(known) ? known : []).some((p) => {
+    const n = typeof p === 'string' ? p : p && p.nombre;
+    return n && (' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(' ' + key + ' ');
+  });
+}
+export function sanitizeLesson(fact, customers = [], products = []) {
   let out = String(fact || '');
   const list = (Array.isArray(customers) ? customers : []).filter((c) => c && c.nombre && String(c.nombre).trim().length >= 3)
     .map((c) => ({ code: customerCode(c.id), nombre: String(c.nombre).trim() })).sort((a, b) => b.nombre.length - a.nombre.length);
@@ -2133,11 +2169,11 @@ export function sanitizeLesson(fact, customers = []) {
       for (const i of at.reverse()) out = out.slice(0, i) + (c.code ? 'cliente #' + c.code : 'un cliente') + out.slice(i + alt.length);
     }
   }
-  out = out.replace(PERSON_CUE, (m, cue, name) => /#/.test(name) ? m : cue + ' ');
+  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || isBrandDon(all, at, at + m.length, products) ? m : cue + ' ');
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
-export async function saveLesson(store, auth, nowMs, fact, customers = []) {
-  const f = sanitizeLesson(fact, customers).slice(0, 200); if (!f) return false;
+export async function saveLesson(store, auth, nowMs, fact, customers = [], products = []) {
+  const f = sanitizeLesson(fact, customers, products).slice(0, 200); if (!f) return false;
   try {
     const key = await lessonsKey(auth), day = limaDate(nowMs);
     for (let i = 0; i < 4; i++) {
@@ -2774,7 +2810,8 @@ function employeeQueryText(r, e) {
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   if (r.tipo === 'stock_producto' && iP >= 0 && iS >= 0) {
     if (!e.filas.length) return 'No encontré ese producto.';
-    return employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
+    // INV-047 / INV-008: marca que la tienda no tiene. Texto fijo: nunca repite la palabra escrita (revisión de #1001)
+    return (brandNoticeOf(r.resumen) ? BRAND_NOTICE_LEAD : '') + employeeSentences(e.filas.map((f) => String(f[iP]) + (iPr >= 0 && f[iPr] != null ? ' (S/ ' + Number(f[iPr]).toFixed(2) + ')' : '') + ': ' + (num(f[iS]) ? stockLabel(f[iS]) : 'sin control de stock')));
   }
   if (r.tipo === 'stock_producto' && !e.filas.length) return 'No encontré ese producto.';
   if (r.tipo === 'bajo_stock' && iP >= 0 && iS >= 0) {
@@ -3073,6 +3110,13 @@ export function parseChatBody(body, role = null) {
   return { text, cut, image, history, context: body.context, stream: body.stream === true, resumen: readResumenField(body.resumen), overflow: Math.max(0, all.length - ASSISTANT_LIMITS.maxHistory), cards: parseCards(body.cards) };
 }
 // Estado de las tarjetas que el aparato tiene en pantalla (solo tipo y estado, de listas cerradas). Sin campo = aparato viejo: null.
+// (auditoría 500, P-044) «el azucar ponlo a 400» con precio S/ 4.00: unas 100 veces el precio = casi seguro faltó el punto («4.00»).
+// La tarjeta y la respuesta preguntan «¿Quiso decir S/ 4.00?»; se confirma igual con un toque (sin PIN ni pasos extra).
+export function decimalSlip(actual, nuevo) {
+  const a = Number(actual), n = Number(nuevo); if (!(a > 0) || !(n > 0)) return null;
+  const r = n / a; return r >= 50 && r <= 200 ? Math.round(n) / 100 : null;
+}
+export function decimalSlipText(v) { return '¿Quiso decir S/ ' + Number(v).toFixed(2) + '?'; }
 export const CARD_TYPES = Object.freeze(['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto']);
 export const CARD_STATES = Object.freeze(['pendiente', 'confirmada', 'cancelada', 'vencida', 'no_permitida']);
 export function parseCards(cards) {
@@ -3251,6 +3295,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
   // Sugerencias de compra o créditos atrasados pedidos por un empleado: 403 antes de abrir el canal, sin cupo ni modelo.
   if (employeeQueryDenied(role, parsed.text)) return json(QUERY_ADMIN_ONLY, 403);
+  if (employeeBelowCostDenied(role, parsed.text)) return json(BELOW_COST_DENIED, 403);
   if (employeeSummaryDenied(role, parsed.text)) return json(SUMMARY_ADMIN_ONLY, 403);
   const store = store0;
   if (!store) return json({ error: 'usage_store_missing' }, 500);
@@ -3401,7 +3446,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     return json(COSTS_ADMIN_ONLY, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
-  const consultas = [], toolMsgs = [], refIds = new Set(); let queryCut = false;
+  const consultas = [], toolMsgs = [], refIds = new Set(); let queryCut = false, brandMissing = false;
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
   if (!seesOwnerData(role)) for (const p of proposals.filter((x) => x.type === 'documento')) {
     let d; try { d = reader ? await timed(() => employeeDocumentRows(reader, p.tipo)) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
@@ -3420,6 +3465,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (!costQueryAllowed(role, p.query?.tipo)) r = { error: COSTS_ADMIN_ONLY.error };
     else try { r = reader ? await timed(() => runAssistantQuery(reader, p.query, now)) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
     if (r && r.truncado) queryCut = true;
+    if (r && !r.error && brandNoticeOf(r.resumen)) brandMissing = true; // INV-047 / INV-008
     if (!seesOwnerData(role)) r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null, ...(r.truncado === true ? { truncado: true } : {}) };
     consultas.push(p);
@@ -3468,6 +3514,18 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (emit && !second.error && !confirmHeld(emit)) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);
     }
+    // (INV-047 / INV-008) marca que la tienda no tiene: si la respuesta no lo dice, el servidor pone el aviso en su propia línea, antes.
+    // Texto fijo «No tengo esa marca…»: nunca lleva la palabra que escribió la persona (revisión de #1001).
+    if (brandMissing && !saysNoBrand(reply)) reply = BRAND_NOTICE + (reply ? '\n' + reply : '');
+  }
+  // (auditoría 500, M-035) costo nuevo dicho en el chat por el Admin: tarjeta «Actualizar costo» (firmada abajo), nunca una lección.
+  let costReply = null;
+  const said = role === 'owner' && !parsed.image && !resetAsk ? statedCost(parsed.text) : null;
+  if (said) {
+    if (!sysProducts) sysProducts = await loadProducts();
+    const sc = statedCostCard(said, [...(ctx.products || []), ...(sysProducts || [])]);
+    if (sc.card && !proposals.some((p) => p.type === 'costo' && String(p.product_id) === String(sc.card.product_id))) proposals.push(sc.card);
+    costReply = sc.reply;
   }
   for (const p of proposals) delete p._call;
   // Id único de propuesta: lo genera el SERVIDOR y queda firmado dentro del token (pid). El cliente nunca lo arma.
@@ -3512,6 +3570,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (role === 'owner' && SUPPLIER_OF_PRODUCT_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm)) reply = SUPPLIER_OF_PRODUCT_TEXT;
   if (PURCHASE_VOID_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm) && (VOID_PATH_RE.test(reply) || !proposals.length)) reply = role === 'owner' ? PURCHASE_VOID_TEXT : PURCHASE_VOID_EMPLOYEE_TEXT;
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
+  if (costReply) reply = proposals.some((p) => p.needsConfirm && p.type !== 'costo') ? reply + ' ' + costReply : costReply;
+  // (auditoría 500, P-044) precio unas 100 veces el actual: la respuesta pregunta lo mismo que la tarjeta.
+  for (const p of proposals) if (p.type === 'precio' && p.quisoDecir != null && !reply.includes(decimalSlipText(p.quisoDecir)))
+    reply = (reply ? reply + ' ' : '') + (proposals.filter((x) => x.type === 'precio').length > 1 ? '«' + p.nombre + '» a ' + 'S/ ' + Number(p.precio_nuevo).toFixed(2) + ': ' : '') + decimalSlipText(p.quisoDecir) + ' Si es así, no confirmes y escríbeme el precio con punto.';
   // (lote en vivo 22-10) borrar todo o reiniciar: el asistente nunca lo ofrece ni lo hace; sin tarjetas.
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
   // (auditoría 500, SEG) varias tarjetas de cambio de producto en una respuesta: el servidor dice cuántas son y que cada una se aplica aparte
@@ -3541,7 +3603,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; } await saveLesson(store, auth, now, redactModelOwner(fact), cust); } }
+  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
+    if (!sysProducts) sysProducts = await loadProducts(); await saveLesson(store, auth, now, redactModelOwner(fact), cust, [...(ctx.products || []), ...(sysProducts || [])]); } }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
@@ -3673,6 +3736,25 @@ export function infoOnlyText(proposals) {
   return 'Aquí tienes la información.';
 }
 
+// (auditoría 500, M-035) «el pollo ahora me cuesta 9.20»: el costo nuevo dicho por el Admin va a la ficha del producto con la MISMA tarjeta
+// «Actualizar costo» (al confirmar se abre la ficha con el costo; se aplica solo cuando la persona pulsa Guardar). No se guarda como lección.
+// Un solo producto que coincide: tarjeta. Varios: se pregunta cuál (sin tarjeta). Ninguno: se dice que no está.
+const soles2 = (n) => n == null || !Number.isFinite(Number(n)) ? 'sin costo' : 'S/ ' + Number(n).toFixed(2);
+export function statedCostCard(said, products) {
+  const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const seen = new Set(), list = (Array.isArray(products) ? products : []).filter((p) => p && p.id != null && p.nombre && !seen.has(String(p.id)) && seen.add(String(p.id)));
+  const nuevo = money(said && said.costo); if (!said || !nuevo) return { card: null, reply: null };
+  const hits = matchProducts(list, said.nombre), full = hits.filter((p) => fold(p.nombre).includes(fold(said.nombre)));
+  const pick = hits.length === 1 ? hits[0] : full.length === 1 ? full[0] : null;
+  if (!pick) return { card: null, reply: hits.length
+    ? 'Ese costo va en la ficha del producto (así las ganancias salen bien), no como nota. ¿De cuál es? ' + hits.slice(0, 5).map((p) => '«' + p.nombre + '»').join(', ') + '. Dime el nombre y te preparo el cambio de costo.'
+    : 'No encontré «' + said.nombre + '» en tus productos. Dime el nombre como está en el inventario y te preparo el cambio de costo.' };
+  const actual = pick.costo == null || !Number.isFinite(Number(pick.costo)) ? null : Number(pick.costo);
+  if (actual != null && Math.abs(actual - nuevo) < 0.005) return { card: null, reply: '«' + pick.nombre + '» ya tiene ese costo (' + soles2(nuevo) + '). No hay nada que cambiar.' };
+  return { card: { id: 'costo-' + pick.id, type: 'costo', needsConfirm: true, requiresRole: 'owner', title: 'Actualizar costo', product_id: pick.id, nombre: pick.nombre,
+    costo_actual: actual, costo_nuevo: nuevo, origen: null, deChat: true },
+  reply: 'Ese costo va en la ficha del producto, así las ganancias salen bien. Preparé el cambio de costo de «' + pick.nombre + '»: ' + soles2(actual) + ' → ' + soles2(nuevo) + '. Pulsa Confirmar para abrir la ficha con el costo nuevo; se aplica cuando pulses Guardar.' };
+}
 // Tarjetas «Actualizar costo» a partir de una compra: solo filas con producto conocido, costo leído distinto (>1 %) y sin marcas de revisión.
 export function costProposals(compra) {
   const out = [];
