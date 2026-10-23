@@ -77,7 +77,9 @@ test('chat con consulta: segunda llamada a DeepSeek solo con el resumen (mensaje
   const p = r.body.proposals[0]; assert.equal(p.type, 'consulta'); assert.equal(p.needsConfirm, false); assert.ok(!p.confirm_token);
   assert.ok(p.result.filas.length <= 10 && p.result.filas.length > 0);
   // Tope del Admin subido de 12000 a 16000 bytes: decisión de alfa del 2026-10-22, para dejar espacio a #957/#962.
-  const [b1, b2] = r.body.payload_bytes; assert.ok(b1 > 0 && b1 < 16000 && b2 > 0 && b2 < 16000, 'bytes ' + r.body.payload_bytes);
+  // Subido de 16000 a 17000 bytes (decisión de alfa del 2026-10-23, cuando #967 traía su propia herramienta). No se sube más.
+  // Ahora #967 va dentro de configurar_app y su catálogo solo viaja en pedidos de configuración: esta consulta no lo lleva.
+  const [b1, b2] = r.body.payload_bytes; assert.ok(b1 > 0 && b1 < 17000 && b2 > 0 && b2 < 16000, 'bytes ' + r.body.payload_bytes);
   assert.match(r.body.reply, /más urgentes/);
 });
 

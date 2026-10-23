@@ -351,7 +351,7 @@ test('Bot 3: el ping dice si el modelo en uso lee fotos (vision), sin nombre de 
   assert.equal((await ping(ENV_OF('groq'))).vision, false); assert.equal((await ping(ENV_OF('gemini'))).vision, true);
   assert.equal((await ping(ENV_OF('groq', { AI_VISION: '1' }))).vision, true); assert.equal((await ping(ENV_OF('gemini'), 'empleado:consultas')).vision, false);
   assert.equal((await ping({ ASSISTANT_DEMO: '1' })).vision, true, 'demostración como antes'); assert.equal((await ping({})).vision, false, 'sin proveedor');
-  const b = await ping(ENV_OF('anthropic')); assert.deepEqual(Object.keys(b), ['ok', 'enabled', 'role', 'level', 'vision']); assert.ok(!/anthropic|claude|groq|gemini/i.test(JSON.stringify(b)));
+  const b = await ping(ENV_OF('anthropic')); assert.deepEqual(Object.keys(b), ['ok', 'enabled', 'role', 'level', 'vision', 'cambios']); assert.ok(!/anthropic|claude|groq|gemini/i.test(JSON.stringify(b)));
 });
 test('Bot 3: el celular no sube la foto si el ping dijo vision:false (frase simple) y avisa ?image=1 cuando sí la manda', async () => {
   const { readFileSync } = await import('node:fs');

@@ -380,7 +380,7 @@ const LEVELS = [
   ['nivel 2', 'empleado:consultas_documentos', ['stock_producto', 'bajo_stock'], ['explicar_pasos', 'consultar', 'preparar_documento'], 'ganancia'],
   ['nivel 3 sin costos', 'empleado:completo', ['stock_producto', 'bajo_stock'], ['explicar_pasos', 'consultar', 'preparar_documento'], 'ganancia'],
   ['nivel 3 con costos', 'empleado:completo+costos', ['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'compras_recientes', 'ganancia', 'productos_sin_ventas', 'ventas_por_hora'],
-    ['explicar_pasos', 'consultar', 'preparar_documento', 'proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo'], 'deuda_cliente']
+    ['explicar_pasos', 'consultar', 'preparar_documento', 'proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo', 'configurar_app'], 'deuda_cliente']
 ];
 for (const [label, role, types, names, denied] of LEVELS) {
   test('por nivel (' + label + '): consultar trae solo sus tipos y sus herramientas; un tipo ajeno no pasa y no se lee la base', async () => {

@@ -15,8 +15,11 @@ test('Admin conoce opciones reales y valores sin subir capturas; datos personale
 });
 test('configuración solo Admin incluso ante empleado de nivel 3 con costos',()=>{
  assert.ok(toolsForRole('owner').some(t=>t.function.name==='configurar_app'));
+ // #967: el nivel 3 con «costos y cambios» recibe configurar_app SOLO con datos del negocio y del ticket; los ajustes de este catálogo siguen del Admin.
+ const l3c=toolsForRole('empleado:completo+costos').find(t=>t.function.name==='configurar_app');
+ assert.ok(l3c&&!l3c.function.parameters.properties.ajuste.enum.some(k=>Object.hasOwn(snapshot,k)||['lector_activo','lector_intervalo','lector_minimo'].includes(k)));
  for(const role of ['empleado:consultas','empleado:consultas_documentos','empleado:completo','empleado:completo+costos']){
-  assert.ok(!toolsForRole(role).some(t=>t.function.name==='configurar_app'));
+  if(role!=='empleado:completo+costos')assert.ok(!toolsForRole(role).some(t=>t.function.name==='configurar_app'));
   assert.equal(proposal('modo','noche',role).dropped,'forbidden_role');
   assert.equal(sanitizeContext({settings:snapshot},role).settings,undefined);
  }
@@ -115,6 +118,7 @@ test('Color y colores admitidos mantienen catálogo aun sin snapshot; empleados 
   const req=buildDeepSeekRequest({role:'owner',ctx:sanitizeContext({products:[]},'owner'),history:[],text});
   assert.ok(req.tools.some(t=>t.function.name==='configurar_app'),text);
   const denied=buildDeepSeekRequest({role:'empleado:completo+costos',ctx:sanitizeContext({products:[],settings:snapshot},'empleado:completo+costos'),history:[],text});
-  assert.ok(!denied.tools.some(t=>t.function.name==='configurar_app'),text);
+  const t=denied.tools.find(t=>t.function.name==='configurar_app');assert.ok(!t||!t.function.parameters.properties.ajuste.enum.includes('tema'),text); // #967: solo negocio y ticket
+  assert.doesNotMatch(JSON.stringify(denied.messages),/Color y estilo/,text);
  }
 });
