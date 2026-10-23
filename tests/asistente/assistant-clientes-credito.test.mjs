@@ -831,3 +831,19 @@ test('#995 (bloqueo en 764d2ee3) «¿cuánto me pagó cada uno, Rosa y Elmer?» 
   for (const text of ['¿me pagó alguien hoy?', '¿cuánto me pagaron mis clientes esta semana?', '¿cuánto me pagó la vecina esta semana?', '¿cuánto me pagó cada uno esta semana?'])
     for (const stream of [false, true]) assert.equal((await askP(text, { stream })).reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', text);
 });
+
+// (decisión del lead, 764d2ee3) «ella» / «él» junto a un verbo de pago, sin cliente que resolver: se pregunta de qué cliente, sin IA y nunca
+// el total de la tienda ni «No encontré… Ella». (Tomar el cliente del turno anterior queda para después.)
+const PRON_PAY = ['¿me pagó ella?', '¿cuánto me pagó él esta semana?', '¿Ella me pagó de su deuda esta semana?', '¿él me abonó hoy?', '¿cuánto me pagó ella de fiado esta semana?'];
+test('#995 (decisión del lead) «me pagó ella / él»: «¿De qué cliente? Escríbame su nombre.» sin IA ni total (con y sin partes)', async () => {
+  for (const text of PRON_PAY) for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = text + ' stream=' + stream + ' ' + args.tipo;
+    const { status, reply, cap } = await askP(text, { stream, args });
+    assert.equal(status, 200, why); assert.equal(reply, '¿De qué cliente? Escríbame su nombre.', why); assert.equal(cap.length, 0, why);
+  }
+  // «ellos» sigue siendo la lista fija (total de la tienda); «el cliente 5» (artículo) sigue siendo el código a un cliente nombrado.
+  for (const stream of [false, true]) {
+    assert.equal((await askP('¿cuánto me pagaron ellos esta semana?', { stream })).reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.');
+    assert.equal((await askP('¿cuánto me pagó el cliente 5 esta semana?', { stream })).reply, ROSA_REPLY);
+  }
+});
