@@ -2793,12 +2793,26 @@ export function stripOwnerKeys(v, depth = 0) {
 // (revisión de alfa, PR #984) «aviso» NO está en la lista blanca: puede venir de cualquier consulta y traer montos. Al empleado solo le llega
 // el aviso rearmado desde los avisos estructurados de fechas y conteos (NOTICES, ver employeeNoticeText): nunca plata.
 const withNotice = (res, aviso) => (aviso ? { ...res, aviso } : res);
+// (revisión #1018) Texto de deuda_cliente del empleado: solo una de las frases fijas de la consulta, armadas con lo que ya pasó la lista
+// blanca (código, saldo, créditos abiertos, vencimiento). Si el texto trae otra cosa (nombre, DNI, teléfono, otro cliente, totales de la
+// tienda), no pasa: se usa la frase armada aquí. El total solo puede ser el número de créditos abiertos (nunca plata).
+function employeeDebtText(texto, res) {
+  if (res.falta === 'cliente_id') return 'Dime el código del cliente (aparece como «cliente #código» en Clientes).';
+  const ref = typeof res.cliente === 'string' && /^cliente #[A-Za-z0-9_-]{1,40}$/.test(res.cliente) ? res.cliente : null;
+  if (!ref) return '';
+  const n = Number(res.creditos_abiertos), saldo = Number(res.saldo_soles), vence = /^\d{4}-\d{2}-\d{2}$/.test(String(res.vence_primero || '')) ? res.vence_primero : null;
+  const ok = Number.isInteger(n) && n > 0 && Number.isFinite(saldo)
+    ? [ref + ' debe S/ ' + saldo.toFixed(2) + ' en ' + n + (n === 1 ? ' crédito abierto' : ' créditos abiertos') + (vence ? '; el primero vence el ' + vence : '') + '.']
+    : ['No encontré deudas de ' + ref + '. Revise el código en Clientes.', ref + ' no tiene deudas pendientes.'];
+  return ok.includes(String(texto || '')) ? String(texto) : ok[0];
+}
 export function employeeQueryResult(r) {
   if (!r || r.error) return r;
   if (r.tipo === 'deuda_cliente') {
     const cols = Array.isArray(r.columnas) ? r.columnas : [], idx = cols.map((c, i) => EMPLOYEE_DEBT_FIELDS.columnas.includes(c) ? i : -1).filter((i) => i >= 0);
     const res = r.resumen || {}, resumen = Object.fromEntries(EMPLOYEE_DEBT_FIELDS.resumen.filter((k) => k in res && (res[k] == null || typeof res[k] !== 'object')).map((k) => [k, res[k]]));
-    return { tipo: r.tipo, titulo: r.titulo, columnas: idx.map((i) => cols[i]), filas: (Array.isArray(r.filas) ? r.filas : []).map((f) => idx.map((i) => f[i])), texto: String(r.texto || ''), total: r.total ?? null, resumen };
+    return { tipo: r.tipo, titulo: r.titulo, columnas: idx.map((i) => cols[i]), filas: (Array.isArray(r.filas) ? r.filas : []).map((f) => idx.map((i) => f[i])),
+      texto: employeeDebtText(r.texto, resumen), total: Number.isInteger(r.total) && r.total === resumen.creditos_abiertos ? r.total : null, resumen };
   }
   const keep = (v) => Array.isArray(v) ? v.map(keep) : v && typeof v === 'object'
     ? Object.fromEntries(Object.entries(v).filter(([k]) => EMPLOYEE_QUERY_FIELDS.resumen.includes(k) && !OWNER_ONLY_KEY.test(k)).map(([k, x]) => [k, keep(x)])) : v;
