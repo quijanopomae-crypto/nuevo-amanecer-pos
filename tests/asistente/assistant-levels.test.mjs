@@ -45,7 +45,7 @@ test('mapa único: cada nivel incluye al anterior; ningún nivel de empleado cam
   for (const k of ['asistente', 'revision', 'cambios', 'costos', 'fotos', 'configurar']) assert.equal(ADMIN_CAPABILITIES[k], true, k);
   // pos-assistant.js toma sus listas de aquí (un solo lugar).
   assert.equal(EMPLOYEE_TOOLS.completo, LEVEL_CAPABILITIES[3].herramientas); assert.equal(EMPLOYEE_TOOLS.consultas, LEVEL_CAPABILITIES[1].herramientas);
-  assert.deepEqual([...EMPLOYEE_QUERY_TYPES], ['stock_producto', 'bajo_stock']); assert.deepEqual([...EMPLOYEE_DOC_TYPES], ['lista_precios', 'lista_pedido']);
+  assert.deepEqual([...EMPLOYEE_QUERY_TYPES], ['stock_producto', 'bajo_stock', 'deuda_cliente']); assert.deepEqual([...EMPLOYEE_DOC_TYPES], ['lista_precios', 'lista_pedido']);
 });
 
 test('roles y nombres: niveles viejos se leen igual; filas malas o desconocidas = sin permiso', () => {

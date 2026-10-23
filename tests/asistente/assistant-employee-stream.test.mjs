@@ -39,7 +39,7 @@ test('1a) empleado: el modelo no ve documentos ni consultas del dueño (enum rec
   const emp = toolsForRole('empleado:consultas_documentos'), own = toolsForRole('owner');
   const doc = emp.find((t) => t.function.name === 'preparar_documento'), q = emp.find((t) => t.function.name === 'consultar');
   assert.deepEqual(doc.function.parameters.properties.tipo.enum, EMPLOYEE_DOC_TYPES);
-  assert.deepEqual(q.function.parameters.properties.tipo.enum, ['stock_producto', 'bajo_stock']);
+  assert.deepEqual(q.function.parameters.properties.tipo.enum, ['stock_producto', 'bajo_stock', 'deuda_cliente']); // UN cliente: decisión del Admin 23-10
   assert.ok(!/valorizado|reporte de ventas|estado de cuenta|cierre|sin costo|deudas/i.test(JSON.stringify(emp)), JSON.stringify(emp).slice(0, 300));
   assert.ok(!toolsForRole('empleado:consultas').some((t) => t.function.name === 'preparar_documento'));
   assert.ok(own.find((t) => t.function.name === 'preparar_documento').function.parameters.properties.tipo.enum.includes('inventario_valorizado'));

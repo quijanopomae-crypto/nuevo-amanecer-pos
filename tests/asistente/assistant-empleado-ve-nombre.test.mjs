@@ -130,7 +130,14 @@ test('(d) empleado: deuda_cliente con cliente_id = código -> el monto en la tar
       assert.match(r.out, /50\.00/, tag + ': el monto (37.40 + 12.60) llega a la pantalla: ' + r.out.slice(0, 600));
       assert.match(r.out, /cliente #R7/, tag + ': la tarjeta va con «cliente #código» (el nombre lo pone el aparato)');
       assert.ok(!NAME_RE.test(r.out) && !r.out.includes('999.99'), tag + ': sin nombre del servidor ni deuda de otro cliente');
-      assert.match(r.toModel.slice(1).join('\n'), /50(?:\.0+)?\b/, tag + ': la IA recibe el saldo para responder');
+      // respuesta directa (pedido simple): la burbuja dice el mismo texto de la consulta, con el monto
+      const reply = stream ? JSON.parse(r.out).filter((x) => x.e === 'text' || x.e === 'done').map((x) => x.d.t || x.d.reply || '').join('') : JSON.parse(r.out).reply;
+      assert.match(reply, /cliente #R7 debe S\/ 50\.00/, tag + ': burbuja: ' + reply);
+      // pedido que pide explicación: segunda llamada; la IA recibe el saldo (sin nombre, ver (c))
+      const r2 = await chat(role, { tipo: 'deuda_cliente', cliente_id: 'R7' }, { text: ask('Explícame por qué debe tanto Rosa Prueba'), stream });
+      assert.equal(r2.toModel.length, 2, tag + ': segunda llamada');
+      assert.match(r2.toModel[1], /saldo_soles\\?"?:\s*50\b/, tag + ': la IA recibe el saldo: ' + r2.toModel[1].slice(-800));
+      assert.ok(!NAME_RE.test(r2.toModel.join('\n')), tag + ': sin nombre hacia la IA');
     }
   }
 });

@@ -76,7 +76,7 @@ test('1) aparato: nombres y direcciones de clientes conocidos -> «cliente #cód
 });
 test('1) UI: el mensaje pasa por maskCustomers ANTES del redactor y del envío (el historial guarda lo mismo); la respuesta pinta el nombre local', () => {
   assert.match(UI, /var masked = C\.maskCustomers \? C\.maskCustomers\(text, deps\.clientes\(\), deps\.productos\(\), deps\.proveedores \? deps\.proveedores\(\) : \[\]\) : \{ text: text \};\n\s*var body = \{ text: C\.redactText\(masked\.text\), history/);
-  assert.match(UI, /if \(C\.customerCodesIn && isOwnerAccess\(\)\) linkCustomers\(bubble, C\.customerCodesIn\(d\.reply, deps\.clientes\(\)\)\);/);
+  assert.match(UI, /if \(C\.customerCodesIn && isAdmin\(\)\) linkCustomers\(bubble, C\.customerCodesIn\(d\.reply, deps\.clientes\(\)\)\);/); // Admin y empleado (23-10)
   assert.ok(!/text: C\.redactText\(text\)/.test(UI), 'ya no se manda el texto sin cambiar nombres');
 });
 test('1) servidor: el estado de cuenta va por cliente_id (código), nunca por nombre; la herramienta ya no pide el nombre', async () => {
@@ -158,12 +158,12 @@ test('(1) deudas_clientes: la TABLA también va con «cliente #código» (sin no
   const codes = C.customerCodesIn(cell.textContent, local); assert.deepEqual(codes, [local[0].id]);
   assert.equal(api.linkCustomers(cell, codes), 1);
   assert.equal(cell.byClass('na-asst-cli')[0].textContent, 'cliente #' + local[0].id + ' (' + local[0].nombre + ')');
-  // la línea real de addCard: Admin ve el nombre en la tarjeta; el empleado solo «cliente #código» (sin botón ni nombre)
-  const line = UI.split('\n').find((l) => l.includes("var qt = p.type === 'consulta'")); assert.ok(line && line.includes('isOwnerAccess()'), line);
+  // la línea real de addCard: el Admin y también el empleado ven el nombre en la tarjeta (decisión del Admin 23-10); sin acceso, solo el código
+  const line = UI.split('\n').find((l) => l.includes("var qt = p.type === 'consulta'")); assert.ok(line && line.includes('isAdmin()'), line);
   const card = (owner) => { const c = doc.createElement('div'), t = doc.createElement('table'); t.className = 'q'; const td = doc.createElement('td'); td.textContent = 'cliente #' + local[0].id; t.appendChild(td); c.appendChild(t);
     c.querySelector = (sel) => (sel === 'table.q' ? t : null);
-    new Function('p', 'c', 'C', 'deps', 'linkCustomers', 'isOwnerAccess', line)({ type: 'consulta' }, c, C, { clientes: () => local }, api.linkCustomers, () => owner); return t; };
-  const adm = card(true), emp = card(false);
-  assert.ok(adm.textContent.includes(local[0].nombre), 'Admin: nombre real en la tarjeta: ' + adm.textContent);
-  assert.equal(emp.textContent, 'cliente #' + local[0].id, 'empleado: solo el código'); assert.equal(emp.byClass('na-asst-cli').length, 0);
+    new Function('p', 'c', 'C', 'deps', 'linkCustomers', 'isAdmin', line)({ type: 'consulta' }, c, C, { clientes: () => local }, api.linkCustomers, () => owner); return t; };
+  const adm = card(true), off = card(false);
+  assert.ok(adm.textContent.includes(local[0].nombre), 'Admin y empleado con asistente: nombre real en la tarjeta: ' + adm.textContent);
+  assert.equal(off.textContent, 'cliente #' + local[0].id, 'sin acceso al asistente: solo el código'); assert.equal(off.byClass('na-asst-cli').length, 0);
 });

@@ -105,7 +105,7 @@ test('tapado de clientes: nombre completo, dos palabras o una sola, nunca dentro
   assert.equal(m('cuánto debe San Juan'), 'cuánto debe cliente #c4');
   assert.equal(m('Rosa Quispe pagó y Quispe pagó'), 'cliente #c1 pagó y cliente #c1 pagó', 'el apellido suelto también se tapa');
   assert.equal(m('la bodega de Rosa Quispe Mamani'), 'la bodega de cliente #c1', 'con algo en medio, el nombre se tapa igual');
-  assert.match(UI, /if \(C\.customerCodesIn && isOwnerAccess\(\)\) linkCustomers\(bubble/, 'el Admin ve el nombre real en el aparato');
+  assert.match(UI, /if \(C\.customerCodesIn && isAdmin\(\)\) linkCustomers\(bubble/, 'el Admin y el empleado ven el nombre real en el aparato (decisión del Admin 23-10)');
 });
 
 test('tapado de clientes: nombre o apellido SUELTO se tapa; dentro de un producto, proveedor conocido o contexto de proveedor no', () => {

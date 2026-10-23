@@ -15,8 +15,9 @@ import { LEVEL_NAMES, COSTS_ROLE, capabilitiesFor, seesOwnerData } from '../../t
 import { NOW, DATA, ARGS, chatWith, amounts, assertNoMoney } from './empleado-montos-datos.mjs';
 
 const EMPLOYEE_ROLES = LEVEL_NAMES.map((n) => 'empleado:' + n).concat(['empleado', 'sin_rol', 'empleado:desconocido']);
-// Nivel 3 + «costos y cambios»: ve ventas y ganancia a propósito (lo da el Admin), pero nunca deudas, caja, créditos, sugerencias ni resúmenes.
-const COSTS_FORBIDDEN = ['deudas_clientes', 'deuda_cliente', 'creditos_atrasados', 'caja_abierta', 'sugerencias_compra', 'resumen_dia', 'resumen_mes'];
+// Nivel 3 + «costos y cambios»: ve ventas y ganancia a propósito (lo da el Admin), pero nunca deudas de la tienda, caja, créditos, sugerencias
+// ni resúmenes. deuda_cliente (UN cliente) es de todo empleado con asistente (decisión del Admin 23-10; ver assistant-empleado-ve-nombre).
+const COSTS_FORBIDDEN = ['deudas_clientes', 'creditos_atrasados', 'caja_abierta', 'sugerencias_compra', 'resumen_dia', 'resumen_mes'];
 
 const chat = (role, tipo, o) => chatWith(assistantChatRoute, role, tipo, o);
 
@@ -34,11 +35,11 @@ test('control: con estos datos el Admin SÍ recibe montos en el texto (la prueba
   }
 });
 
-test('niveles de empleado sin «costos»: solo stock_producto y bajo_stock están permitidos (fuente única de niveles)', () => {
+test('niveles de empleado sin «costos»: solo stock_producto, bajo_stock y deuda_cliente están permitidos (fuente única de niveles)', () => {
   for (const role of EMPLOYEE_ROLES) {
     assert.equal(seesOwnerData(role), false, role);
     const c = capabilitiesFor(role).consultas;
-    assert.ok(Array.isArray(c) && c.every((t) => ['stock_producto', 'bajo_stock'].includes(t)), `${role}: ${JSON.stringify(c)}`);
+    assert.ok(Array.isArray(c) && c.every((t) => ['stock_producto', 'bajo_stock', 'deuda_cliente'].includes(t)), `${role}: ${JSON.stringify(c)}`);
   }
 });
 
@@ -128,7 +129,7 @@ test('lista abierta por error (nivel 1-3 con ventas, deudas, compras…): el emp
 
 test('employeeQueryResult: con cualquier consulta (también caja, créditos, sugerencias, ganancia, resúmenes) no pasa texto con montos ni total', async () => {
   const c = collector();
-  for (const tipo of QUERY_TYPES) {
+  for (const tipo of QUERY_TYPES.filter((t) => t !== 'deuda_cliente')) { // deuda_cliente: abajo (el empleado sí ve el saldo de UN cliente)
     const raw = await runAssistantQuery(memoryReader(DATA), { tipo, ...ARGS }, NOW);
     const e = employeeQueryResult(raw);
     c.check(() => assertNoMoney(tipo, JSON.stringify(e)));
@@ -137,6 +138,10 @@ test('employeeQueryResult: con cualquier consulta (también caja, créditos, sug
     if (!['stock_producto', 'bajo_stock'].includes(tipo)) c.check(() => assert.notEqual(e.texto, raw.texto, `${tipo}: pasa el texto original`));
   }
   c.done('employeeQueryResult');
+  // deuda_cliente (decisión del Admin 23-10): pasa el saldo de ESE cliente, solo con su lista blanca (código, saldo, créditos, vencimiento)
+  const raw = await runAssistantQuery(memoryReader(DATA), { tipo: 'deuda_cliente', cliente_id: 'C-0002' }, NOW), e = employeeQueryResult(raw);
+  assert.deepEqual(e.columnas, ['Vence', 'Saldo S/']); assert.deepEqual(Object.keys(e.resumen).sort(), ['cliente', 'creditos_abiertos', 'saldo_soles', 'vence_primero']);
+  assert.match(e.texto, /^cliente #C-0002 debe S\/ 321\.09/); assert.ok(!JSON.stringify(e).includes('876.54'), 'nunca la deuda de otro cliente');
 });
 
 test('employeeQueryResult: stock_producto y bajo_stock se leen igual que antes (con el precio de venta)', async () => {
