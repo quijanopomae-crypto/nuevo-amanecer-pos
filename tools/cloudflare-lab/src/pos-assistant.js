@@ -3396,10 +3396,14 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
   // (auditoría 500, SEG) varias tarjetas de cambio de producto en una respuesta: el servidor dice cuántas son y que cada una se aplica aparte
   // (no depende del modelo). Si el texto ya cortado era el del tope, sigue marcado como cortado.
-  if (!resetAsk) { const was = capped !== null && reply === capped; const r2 = withChangeCount(reply, proposals); if (r2 !== reply) { reply = r2; if (was) capped = reply; } }
+  // (auditoría 500, INV-057) «súmale 10 a todo» sacó 19 tarjetas: con más de MAX_CHANGE_CARDS tarjetas de cambio el SERVIDOR no manda ninguna
+  // (quedan en dropped como tope_tarjetas) y pregunta si muestra la lista primero. De 2 a 5 sigue la frase «Son N productos…» de #987.
+  const overCap = !resetAsk && capChangeCards(proposals, dropped);
+  if (overCap) reply = overCap;
+  else if (!resetAsk) { const was = capped !== null && reply === capped; const r2 = withChangeCount(reply, proposals); if (r2 !== reply) { reply = r2; if (was) capped = reply; } }
   // (auditoría 500) avisos fijos del servidor, cada uno en su línea (pos-assistant-varios.js): lo que no se atendió nunca se pierde en silencio.
   // Van DESPUÉS de la frase «Son N productos…» (que se pega a la última frase): así cada aviso queda en su propia línea y CHANGE_COUNT_RE no los toca.
-  if (!resetAsk) reply = await serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader: rd0 });
+  if (!resetAsk) reply = await serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader: rd0, overCap: !!overCap });
   tm.ms_db = Math.round(dbMs); tm.db_stmts = dbc.n; tm.ms_total = ms(t0); // antes de la bitácora (su escritura: +1 sentencia)
   const times = timingFields(tm); logTimings(tm);
   // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos. La primera fila lleva los tiempos del pedido (sin migración:
@@ -3431,13 +3435,13 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
 }
 
 // (auditoría 500) AJ-002 negativos en masa, AJ-043 varios movimientos sin tarjeta y VE-010 mensaje cortado: una línea aparte por aviso.
-async function serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader }) {
+async function serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader, overCap }) {
   const lines = [];
   const canAdjust = toolAllowed(role, 'proponer_ajuste_stock'), adj = proposals.filter((p) => p.type === 'ajuste');
   if (canAdjust && asksNegativeBulk(parsed.text)) {
     let list = null; try { if (reader && typeof reader.products === 'function') list = await reader.products(); } catch { list = null; } // solo lectura
     lines.push(negativeBulkText(list, adj.map((p) => p.product_id)));
-  } else if (canAdjust && !proposals.some((p) => p.type === 'compra')) {
+  } else if (canAdjust && !overCap && !proposals.some((p) => p.type === 'compra')) { // con el tope ya se preguntó por la lista entera
     const reqs = adjustRequests(parsed.text);
     const left = reqs.length ? unattendedRequests(reqs, [...adj.map((p) => p.nombre), ...(noStock || [])]) : [];
     if (left.length) lines.push(unattendedText(left));
@@ -3450,6 +3454,17 @@ async function serverNotices(reply, { role, parsed, proposals, dropped, noStock,
 const PER_PRODUCT_CARDS = new Set(['precio', 'costo', 'ajuste', 'producto']);
 const CHANGE_COUNT_RE = /\s*Son \d+ productos; cada uno se aplica aparte con su «(?:Confirmar|Aplicar)»\./g;
 export function changeCountText(n) { return 'Son ' + n + ' productos; cada uno se aplica aparte con su «Aplicar».'; }
+// (INV-057) tope del servidor: más de 5 tarjetas de cambio en una respuesta -> ninguna tarjeta y una pregunta con el número real.
+export const MAX_CHANGE_CARDS = 5;
+export function changeCapText(n, allProducts = true) { return 'Son ' + n + (allProducts ? ' productos' : ' cambios') + '; ¿le muestro la lista para revisarla antes?'; }
+// Vacía proposals (y anota cada tarjeta en dropped) si hay más de MAX_CHANGE_CARDS tarjetas de cambio. Devuelve la pregunta o null.
+export function capChangeCards(proposals, dropped) {
+  const changes = (proposals || []).filter((p) => p && p.needsConfirm);
+  if (changes.length <= MAX_CHANGE_CARDS) return null;
+  for (const p of proposals) if (p && p.needsConfirm) dropped.push({ tool: AUDIT_TOOL[p.type] || TYPE_TOOL[p.type] || p.type, dropped: 'tope_tarjetas' });
+  proposals.length = 0;
+  return changeCapText(changes.length, changes.every((p) => PER_PRODUCT_CARDS.has(p.type)));
+}
 export function withChangeCount(reply, proposals) {
   const n = (proposals || []).filter((p) => p && p.needsConfirm && PER_PRODUCT_CARDS.has(p.type)).length;
   if (n < 2) return reply;
