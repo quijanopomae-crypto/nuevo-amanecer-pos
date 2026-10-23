@@ -321,6 +321,15 @@
     try { if(!root.NA_CONFIG_V9&&root.NA_CONFIG_V9_BOOT) await root.NA_CONFIG_V9_BOOT.load(); } catch (_) { return null; }
     return isOwnerAccess()?root.NA_CONFIG_V9:null;
   }
+  // (fix/asist-alta-cliente-local) Formulario EXISTENTE «Nuevo cliente» (abrirModalCli, con sus permisos y bloqueos): se llena nombre,
+  // celular y DNI; la persona revisa y toca Guardar. El nombre va ANTES que el DNI: así el buscador de DNI del POS no consulta en la red.
+  function openNewCustomer(p) {
+    var f = g('abrirModalCli'); if (typeof f !== 'function') return false;
+    f(); var m = doc.getElementById('mCli'); if (!m) return false;
+    function set(id, v) { var i = doc.getElementById(id); if (!i || v == null || v === '') return; i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); mark(i); }
+    set('cNombre', p.nombre); set('cTel', p.tel); set('cDni', p.dni);
+    return m.classList.contains('open');
+  }
   var deps = {
     // (#967 teléfono) destino servidor: el confirm ya guardó; se vuelven a leer pos.business, pos.ticket y pos.flags con el lector EXISTENTE
     // de Configuración (config-g.js pullSettings: GET /settings y aplica con los mismos setters), sin recargar la página
@@ -388,6 +397,7 @@
       var r = doc.getElementById('mMovMotivo'); if (r && motivo) { Array.prototype.forEach.call(r.options, function (o) { if (o.text === motivo || o.value === motivo) r.value = o.value; }); mark(r); }
       return m.classList.contains('open') ? true : 'El POS no abrió «Registrar movimiento» (puede que el producto no controle inventario). Revisa la ficha del producto.';
     },
+    openNewCustomer: openNewCustomer,
     // Formulario EXISTENTE «Nuevo producto» (abrirModalProd). Guarda la persona (product.create).
     openNewProduct: function (p) {
       var f = g('abrirModalProd'); if (typeof f !== 'function') return false;
@@ -977,9 +987,22 @@
   function drainQueue() { if (!queued || busy || !panelEl) return; var t = queued; queued = null; if (queuedNote) { queuedNote.remove(); queuedNote = null; } setTimeout(function () { if (!busy && panelEl) send(t); else if (panelEl) queueMsg(t); }, 0); }
   // Solo «sigue / continúa / más…» usa la cabecera de la tabla cortada anterior; otra pregunta empieza limpia (sin arrastrar la anterior).
   var CONT_RE = /^\s*(?:y\s+)?(?:sigue|siga|seguí|segui|continúa|continua|continúe|continue|contin[uú]a\s+por\s+favor|más|mas|el\s+resto|lo\s+que\s+falta|los\s+dem[aá]s|dale)(?:[\s,.!¡?¿]|$)/i;
+  // (fix/asist-alta-cliente-local) «agrega cliente …»: atajo LOCAL, sin red, sin modelo y sin historial. Si ya existe en el aparato se dice
+  // con su nombre real y su código (Admin y empleado); si no, se abre «Nuevo cliente» lleno. true = atendido aquí.
+  function customerShortcut(text) {
+    var it = C.customerIntent ? C.customerIntent(text) : null; if (!it) return false;
+    inputEl.value = ''; addMsg('u', text);
+    var found = C.findCustomers(deps.clientes(), it);
+    if (found.length) { addMsg('a', C.customerExistsReply(found, it)); return true; }
+    var ok = deps.openNewCustomer(it) === true;
+    if (ok) closePanel(); // como al confirmar una tarjeta: el formulario queda a la vista para tocar Guardar
+    addMsg('a', ok ? 'Abrí «Nuevo cliente» con ' + it.nombre + (it.tel ? ', celular ' + it.tel : '') + (it.dni ? ', DNI ' + it.dni : '') + '. Revisa los datos y toca Guardar.' : 'No se pudo abrir «Nuevo cliente» (permiso o módulo bloqueado). Ábrelo desde Clientes.');
+    return true;
+  }
   async function send(text, image) {
     if (busy) { if (!image) queueMsg(text); return; }
     text = String(text || '').trim(); if (!text && !image) return;
+    if (!image && customerShortcut(text)) return;
     if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
     if (!image && isOwnerAccess() && PRODFOTO_RE.test(text)) { inputEl.value = ''; return prodFotoPick(); }
     if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !isReview(text)) return learnedShow(text);

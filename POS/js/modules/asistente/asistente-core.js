@@ -1213,12 +1213,73 @@
     } else if (redactText(u.content) !== u.content || redactText(a.content) !== a.content || !u.sig) h.splice(h.length - 2, 2);
   }
 
+  // (fix/asist-alta-cliente-local) «agrega cliente Rosa Quispe 987654321» -> { nombre, tel, dni } (tel: 9 dígitos, dni: 8; '' si no hay)
+  // o null. Solo si el mensaje EMPIEZA con el alta: «<verbo> (al/el/la/un/una) (nuevo) cliente (nuevo) <nombre>», «nuevo cliente <nombre>»,
+  // «cliente nuevo <nombre>» o «<verbo> a <nombre> como cliente (nuevo)». Verbos: agrega, añade, registra, crea, da de alta. (Revisión
+  // #1015) «crea el estado de cuenta del cliente X», «registra el pago del cliente X», «agrega 2 arroz al cliente X» o «registra que el
+  // cliente X pagó 50» NO son alta: siguen al asistente (con maskCustomers). El nombre se corta en verbos y conectores (pagó, debe, por, a,
+  // al, venta, compró, llevó, con, que…) y en números que no son celular ni DNI. Quita don/doña/señor/señora. Solo en el aparato.
+  var CUST_VERB = '(?:agreg\\p{L}*|a[ñn]ad\\p{L}*|registr[ae]r?|cre[ae]r?|d(?:a|ar|e)\\s+de\\s+alta)';
+  var CUST_HEAD_RE = new RegExp('^(?:' + CUST_VERB + '\\s+(?:(?:a\\s+la|a\\s+una|a\\s+un|al|el|la|un|una)\\s+)?(?:nuev[oa]\\s+)?client[ea](?:\\s+nuev[oa])?'
+    + '|nuev[oa]\\s+client[ea]|client[ea]\\s+nuev[oa])(?=[^\\p{L}]|$)', 'iu');
+  var CUST_AS_RE = new RegExp('^' + CUST_VERB + '\\s+a\\s+(.+?)\\s+como\\s+(?:(?:un|una)\\s+)?(?:nuev[oa]\\s+)?client[ea](?:\\s+nuev[oa])?(?=[^\\p{L}]|$)', 'iu');
+  var CUST_ASK_RE = /[¿?#]/;
+  var CUST_HON = { don: 1, 'doña': 1, dona: 1, 'señor': 1, 'señora': 1, senor: 1, senora: 1, sr: 1, sra: 1, srta: 1, 'señorita': 1, senorita: 1 };
+  var CUST_STOP = { dni: 1, tel: 1, 'teléfono': 1, telefono: 1, celular: 1, cel: 1, 'número': 1, numero: 1, nro: 1, con: 1, y: 1, e: 1, su: 1, ruc: 1, como: 1, que: 1, para: 1, en: 1,
+    a: 1, al: 1, por: 1, desde: 1, hoy: 1, ayer: 1, fiado: 1, venta: 1, ventas: 1, 'pagó': 1, pago: 1, paga: 1, pagar: 1, 'pagará': 1, pagara: 1, pagan: 1, debe: 1, deben: 1, 'debía': 1, debia: 1,
+    'debió': 1, debio: 1, 'compró': 1, compro: 1, compra: 1, compras: 1, 'llevó': 1, llevo: 1, lleva: 1, 'abonó': 1, abono: 1, abona: 1, soles: 1, sol: 1 };
+  var CUST_PART = { de: 1, del: 1, la: 1, las: 1, los: 1 };
+  function customerIntent(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim(), head, rest;
+    if (!t || t.length > 200 || CUST_ASK_RE.test(t)) return null;
+    if ((head = CUST_AS_RE.exec(t))) rest = head[1] + ' , ' + t.slice(head[0].length);
+    else if ((head = CUST_HEAD_RE.exec(t))) rest = t.slice(head[0].length);
+    else return null;
+    var tel = '', dni = '';
+    // números: «955 444 333» junto = celular; «41234567 987111222» = DNI + celular; otro número corta el nombre
+    rest = rest.replace(/\d[\d .-]*\d|\d/g, function (g) {
+      var all = g.replace(/\D/g, ''), parts = all.length === 8 || all.length === 9 ? [all] : g.split(/[ ]+/).map(function (x) { return x.replace(/\D/g, ''); });
+      parts.forEach(function (d) { if (d.length === 9 && !tel) tel = d; else if (d.length === 8 && !dni) dni = d; });
+      return ' , ';
+    });
+    var toks = rest.match(/[\p{L}][\p{L}'’-]*\.?|[,;:]/gu) || [];
+    var low = function (w) { return String(w).toLowerCase().replace(/\.$/, ''); };
+    var words = [], k = 0;
+    while (k < toks.length && (/^[:;,]$/.test(toks[k]) || CUST_HON[low(toks[k])])) k++;
+    for (; k < toks.length && words.length < 6; k++) { var w = toks[k], lw = low(w);
+      if (/^[:;,]$/.test(w) || CUST_STOP[lw] || /^client/i.test(w)) break;
+      if (CUST_HON[lw]) continue;
+      words.push(w.replace(/\.$/, '')); }
+    while (words.length && CUST_PART[low(words[words.length - 1])]) words.pop();
+    if (!words.length || !words.some(function (w) { return w.replace(/[^\p{L}]/gu, '').length >= 2; })) return null;
+    var nombre = words.map(function (w, j) { var lw = w.toLowerCase(); if (j && CUST_PART[lw]) return lw; return w === lw ? w.charAt(0).toUpperCase() + w.slice(1) : w; }).join(' ');
+    return { nombre: nombre, tel: tel, dni: dni };
+  }
+  // Clientes del aparato con el mismo nombre (sin tildes, mayúsculas ni espacios de más) o el mismo DNI.
+  function custKey(v) { return foldStr(v).replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function findCustomers(clientes, p) {
+    var key = custKey(p && p.nombre), dni = p && p.dni ? String(p.dni) : '';
+    return (Array.isArray(clientes) ? clientes : []).filter(function (c) {
+      if (!c || c.nombre == null) return false;
+      return (key && custKey(c.nombre) === key) || (dni && String(c.dni || '').replace(/\D/g, '') === dni);
+    }).slice(0, 20);
+  }
+  // Respuesta local (Admin y empleado ven el nombre real; nunca sale del aparato ni va al historial).
+  // (revisión #1015) con p: si ninguno coincide por nombre dice «con ese DNI»; si hay de los dos, «con ese nombre o DNI».
+  function customerExistsReply(list, p) {
+    var show = function (c) { return String(c.nombre).replace(/\s+/g, ' ').trim() + ' (#' + c.id + ')'; };
+    if (!list || !list.length) return '';
+    if (list.length === 1) return 'Ya existe el cliente ' + show(list[0]);
+    var key = custKey(p && p.nombre), byName = list.filter(function (c) { return key && custKey(c.nombre) === key; }).length;
+    var how = !p || byName === list.length ? 'con ese nombre' : byName ? 'con ese nombre o DNI' : 'con ese DNI';
+    return 'Ya existen ' + list.length + ' clientes ' + how + ': ' + list.map(show).join(', ');
+  }
   function configurationIntent(text, previous) {
     var t = String(text || '').trim().toLowerCase();
     if (/\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/.test(t)) return true;
     return !!previous && /^(?:s[ií]|no|hazlo|apl[ií]calo|normal|chico|grande|muy grande|azul|verde|naranja|celeste|simple|claro|noche|auto|\d{1,6}%?)[.!]?$/i.test(t);
   }
-  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { configurationIntent: configurationIntent, customerIntent: customerIntent, findCustomers: findCustomers, customerExistsReply: customerExistsReply, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
