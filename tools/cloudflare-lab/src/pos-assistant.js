@@ -210,6 +210,8 @@ const capName = (x) => x.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.s
 // Oraciones con verbo de pago (sin «yo/he/hemos»); toMe: las que además son un pago A la tienda («me/le pagó», «fiado», «deuda»…).
 // Antes de «pago/abono» hace de él un sustantivo («un pago», «el pago», «cada pago»): no es un cliente que pagó.
 const PAYER_NOUN_DET = new Set(['un', 'una', 'el', 'del', 'al', 'cada', 'ese', 'este', 'esa', 'esta', 'otro', 'otra', 'primer', 'ultimo', 'ultima', 'mi', 'tu', 'su', 'nuestro']);
+// «pago/abono» sin tilde: además «la/los/las/mis/tus/sus/nuestra…» justo antes = el Admin o un sustantivo («las pago», «mis pago»): no es un cliente.
+const PAYER_UNACC_DET = new Set([...PAYER_NOUN_DET, 'la', 'los', 'las', 'mis', 'tus', 'sus', 'nuestra', 'nuestros', 'nuestras']);
 export function payerSentences(toks, { toMe = false } = {}) {
   const by = new Map(); for (const t of toks) { if (!by.has(t.sent)) by.set(t.sent, []); by.get(t.sent).push(t); }
   return new Set([...by].filter(([, ts]) => ts.some((t) => PAYER_VERBS.has(t.f)) && !ts.some((t) => PAYER_FIRST.has(t.f)) && (!toMe || ts.some((t) => PAYER_TO_ME.has(t.f)))).map(([k]) => k));
@@ -231,7 +233,16 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) { vo
   }
   const prevSent = new Set([...paySent].map((x) => x - 1).filter((x) => x >= 0 && !paySent.has(x)));
   // «pago/abono» sin tilde también es el Admin («¿cuánto pago de flete?», «¿cómo pago con Yape?»): como un sustantivo, solo con mayúscula.
-  const strongSent = new Set(toks.filter((t, k) => verbSent.has(t.sent) && PAYER_VERBS.has(t.f) && !(t.f === t.w.toLowerCase() && (t.f === 'pago' || t.f === 'abono'))
+  // (orden del lead, 20:27) salvo con una palabra que sobra (o un cliente de la lista) ANTES, sin «cuánto … de» en la oración: «rosa pago?»,
+  // «la rosa abono?» = esa persona pagó. «yo pago…» ya está fuera (verbSent); el artículo/posesivo justo antes lo corta abajo.
+  const sentWords = (n) => toks.filter((x) => x.sent === n).map((x) => x.f);
+  const unaccentedPaid = (t, k) => { const w = sentWords(t.sent);
+    if (w.some((f) => /^cuant[oa]s?$/.test(f)) && w.includes('de')) return false;
+    if (k > 0 && toks[k - 1].sent === t.sent && PAYER_UNACC_DET.has(toks[k - 1].f)) return false;
+    for (let j = k - 1; j >= 0 && toks[j].sent === t.sent; j--) if (used.has(j) || !payerKnown(toks[j])) return true;
+    return false; };
+  const strongSent = new Set(toks.filter((t, k) => verbSent.has(t.sent) && PAYER_VERBS.has(t.f)
+    && (!(t.f === t.w.toLowerCase() && (t.f === 'pago' || t.f === 'abono')) || unaccentedPaid(t, k))
     && !(k > 0 && toks[k - 1].sent === t.sent && (PAYER_NOUN_DET.has(toks[k - 1].f) || toks[k - 1].f === 'se'))).map((t) => t.sent));
   const runs = []; let run = null; // (2) lo que sobra
   for (let i = 0; i < toks.length; i++) {
