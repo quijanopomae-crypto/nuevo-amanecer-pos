@@ -471,8 +471,10 @@ test('#995 mock: «cliente nro. 5», «N° 5», «cliente 5» dan cliente_id 5 e
     const a = mockArgs(text);
     assert.equal(a.length, 1, text); assert.equal(a[0].tipo, 'cobros_creditos', text); assert.equal(a[0].cliente_id, '5', text);
     // El chat real (modelo que pide ventas_periodo) contesta lo mismo: los cobros de cliente #5.
-    const { reply } = await ask995(text, { tipo: 'ventas_periodo', ...WEEK }, false);
-    assert.equal(reply, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.', text);
+    for (const stream of [false, true]) {
+      const { reply } = await ask995(text, { tipo: 'ventas_periodo', ...WEEK }, stream);
+      assert.equal(reply, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.', text + ' stream=' + stream);
+    }
   }
   for (const text of ['¿cuánto debe el cliente nro. 5?', '¿cuánto debe el cliente N° 5?', '¿cuánto debe el cliente 5?', '¿cuánto debe el cliente #5?', '¿hasta cuánto le fío al cliente nro. 7?']) {
     const a = mockArgs(text);
@@ -480,4 +482,41 @@ test('#995 mock: «cliente nro. 5», «N° 5», «cliente 5» dan cliente_id 5 e
   }
   // «cliente nuevo» no es un código: no es deuda de un cliente «nuevo».
   assert.ok(!mockArgs('¿cuánto debe el cliente nuevo?').some((a) => a.cliente_id === 'nuevo'));
+});
+
+// ---------- #995: lista cortada sin cobros encontrados = no hay dato completo (nunca «No hubo cobros») ----------
+test('#995 listas cortadas y nada encontrado: dice que no tiene el dato completo, no «No hubo cobros… (se revisó una parte)»', async () => {
+  const cut = { ...DATA_CR, paymentsTruncated: true, creditsTruncated: true };
+  for (const args of [{ tipo: 'cobros_creditos', ...WEEK, cliente_id: '7' }, { tipo: 'cobros_creditos', fecha: '2026-10-01' }]) {
+    const r = await q(args, cut);
+    assert.ok(!/No hubo cobros/.test(r.texto), JSON.stringify(args) + ' -> ' + r.texto);
+    assert.ok(!/S\/ \d/.test(r.texto), r.texto);
+    assert.match(r.texto, /no tengo el dato completo/i, r.texto);
+    assert.equal(r.resumen.lista_cortada, true); assert.equal(r.resumen.cobros_soles, undefined);
+  }
+  // Solo una de las dos listas cortada: igual, no se afirma cero.
+  for (const data of [{ ...DATA_CR, paymentsTruncated: true }, { ...DATA_CR, creditsTruncated: true }]) {
+    const r = await q({ tipo: 'cobros_creditos', ...WEEK, cliente_id: '7' }, data);
+    assert.ok(!/No hubo cobros/.test(r.texto), r.texto); assert.match(r.texto, /no tengo el dato completo/i);
+  }
+  // Con cobros encontrados en una lista cortada: el monto con el aviso de que se revisó una parte (como antes).
+  const parte = await q({ tipo: 'cobros_creditos', ...WEEK, cliente_id: '5' }, cut);
+  assert.equal(parte.texto, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro. (lista larga: se revisó una parte)');
+  // Sin cortar: «No hubo cobros» sigue igual.
+  assert.match((await q({ tipo: 'cobros_creditos', ...WEEK, cliente_id: '7' }, DATA_CR)).texto, /^No hubo cobros de fiados de cliente #7/);
+});
+
+// Las 4 frases del bloqueo, cada una con y sin partes y con ventas_periodo / cobros_creditos sin cliente_id.
+test('#995 frases del bloqueo, con y sin partes: cliente 5 = sus cobros; doña Rosa / doña [nombre oculto] = pide el código; general = total de la tienda', async () => {
+  const cases = [
+    ['¿cuánto me pagó el cliente 5 de su deuda esta semana?', (r) => assert.equal(r, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.')],
+    ['¿cuánto me pagó doña Rosa de su deuda esta semana?', (r) => { assert.match(r, /código del cliente/); assert.ok(!/S\/ \d/.test(r)); }],
+    ['¿cuánto me pagó doña [nombre oculto] de su deuda esta semana?', (r) => { assert.match(r, /código del cliente/); assert.ok(!/S\/ \d/.test(r)); }],
+    ['¿cuánto cobré de fiados esta semana?', (r) => assert.equal(r, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.')]
+  ];
+  for (const [text, check] of cases) for (const args of SALES_ARGS) for (const stream of [false, true]) {
+    const { reply, cap } = await ask995(text, args, stream);
+    try { check(reply); } catch (e) { e.message = text + ' ' + JSON.stringify(args) + ' stream=' + stream + ': ' + e.message; throw e; }
+    noNames(cap);
+  }
 });
