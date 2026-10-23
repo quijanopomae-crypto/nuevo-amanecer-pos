@@ -195,3 +195,26 @@ test('5b) un token firmado antes del arreglo (aclaración cruda) sale limpio hac
   assert.ok(!/Carmen|Salas/i.test(sent), 'llegó a la IA: ' + sent);
   assert.ok(!/Carmen|Salas/.test(JSON.stringify((await readInvoiceMemory(d.invoice_memory, SECRET, OWNER, NOW)).clarifications)), 'el token nuevo sale limpio');
 });
+
+// (alfa) pregunta_previa (y lastReply, de donde sale) de un token viejo puede traer el nombre crudo: se limpia al leer, antes de la IA y de volver a firmarse.
+for (const stream of [false, true]) test('5c) token viejo: pregunta_previa y lastReply con «doña Carmen Salas» salen limpios hacia la IA; «fideo don vittorio» se queda' + (stream ? ' (en partes)' : ''), async () => {
+  const RAW = 'Leí la boleta de doña Carmen Salas; ¿el fideo don vittorio viene en cajas de 20?';
+  const prev = { ...(await readInvoiceMemory(await boletaToken(), SECRET, OWNER, NOW)), lastReply: RAW };
+  const old = await writeInvoiceMemory({ previous: { ...prev }, image: null, proposals: [], reply: RAW, text: 'sí, son 20 por caja', secret: SECRET, auth: OWNER, now: NOW, clean: (x) => String(x) });
+  const m0 = await readInvoiceMemory(old, SECRET, OWNER, NOW);
+  assert.ok(m0.clarifications[0].pregunta_previa === RAW && m0.lastReply === RAW, 'el token viejo lleva el nombre');
+  const reply = stream ? () => streamR([delta({ content: 'Entendido.' }, 'stop')]) : () => msg('Entendido.');
+  const read = async (r) => (stream ? sseFinal(await r.text()) : await r.json());
+  // turno con aclaración: la nueva pregunta_previa sale del lastReply viejo
+  const t1 = await route({ text: 'el arroz es 50 kg', invoice_memory: old, stream }, createMemoryUsageStore(), [reply]);
+  const d = await read(t1.r), sent = boletaSent(t1.cap[t1.cap.length - 1]);
+  assert.ok(/pregunta_previa/.test(sent), 'va la boleta recordada');
+  assert.ok(!/Carmen|Salas/i.test(sent), 'llegó a la IA: ' + sent);
+  assert.match(sent, /fideo don vittorio viene en cajas de 20/);
+  const m1 = await readInvoiceMemory(d.invoice_memory, SECRET, OWNER, NOW);
+  assert.equal(m1.clarifications.length, 2);
+  for (const c of m1.clarifications) { assert.ok(!/Carmen|Salas/i.test(c.pregunta_previa), 'se volvió a firmar: ' + c.pregunta_previa); assert.match(c.pregunta_previa, /fideo don vittorio viene en cajas de 20/); }
+  // y el turno siguiente
+  const t2 = await route({ text: 'listo, regístrala', invoice_memory: d.invoice_memory, stream }, createMemoryUsageStore(), [reply]); await read(t2.r);
+  const sent2 = boletaSent(t2.cap[t2.cap.length - 1]); assert.ok(/pregunta_previa/.test(sent2) && !/Carmen|Salas/i.test(sent2), sent2);
+});
