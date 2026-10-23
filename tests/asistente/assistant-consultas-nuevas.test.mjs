@@ -425,7 +425,9 @@ test('por nivel: la lista de todos los deudores (deudas_clientes) nunca llega al
       ['¿cuánto me deben todos los clientes?', { tipo: 'deuda_cliente', cliente_id: 'todos' }]]) {
       const cap = [], [rd, n] = counting(reader());
       const r = await chat({ text }, { role, rd, fetch: scripted([{ content: '', tool_calls: [tool('consultar', args, 'c1')] }, { content: 'Listo.' }], cap) });
-      const tag = role + ' / ' + text + ' / ' + JSON.stringify(args), out = JSON.stringify(r.body);
+      const tag = role + ' / ' + text + ' / ' + JSON.stringify(args);
+      // solo lo que ve el empleado (respuesta, tarjetas, error): sin firmas, tiempos, bytes ni cupo, que traen dígitos que no son montos
+      const out = JSON.stringify({ reply: r.body.reply, error: r.body.error, proposals: r.body.proposals }, (k, v) => (['sig', 'iat', 'exp', 'id', 'timings', 'usage'].includes(k) ? undefined : v));
       assert.ok([200, 403].includes(r.status), tag + ': ' + r.status);
       if (args.tipo === 'deudas_clientes') assert.equal(n.reads, 0, tag + ': sin leer la base');
       const cards = (r.body.proposals || []).filter((p) => p.type === 'consulta');
