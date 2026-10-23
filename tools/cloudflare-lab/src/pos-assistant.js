@@ -2518,9 +2518,11 @@ export function employeeQueryResult(r) {
 // ---------- Rol para el asistente ----------
 // El rol sale de assistantAccess (pos-assistant-access.js), con la MISMA regla del POS; aquí solo los cuerpos de ping y de «apagado».
 // 403 cuando el asistente no está disponible para este aparato.
-export const PING_FIELDS = Object.freeze(['ok', 'enabled', 'role', 'level', 'vision']);
+export const PING_FIELDS = Object.freeze(['ok', 'enabled', 'role', 'level', 'vision', 'cambios']);
 // vision: ¿el modelo en uso lee fotos? (Bot 3) Solo el dueño puede mandar fotos: para un empleado siempre false. Sin nombre de proveedor ni modelo.
-export function pingBody(role, vision = false) { return { ok: true, enabled: true, role: role === 'owner' ? 'owner' : 'empleado', level: accessLevel(role), vision: role === 'owner' && !!vision }; }
+// cambios (#967/#978): ¿este rol tiene «cambios» (datos del negocio y del ticket)? Una sola fuente: pos-assistant-levels.js. Admin true; nivel 3 +
+// «costos y cambios» true; el resto (niveles 1-3 sin permiso, roles desconocidos) false. El celular lo lee en canExecute (roles.cambios).
+export function pingBody(role, vision = false) { return { ok: true, enabled: true, role: role === 'owner' ? 'owner' : 'empleado', level: accessLevel(role), vision: role === 'owner' && !!vision, cambios: levelCan(role, 'cambios') === true }; }
 function offBody(role) { return role === 'empleado:off' || role === 'empleado' || role === 'sin_rol' ? { error: 'assistant_off', message: 'El Admin no activó el asistente en este aparato.' } : { error: 'admin_only', message: 'El asistente es solo para el Admin.' }; }
 
 // ---------- Token de confirmación (un solo uso, 5 minutos) ----------

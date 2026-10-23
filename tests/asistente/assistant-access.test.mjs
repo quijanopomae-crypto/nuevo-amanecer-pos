@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
 import { toolsForRole, EMPLOYEE_TOOLS, PING_FIELDS, pingBody } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { LEVEL_NAMES, COSTS_ROLE } from '../../tools/cloudflare-lab/src/pos-assistant-levels.js';
 
 const MIG = ['0024_pos_roles_owner_pin.sql', '0025_pos_reviews_pin_failures.sql'];
 const PIN = '4821';
@@ -46,23 +47,33 @@ test('apagado por defecto: el empleado recibe 403 assistant_off en chat, ping y 
   const { chat, call } = await setup(t);
   const r = await chat('tok-emp', 'qué falta reponer'); assert.equal(r.status, 403); assert.equal(r.body.error, 'assistant_off');
   const ping = await call('tok-emp', '/auth/assistant/chat', { ping: true }); assert.equal(ping.status, 403);
-  const own = await call('tok-dueno', '/auth/assistant/chat', { ping: true }); assert.deepEqual(await own.json(), { ok: true, enabled: true, role: 'owner', level: 'dueno', vision: true });
+  const own = await call('tok-dueno', '/auth/assistant/chat', { ping: true }); assert.deepEqual(await own.json(), { ok: true, enabled: true, role: 'owner', level: 'dueno', vision: true, cambios: true });
   const conf = await call('tok-emp', '/auth/assistant/confirm', { token: 'x', proposal: {} }); assert.equal(conf.status, 403); assert.equal((await conf.json()).error, 'assistant_off');
 });
 
 // Bots 3 y 5 (50b6716b): el ping del re-chequeo devuelve SOLO si este aparato tiene asistente y su nivel. Nada del dueño ni de otros aparatos.
 test('ping: la respuesta trae solo los campos de nivel (ok, enabled, role, level), para dueño y empleado; nada del dueño ni de la configuración', async (t) => {
   const { call, level } = await setup(t);
-  assert.deepEqual([...PING_FIELDS], ['ok', 'enabled', 'role', 'level', 'vision']); // vision (Bot 3): solo si el modelo en uso lee fotos
+  assert.deepEqual([...PING_FIELDS], ['ok', 'enabled', 'role', 'level', 'vision', 'cambios']); // vision (Bot 3): solo si el modelo en uso lee fotos; cambios (#978)
   assert.equal((await level('session:emp', 'consultas_documentos')).status, 200);
-  for (const [tok, want] of [['tok-dueno', { role: 'owner', level: 'dueno', vision: true }], ['tok-emp', { role: 'empleado', level: 'consultas_documentos', vision: false }]]) {
+  for (const [tok, want] of [['tok-dueno', { role: 'owner', level: 'dueno', vision: true, cambios: true }], ['tok-emp', { role: 'empleado', level: 'consultas_documentos', vision: false, cambios: false }]]) {
     const r = await call(tok, '/auth/assistant/chat', { ping: true }); assert.equal(r.status, 200);
     const raw = await r.text(), body = JSON.parse(raw);
     assert.deepEqual(Object.keys(body).sort(), [...PING_FIELDS].sort(), raw); assert.deepEqual(body, { ok: true, enabled: true, ...want });
     assert.ok(!/session:|dueno-|device|owner_bootstrap|configured|server_now|pin|token|approval/i.test(raw.replace('"level":"dueno"', '')), raw);
-    assert.ok(raw.length < 105, 'chico (con vision): ' + raw.length + ' bytes');
+    assert.ok(raw.length < 125, 'chico (con vision y cambios): ' + raw.length + ' bytes');
   }
   assert.deepEqual(Object.keys(pingBody('empleado:consultas')), [...PING_FIELDS]);
+});
+
+// #978 (celular): canExecute deja al nivel 3 con «costos y cambios» aplicar las tarjetas de Configuración del servidor si el ping trae cambios:true.
+test('ping: cambios true para Admin y nivel 3 + «costos y cambios»; false para niveles 1, 2, 3 sin permiso y roles desconocidos', () => {
+  assert.equal(COSTS_ROLE, 'empleado:completo+costos');
+  for (const role of ['owner', COSTS_ROLE]) { const b = pingBody(role); assert.equal(b.cambios, true, role); assert.deepEqual(Object.keys(b), [...PING_FIELDS]); }
+  for (const role of [...LEVEL_NAMES.map((n) => 'empleado:' + n), 'empleado', 'sin_rol', 'otro', 'empleado:completo+otro', 'owner ', '', null, undefined]) {
+    const b = pingBody(role); assert.equal(b.cambios, false, String(role)); assert.notEqual(b.role, 'owner');
+  }
+  assert.equal(pingBody('empleado:completo').level, pingBody(COSTS_ROLE).level, 'el nivel no cambia: solo se suma cambios');
 });
 
 test('cambiar el nivel: solo aparato Admin + PIN correcto; el empleado no puede subirse solo; queda anotado si existe la bitácora', async (t) => {
