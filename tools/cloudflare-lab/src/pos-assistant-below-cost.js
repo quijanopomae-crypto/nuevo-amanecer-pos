@@ -10,14 +10,14 @@
 // - Empleado sin ese permiso (cualquier nivel), aparato sin rol o sin fila: 403 below_cost_admin_only (sin cupo, sin modelo, sin leer nada).
 import { assistantAccess } from './pos-assistant-access.js';
 import { seesOwnerData } from './pos-assistant-levels.js';
-import { redactText, redactOwnerText, reserveUsage, createSettingsUsageStore } from './pos-assistant.js';
+import { redactText, redactOwnerText, reserveUsage, createSettingsUsageStore, BELOW_COST_DENIED } from './pos-assistant.js';
 import { resolveProvider, callModel } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { canonicalReader, period, dateWordRange } from './pos-assistant-queries.js';
 
 export const BELOW_COST_PATH = '/auth/assistant/below-cost';
 export const BELOW_COST_LIMITS = Object.freeze({ maxRows: 50, modelRows: 10, modelMs: 20000, defaultDays: 30, maxBodyBytes: 2048 });
-export const BELOW_COST_DENIED = Object.freeze({ error: 'below_cost_admin_only', message: 'Las alertas de venta bajo costo son solo para el Admin.' });
+export { BELOW_COST_DENIED }; // el chat usa la misma respuesta para el empleado sin permiso de costos
 const CODE_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 export const productRef = (id) => 'producto #' + id;
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
