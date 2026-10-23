@@ -332,7 +332,8 @@ test('pantalla de la tarjeta: «Pedir de nuevo», sin PIN ni cabecera de aprobac
   const cr = ui.slice(ui.indexOf('async function confirmRemote'), ui.indexOf('// ---------- Funciones existentes del POS'));
   assert.ok(cr.length > 100 && !/x-owner-approval/.test(cr), 'confirm no manda aprobación (Configuración sí la usa, con PIN)');
   assert.match(ui, /post\('\/auth\/assistant\/confirm', body, null, C\.TIMEOUTS\.confirm\)/);
-  assert.match(ui, /t\.textContent = limit \? 'Fuera del límite: quita la fila o corrige la factura' : 'Revisa este dato'/);
+  // #1002: la fila sin cantidad conserva su propio aviso (noQtyNotice); las demás, «Revisa este dato».
+  assert.match(ui, /t\.textContent = limit \? 'Fuera del límite: quita la fila o corrige la factura' : missing \? noQtyNotice\(line\) : 'Revisa este dato'/);
   assert.match(ui, /i < \(C\.CONFIRM_ATTEMPTS \|\| 2\)/);
   assert.match(ui, /gate\.cancel\(key\); c\.dataset\.st = 'cancelled';[^\n]*\n[^\n]*\n\s*res\.textContent = 'Pidiendo una tarjeta nueva…'; send\(prompt\)/);
 });
