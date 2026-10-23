@@ -954,6 +954,17 @@
   var NAME_STOP = { de: 1, del: 1, la: 1, las: 1, los: 1, el: 1, y: 1, e: 1, san: 1, santa: 1, sr: 1, sra: 1, don: 1, dona: 1 };
   // palabras de clientes genéricos («Cliente Varios», «Público General», «SIN DOC»): sueltas no son un nombre y no se tapan
   var SINGLE_STOP = { cliente: 1, clientes: 1, varios: 1, varias: 1, general: 1, publico: 1, consumidor: 1, final: 1, sin: 1, doc: 1, documento: 1, nombre: 1, otro: 1, otros: 1, casa: 1, tienda: 1 };
+  // formas comunes que coinciden con el plural/diminutivo de un nombre y no se tapan (comida, cosas, moneda)
+  var INFLECT_STOP = { juanes: 1, flores: 1, luces: 1, cruces: 1, soles: 1, mares: 1, reyes: 1, santos: 1, angeles: 1, leones: 1, palomas: 1, palomitas: 1, pascuas: 1, rocios: 1, angelitos: 1, reinas: 1 };
+  // plural y diminutivo simples de una palabra de nombre (4+ letras, sin números): rosa -> rosas, rosita(s); juan -> juanes, juancito(s);
+  // perez -> perezes/pereces; pilar -> pilares. Los nombres que ya terminan en s (Marcos) no cambian.
+  function nameForms(w) {
+    if (!w || w.length < 4 || /\d/.test(w) || /s$/.test(w)) return [];
+    var out = [], last = w.slice(-1);
+    if (/[aeiou]/.test(last)) { out.push(w + 's'); if (/[ao]/.test(last)) { var st = w.slice(0, -1), d = last === 'a' ? 'ita' : 'ito'; out.push(st + d, st + d + 's'); } }
+    else { out.push(w + 'es'); if (last === 'z') out.push(w.slice(0, -1) + 'ces'); if (/[nr]/.test(last)) out.push(w + 'cito', w + 'cita', w + 'citos', w + 'citas'); }
+    return out;
+  }
   function foldCh(ch) { return ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function foldStr(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function nameTokens(v) { return foldStr(v).split(/[^a-z0-9ñ]+/).filter(Boolean); }
@@ -998,7 +1009,11 @@
     (Array.isArray(proveedores) ? proveedores.slice(0, 2000) : []).concat((Array.isArray(productos) ? productos.slice(0, 5000) : []).map(function (p) { return p && (p.proveedor || p.supplier); }))
       .forEach(function (v) { var st = nameTokens(typeof v === 'string' ? v : v && (v.nombre || v.name)); pairsOf(st); if (st.length > 1 || (st.length === 1 && st[0].length >= 4)) prodNames[st.join(' ')] = 1; });
     var phrases = {}; // frase plegada -> { refs, addr }
-    function add(ph, ref, addr, single) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr, single: !!single }); if (!single) o.single = false; if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    function add1(ph, ref, addr, single) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr, single: !!single }); if (!single) o.single = false; if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    // (auditoría 500, CLI-030: «hay dos rosas» llegó al modelo) también el plural y el diminutivo de la ÚLTIMA palabra del nombre; nunca
+    // si esa forma es una palabra de producto/proveedor o una palabra común («juanes», «flores», «luces», «soles»…)
+    function add(ph, ref, addr, single) { add1(ph, ref, addr, single); if (!ph || addr) return;
+      var cut = ph.lastIndexOf(' '), head = ph.slice(0, cut + 1); nameForms(ph.slice(cut + 1)).forEach(function (v) { if (!prodWords[v] && !INFLECT_STOP[v]) add1(head + v, ref, false, single); }); }
     function inPair(a, b) { var w = f.slice(a, b), pm = /([a-z0-9ñ]+)[^a-z0-9ñ]{1,3}$/.exec(f.slice(Math.max(0, a - 40), a)), nm = /^[^a-z0-9ñ]{1,3}([a-z0-9ñ]+)/.exec(f.slice(b, b + 40));
       return !!((pm && prodPairs[pm[1] + ' ' + w]) || (nm && prodPairs[w + ' ' + nm[1]])); }
     list.forEach(function (c) {
