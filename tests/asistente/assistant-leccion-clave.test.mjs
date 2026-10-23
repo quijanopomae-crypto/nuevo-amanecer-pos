@@ -139,3 +139,20 @@ test('4) la puntuación no cuenta en la ventana del verbo de deuda: «arroz don 
     assert.ok(!/Pedro/i.test(sent), 'llegó a la IA' + (stream ? ' (en partes)' : ''));
   }
 });
+
+// (alfa) Guarda: quitar los pronombres átonos y la puntuación de la ventana no debe tapar marcas.
+test('4b) con pronombres y puntuación cerca, «fideo don vittorio» y «doña pepa» quedan enteros', async () => {
+  const { sanitizeLesson, isBrandDon } = A;
+  const KNOWN = [...DATA.products, { nombre: 'Doña Pepa 1 kg' }];
+  for (const t of [
+    'apunta: el fideo don vittorio me lo traen los lunes, 5 cajas',
+    'apunta: fideo don vittorio, se lo llevan siempre; trae 20 por caja',
+    'recuerda: la doña pepa la llevo siempre, 12 bolsas',
+    'anota: doña pepa, me la traen el 5 y se les acaba rápido',
+    'apunta: FIDEO DON VITTORIO, LO TRAEN EN CAJAS DE 20'
+  ]) {
+    assert.equal(sanitizeLesson(t, DATA.customers, KNOWN), t, t);
+    const i = t.search(/don vittorio|doña pepa/i), len = /vittorio/i.test(t.slice(i, i + 12)) ? 12 : 9;
+    assert.equal(isBrandDon(t, i, i + len, KNOWN), true, t);
+  }
+});
