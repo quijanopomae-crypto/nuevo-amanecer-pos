@@ -121,3 +121,59 @@ test('AJ-026: «inka» encuentra Inca Kola (c/k/qu); lo exacto no cambia', async
   const q = await runAssistantQuery(memoryReader({ ...readerData, products: P }), { tipo: 'stock_producto', producto: 'inka' });
   assert.equal(q.total, 2); assert.match(q.texto, /Inca Kola 500 ml/);
 });
+
+// ---------- VE-010 + SEG 500 (al unir #987): el PIN se tapa sobre el texto COMPLETO antes del corte ----------
+// Un PIN que cae justo en la posición 1500 no puede quedar a medias sin tapar: ni en lo que va al modelo ni en el aviso «Quedó fuera desde…».
+// solo lo que escribió la persona (<dato_usuario>…</dato_usuario>), sin los datos del punto de venta que sí llevan números
+const userSent = (req) => req.messages.filter((m) => m.role === 'user').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+  .map((c) => { const m = /<dato_usuario>([\s\S]*?)<\/dato_usuario>/.exec(c); return m ? m[1] : ''; }).join('\n');
+const preview = (reply) => { const m = /Quedó fuera desde «([^»]*)»/.exec(reply); return m ? m[1] : null; };
+for (const [label, cred, digits] of [['pin 4321', 'pin 4321', '4321'], ['pin: 123456', 'pin: 123456', '123456']]) {
+  test('VE-010 + SEG: «' + label + '» justo en el corte de 1500 -> ni el modelo ni el aviso ven sus dígitos; el aviso de corte sigue', async () => {
+    const max = ASSISTANT_LIMITS.maxMessageChars;
+    for (const split of [1, 2, Math.ceil(digits.length / 2)]) {
+      // los dígitos empiezan `split` caracteres antes del corte: una parte queda dentro y otra fuera
+      const lead = 'Hoy llegó el pedido de la distribuidora y quiero registrar varias cosas con calma. '.repeat(40);
+      const before = lead.slice(0, max - split - cred.length + digits.length) + ' ';
+      const t = before.slice(1) + cred + ' es el de la caja, y luego anota la salida de arroz por favor. ' + 'Gracias. '.repeat(20);
+      const at = t.indexOf(digits);
+      assert.ok(at < max && at + digits.length > max, 'el PIN debe cruzar el corte (en ' + at + ', split ' + split + ')');
+      const p = parseChatBody({ text: t }, 'owner');
+      assert.ok(p.cut, 'debe marcar el corte');
+      assert.doesNotMatch(p.text, /\d/, 'texto al modelo: ' + p.text.slice(-60));
+      assert.doesNotMatch(p.cut.desde, /\d/, 'vista previa: ' + p.cut.desde);
+      const r = await chat(t, [], 'Listo, lo reviso.');
+      assert.equal(r.status, 200);
+      const us = userSent(r.sent[0]); assert.ok(us.length > 1000, 'llega el mensaje cortado'); assert.match(us, /pin:? \[/);
+      assert.doesNotMatch(us, /\d/, 'lo que va al modelo no lleva ni una parte del PIN');
+      assert.ok(!JSON.stringify(r.sent).includes(digits), 'payload sin el PIN');
+      assert.match(sysText(r.sent[0]), /MENSAJE CORTADO/);
+      const pv = preview(r.body.reply);
+      assert.ok(pv !== null, 'el aviso de corte sigue: ' + r.body.reply);
+      assert.doesNotMatch(pv, /\d/, 'vista previa del corte: ' + pv);
+      assert.ok(!r.body.reply.includes(digits), 'la respuesta no repite el PIN');
+      assert.match(r.body.reply.split('\n').pop(), /^Tu mensaje era muy largo: leí solo los primeros 1500 caracteres\./);
+    }
+  });
+}
+
+// ---------- AJ-043 / AJ-002 + «Son N productos…» (#987): cada aviso en su línea, sin repetir ni perderse ----------
+test('AJ-043 + #987: dos tarjetas de tres pedidos -> «Son 2 productos…» pegada a la respuesta y el aviso de lo que faltó en su propia línea', async () => {
+  const r = await chat('entrada 10 arroz, salida 2 azucar, entrada 5 fideo', [adj('p01', 'entrada', 10, 1), adj('p04', 'salida', 2, 2)], 'Listo.');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.proposals.length, 2);
+  const lines = r.body.reply.split('\n');
+  assert.equal(lines.length, 2, r.body.reply);
+  assert.equal(lines[0], 'Listo. Son 2 productos; cada uno se aplica aparte con su «Aplicar».');
+  assert.match(lines[1], /^Sin tarjeta todavía: «entrada 5 fideo»\./);
+  assert.equal(r.body.reply.match(/Son \d+ productos/g).length, 1, 'la frase va una sola vez');
+});
+
+test('AJ-002 + #987: negativos con tres tarjetas -> «Son 3 productos…» y «Hay 5 productos con stock negativo…» en líneas distintas', async () => {
+  const r = await chat('Todos los productos negativos quiero ponerlos en diez unidades', [adj('p16', 'entrada', 11, 1), adj('p17', 'entrada', 12, 2), adj('p23', 'entrada', 13, 3)], 'Preparé las tarjetas.');
+  const lines = r.body.reply.split('\n');
+  assert.equal(lines.length, 2, r.body.reply);
+  assert.equal(lines[0], 'Preparé las tarjetas. Son 3 productos; cada uno se aplica aparte con su «Aplicar».');
+  assert.match(lines[1], /^Hay 5 productos con stock negativo\. No existe un ajuste masivo/);
+  assert.doesNotMatch(lines[1], /Son \d+ productos/);
+});
