@@ -145,7 +145,7 @@
     'reportes': false,
     'cotizaciones': true,
     'cuentas-pagar': true,
-    'compartir-pdf-whatsapp': true,
+    'compartir-pdf-whatsapp': false,
     'filtro-fechas-export': false,
     'pedidos-pos': true,
     'pedido-a-boleta': true,

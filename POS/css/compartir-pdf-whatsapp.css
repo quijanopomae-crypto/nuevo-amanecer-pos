@@ -1,0 +1,5 @@
+/* #32: solo el bloque nuevo dentro del diálogo de compartir; no cambia el ticket ni Venta. */
+.na-pdf-wa{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border,#d9dee5)}
+.na-pdf-wa-send{min-height:44px;border-radius:10px;border:1px solid #128c7e;background:#25d366;color:#06352c;font-weight:700;cursor:pointer}
+.na-pdf-wa-send:disabled{opacity:.6;cursor:wait}
+body.dark .na-pdf-wa-send,[data-theme="dark"] .na-pdf-wa-send{background:#128c7e;color:#fff}
