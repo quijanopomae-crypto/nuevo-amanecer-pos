@@ -2851,7 +2851,24 @@ export function hasImageField(raw) { return /(^|[^\\])"image"\s*:\s*(?!null\b)/.
 // con texto armado, y un mensaje corto que no pide explicación, consejo ni comparación. Si no, va la segunda llamada como siempre.
 export const DIRECT_ASK_MAX = 160;
 const EXPLAIN_ASK = /por\s*qu[eé]|explica|expl[ií]came|recomien|consej|suger|compar|anali[sz]|deber[ií]a|conviene|mejor|peor|qu[eé] hago|c[oó]mo (?:hago|puedo|mejor)|tendencia|resum|y (?:adem[aá]s|tambi[eé]n)|predic|estrategia/i;
-export function directQueryReply({ result, proposals, dropped, consultas, queryCut, text, image }) {
+// (auditoría 500: CP-001/017/039, P-025, CAJ/CLI) El texto armado solo contesta «¿cuánto/qué hay?». Si la pregunta trae otra cosa, va la
+// segunda llamada para que el modelo conteste ESO (pregunte cuál, haga la cuenta, confirme una cantidad rara, diga qué dato falta):
+// - un número que no es fecha («para tener 20», «1000 cajas»);  - compra o llegada de mercadería («me llegó…», «compré…», «cuánto tengo que comprar»);
+// - margen, ganancia o costo con una consulta que no es de ganancia;  - método de pago, gastos, devoluciones, cobros o «quién» en ventas, caja,
+//   resumen o deudas (sin frase enfocada del servidor: pos-assistant-caja-foco.js).
+const DATE_NUM = /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|se?tiembre|octubre|noviembre|diciembre)\b|\b(?:19|20)\d{2}\b/gi;
+const DIRECT_BUY = /\bcompr[eéoa]|\bcomprar|\blleg[oóa]|\bme\s+trajeron|\brecib[ií]|\bpedid[oa]|\bencarg|\brepon|\bpara\s+tener\b/i;
+const DIRECT_COST = /margen|ganancia|\bgan(?:o|é|e)(?![\wáéíóúñ])|\bganamos\b|utilidad|rentab|\bcostos?\b|\bme\s+cuesta/i;
+const DIRECT_DETAIL = /efectivo|\byape\b|\bplin\b|transferencia|cr[eé]dito|fiad|\bgast|devol|anulaci|\bcobr|\bingres|\begres|qui[eé]n(?:es)?\b/i;
+const DIRECT_DETAIL_TYPES = ['ventas_periodo', 'resumen_dia', 'resumen_mes', 'caja_abierta', 'deudas_clientes'];
+export function directAsksMore(text, tipo) {
+  const t = String(text || '');
+  if (/\d/.test(t.replace(DATE_NUM, ' '))) return true;
+  if (DIRECT_BUY.test(t)) return true;
+  if (DIRECT_COST.test(t) && !COST_QUERY_TYPES.includes(tipo)) return true;
+  return DIRECT_DETAIL_TYPES.includes(tipo) && DIRECT_DETAIL.test(t);
+}
+export function directQueryReply({ result, proposals, dropped, consultas, queryCut, text, image, focused }) {
   if (image || queryCut || (dropped && dropped.length)) return null;
   if (String(result?.content || '').trim()) return null;
   const calls = result?.calls || [];
@@ -2861,6 +2878,8 @@ export function directQueryReply({ result, proposals, dropped, consultas, queryC
   if (!r || r.error || typeof r.texto !== 'string' || !r.texto.trim()) return null;
   const t = String(text || '');
   if (!t.trim() || t.length > DIRECT_ASK_MAX || EXPLAIN_ASK.test(t)) return null;
+  if (focused) return focused; // frase del servidor que ya contesta lo preguntado (caja y deudas)
+  if (directAsksMore(t, consultas[0].query?.tipo)) return null;
   return r.texto;
 }
 
@@ -3147,7 +3166,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     // Respuesta directa (lentitud 22-10): pedido simple = el modelo SOLO pidió una consulta (sin texto, sin otra herramienta ni tarjeta
     // descartada), la lectura salió bien, completa y con texto armado, y la persona no pidió explicación ni consejo. Entonces la respuesta
     // es el texto de la consulta (por el MISMO filtro del rol que la respuesta del modelo) y NO hay segunda llamada: ~1 llamada menos.
-    const direct = directQueryReply({ result, proposals, dropped, consultas, queryCut, text: parsed.text, image: parsed.image }) && (focus.get(consultas[0]) || consultas[0].result.texto);
+    const direct = directQueryReply({ result, proposals, dropped, consultas, queryCut, text: parsed.text, image: parsed.image, focused: consultas.length === 1 ? focus.get(consultas[0]) : null });
     if (direct && mode !== 'mock') {
       reply = finalText(direct); tm.second_call = false;
       if (emit) { emit.reset(); emit.push(reply); emit.flush(); }
