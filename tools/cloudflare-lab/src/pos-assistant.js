@@ -31,7 +31,7 @@ import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
   bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
-import { CONFIG_CARD, CONFIG_DEST, isServerKey, resolveConfigProposals, applyConfigCard } from './pos-assistant-config-route.js';
+import { CONFIG_CARD, CONFIG_DEST, isServerKey, resolveConfigProposals, applyConfigCard, configFillNames, configFillValue } from './pos-assistant-config-route.js';
 import { MEMORY_LIMITS, trimHistory, readNote, noteTurn, readResumenField, cleanResumen, verifyResumen, buildResumen, resumenMessage, resumenSigData } from './pos-assistant-memoria.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
@@ -1403,13 +1403,16 @@ function manualBad1(name, k) {
   return false;
 }
 export function manualBad(name, v) { if (!v) return true; v = String(v); return manualBad1(name, v) || manualBad1(name, v.normalize('NFKC')); }
+// Tarjeta «configuracion» del servidor con RUC tapado (#967): solo «valor», solo si está en su «completar» firmado (configFillNames); se revisa
+// como RUC (manualBad 'ruc') y después con la regla de la clave en el confirm (configFillValue). Cualquier otra clave en manual → 400.
+const CONFIG_FILL_MAX = 40;
 function fillCheck(p, manual) {
-  const names = Array.isArray(p.completar) ? [...new Set(p.completar.map((n) => String(n)).filter((n) => Object.hasOwn(FILL_MAX, n)))] : [];
+  const cfg = p?.type === CONFIG_CARD, names = cfg ? configFillNames(p) : Array.isArray(p.completar) ? [...new Set(p.completar.map((n) => String(n)).filter((n) => Object.hasOwn(FILL_MAX, n)))] : [];
   if (manual != null && (typeof manual !== 'object' || Array.isArray(manual) || Object.getPrototypeOf(manual) !== Object.prototype)) return { status: 400, error: 'manual_not_allowed', fields: [] };
   const m = manual || {}, extra = Object.keys(m).filter((k) => !names.includes(k));
   if (extra.length) return { status: 400, error: 'manual_not_allowed', fields: extra.slice(0, 10).map((k) => String(k).slice(0, 40)) };
   const out = {}, fields = [];
-  for (const n of names) { const v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, FILL_MAX[n]).trim() : ''; if (manualBad(n, v)) fields.push(n); else out[n] = v; }
+  for (const n of names) { const v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, cfg ? CONFIG_FILL_MAX : FILL_MAX[n]).trim() : ''; if (manualBad(cfg ? 'ruc' : n, v)) fields.push(n); else out[n] = v; }
   const masked = (x, d = 0) => (typeof x === 'string' ? MASK_LEFT_RE.test(x) : d < 4 && x && typeof x === 'object' ? Object.values(x).some((y) => masked(y, d + 1)) : false);
   // (Bot 5 sobre 58200f60) el nombre de una línea CON product_id no se revisa: «Nueva compra» toma el producto de la base por su id («Leche 12345678»
   // llega como «Leche DNI ****5678» y la tarjeta no se podía confirmar nunca). Una línea sin product_id sí se revisa (ese nombre iría tal cual).
@@ -2698,6 +2701,10 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   // señal no repite: la tarjeta se marca usada con escritura condicional (store.put con revision) y el segundo recibe already_confirmed.
   // Filas marcadas «Revisa este dato»: hay que aceptarlas o quitarlas una por una, con el op de ESTE token (la consola no se salta el botón).
   let applied = Object.keys(fc.out).length ? { ...body.proposal, ...fc.out } : body.proposal;
+  // RUC escrito a mano en la tarjeta de Configuración: regla de la clave (11 dígitos, 10/15/16/17/20); inválido → 400 sin escribir nada.
+  if (tok.t === CONFIG_CARD && Object.hasOwn(fc.out, 'valor')) { const v = configFillValue(applied.ajuste, fc.out.valor); if (v === undefined) {
+    const n = String(fc.out.valor).replace(/[\s.\-]/g, ''); // regla dura: 11 dígitos; el prefijo lo revisa el validador que ya existía (ruc)
+    return json({ error: 'config_invalid', fields: ['valor'], message: /^\d{11}$/.test(n) ? 'El RUC debe empezar con 10, 15, 16, 17 o 20.' : 'El RUC debe tener 11 dígitos.', operation_id: tok.op }, 400); } applied = { ...applied, valor: v }; }
   if (tok.t === 'compra') {
     const flagged = flaggedRows(body.proposal), rv = body.review && typeof body.review === 'object' ? body.review : {};
     const ints = (a) => (Array.isArray(a) ? a : []).filter((i) => Number.isInteger(i) && i >= 0 && i < body.proposal.lineas.length);

@@ -40,15 +40,31 @@ export const CONFIG_KEY_NAMES = Object.freeze(Object.keys(CONFIG_KEYS));
 export const isServerKey = (k) => typeof k === 'string' && Object.hasOwn(CONFIG_KEYS, k);
 // Catálogo para el modelo (solo en pedidos de configuración, igual que el de #972): clave, nombre y valores admitidos. NUNCA los valores
 // actuales (nombre, RUC, dirección y pie no salen al modelo; el «antes» de la tarjeta se lee de la base en resolveConfigProposals).
-const KIND = { negocio_ruc: 'RUC de 11 dígitos', ticket_ancho: ['58mm', '80mm'] };
+const KIND = { negocio_ruc: 'RUC de 11 dígitos (o valor vacío: se escribe en el teléfono)', ticket_ancho: ['58mm', '80mm'] };
 export function serverCatalog() {
   return CONFIG_KEY_NAMES.map((clave) => { const s = CONFIG_KEYS[clave], k = KIND[clave] || (s.parse === bool ? 'boolean' : 'texto');
     return { clave, nombre: s.label, ...(Array.isArray(k) ? { valores: k } : { tipo: k }) }; });
 }
 
+// RUC (decisión de alfa, 23-10): no se afloja el filtro de DNI/RUC. Si el RUC llega tapado o vacío, la tarjeta sale igual con valor vacío y
+// «completar: ['valor']» (el mismo mecanismo de la tarjeta de compra): la persona lo escribe en el teléfono y va en body.manual del confirm,
+// fuera de la propuesta firmada; el número nunca pasa por el modelo. Solo esta clave y solo el campo «valor» se pueden completar así.
+export const CONFIG_FILL = Object.freeze({ negocio_ruc: 'valor' });
+const RUC_MASK = /[*∗＊•●·⁎✱#_~…▪■◦□▫]|(?:^|[^\p{L}])x(?:[\s-]?x)+|\[[^\]]{0,30}\]|\((?:ocult[oa]|omitid[oa])\)|ocult|omitid|tapad|redact/iu;
+const rucPending = (v) => v == null || (typeof v === 'string' && (clean(v) === '' || RUC_MASK.test(v)));
+// Campos que esta tarjeta deja completar a mano (declarados y firmados en «completar»); [] para cualquier otra.
+export function configFillNames(p) {
+  const n = p && p.type === CONFIG_CARD && p.destino === CONFIG_DEST && Object.hasOwn(CONFIG_FILL, p.ajuste) ? CONFIG_FILL[p.ajuste] : null;
+  return n && Array.isArray(p.completar) && p.completar.includes(n) ? [n] : [];
+}
+// Lo escrito a mano (ya normalizado por el confirm): validado con la MISMA regla de la clave (RUC Perú: 11 dígitos, 10/15/16/17/20).
+export function configFillValue(ajuste, raw) { return Object.hasOwn(CONFIG_FILL, ajuste) ? CONFIG_KEYS[ajuste].parse(raw) : undefined; }
+
 // Llamada configurar_app con una clave del servidor -> borrador (antes se completa con la base en resolveConfigProposals).
 export function serverSettingProposal(args, id) {
   const k = args?.ajuste, v = isServerKey(k) ? CONFIG_KEYS[k].parse(args.valor) : undefined;
+  if (v === undefined && Object.hasOwn(CONFIG_FILL, k) && rucPending(args.valor))
+    return { id, type: CONFIG_CARD, needsConfirm: true, title: 'Cambiar configuración', ajuste: k, nombre: CONFIG_KEYS[k].label, alcance: CONFIG_ALCANCE, destino: CONFIG_DEST, completar: [CONFIG_FILL[k]], valor: '', _pending: true };
   if (v === undefined) return { dropped: 'bad_setting', tool: 'configurar_app' };
   return { id, type: CONFIG_CARD, needsConfirm: true, title: 'Cambiar configuración', ajuste: k, nombre: CONFIG_KEYS[k].label, alcance: CONFIG_ALCANCE, destino: CONFIG_DEST, valor: v, _pending: true };
 }
@@ -70,7 +86,7 @@ export async function resolveConfigProposals(db, proposals, dropped) {
     try {
       if (!(spec.setting in rows)) rows[spec.setting] = db ? await readSetting(db, spec.setting) : null;
       const row = rows[spec.setting];
-      if (!row) bad = 'config_sin_datos'; else { antes = current(row, spec); if (antes === p.valor) bad = 'config_sin_cambio'; }
+      if (!row) bad = 'config_sin_datos'; else { antes = current(row, spec); if (antes === p.valor && !configFillNames(p).length) bad = 'config_sin_cambio'; }
     } catch { bad = 'config_read_failed'; }
     if (bad) { dropped.push({ dropped: bad, tool: 'configurar_app' }); proposals.splice(k, 1); k--; continue; }
     const { _pending, valor, ...rest } = p;

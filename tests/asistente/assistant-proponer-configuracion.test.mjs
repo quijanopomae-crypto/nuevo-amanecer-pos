@@ -66,8 +66,8 @@ function harness({ role = 'owner', auth = OWNER, db = memDb(SEED()), store = cre
   const deps = { store, db, resolveRole: async () => role, fetch: f, audit: async (_d, r) => { audit.push(...r); return r.length; }, readBusinessName: async () => 'Negocio', mockChunkMs: 0, now: () => NOW };
   const chat = async (text = 'Cambia la configuración del ticket') => { const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text }) }), ENV, auth, json, deps);
     const raw = await r.text(); let body = null; try { body = JSON.parse(raw); } catch { body = null; } return { status: r.status, body, raw }; };
-  const confirm = async (p, a = auth) => { const { confirm_token, ...proposal } = p;
-    const r = await assistantConfirmRoute(new Request('https://w.test/auth/assistant/confirm', { method: 'POST', body: JSON.stringify({ token: confirm_token, proposal }) }), ENV, a, json, deps);
+  const confirm = async (p, a = auth, manual) => { const { confirm_token, ...proposal } = p;
+    const r = await assistantConfirmRoute(new Request('https://w.test/auth/assistant/confirm', { method: 'POST', body: JSON.stringify({ token: confirm_token, proposal, ...(manual !== undefined ? { manual } : {}) }) }), ENV, a, json, deps);
     return { status: r.status, body: await r.json() }; };
   return { chat, confirm, cap, audit, db, deps };
 }
@@ -251,4 +251,97 @@ test('Admin: payload_bytes de la primera llamada bajo 17000 sin el catálogo; el
   const h2 = harness({ args: { ajuste: 'avisos', valor: false } });
   const r2 = await h2.chat(); const [b2] = r2.body.payload_bytes; assert.ok(b2 > b1 && b2 < 21000, 'bytes ' + b2);
   assert.ok(h2.cap[0].tools.some((t) => t.function.name === TOOL));
+});
+
+// RUC (decisión de alfa): el filtro de DNI/RUC no se afloja. RUC tapado o vacío → tarjeta con valor vacío y completar:['valor'] (mismo
+// mecanismo que la compra); el celular manda manual:{valor} fuera de la propuesta firmada y el servidor lo valida (RUC Perú).
+const RUC = '10456789012';
+const MASKED_RUC = ['10*******12', '', '[RUC oculto]', 'XXXXXXXXXXX', '10•••••••12'];
+
+test('RUC tapado o vacío: tarjeta configuracion con destino servidor, valor vacío y completar:[\'valor\'] (Admin y nivel 3 + cambios)', async () => {
+  for (const valor of MASKED_RUC) {
+    const p = serverSettingProposal({ ajuste: 'negocio_ruc', valor }, 'p1');
+    assert.equal(p.type, CONFIG_CARD, valor); assert.equal(p.destino, CONFIG_DEST); assert.equal(p.valor, ''); assert.deepEqual(p.completar, ['valor']);
+  }
+  assert.equal(serverSettingProposal({ ajuste: 'negocio_ruc', valor: '123' }, 'p1').dropped, 'bad_setting', 'un RUC mal escrito (no tapado) se sigue descartando');
+  assert.equal(serverSettingProposal({ ajuste: 'negocio_nombre', valor: '' }, 'p1').dropped, 'bad_setting', 'solo el RUC se completa a mano');
+  for (const [role, auth] of [['owner', OWNER], [COSTS_ROLE, EMP]]) {
+    const h = harness({ role, auth, args: { ajuste: 'negocio_ruc', valor: '10*******12' } });
+    const r = await h.chat('Pon el RUC del negocio ' + RUC); assert.equal(r.status, 200, r.raw);
+    const card = cardOf(r); assert.ok(card?.confirm_token, r.raw);
+    assert.equal(card.ajuste, 'negocio_ruc'); assert.equal(card.destino, CONFIG_DEST); assert.equal(card.valor, ''); assert.equal(card.antes, '');
+    assert.deepEqual(card.completar, ['valor']); assert.ok(!r.raw.includes(RUC) && !r.raw.includes('45678901'), 'el RUC no vuelve en la tarjeta');
+    assert.equal(h.db.writes.length, 0);
+  }
+});
+
+test('RUC: confirm con manual:{valor} válido aplica (normaliza espacios), revisión +1, una fila de bitácora sin el número; doble toque no repite', async () => {
+  for (const [role, auth] of [['owner', OWNER], [COSTS_ROLE, EMP]]) {
+    const h = harness({ role, auth, args: { ajuste: 'negocio_ruc', valor: '' } });
+    const card = cardOf(await h.chat('Cambia el RUC'));
+    const need = await h.confirm(card, auth); assert.equal(need.status, 422); assert.equal(need.body.error, 'fields_required'); assert.deepEqual(need.body.fields, ['valor']);
+    const tapado = await h.confirm(card, auth, { valor: '10****9012' }); assert.equal(tapado.status, 422); assert.deepEqual(tapado.body.fields, ['valor']);
+    assert.equal(h.db.writes.length, 0);
+    const ok = await h.confirm(card, auth, { valor: '10 4567 8901-2' }); assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(setting(h.db, 'pos.business').ruc, RUC); assert.equal(h.db.rows.get('pos.business').revision, 4);
+    assert.equal(h.db.rows.get('pos.business').updated_by, auth.principalId); assert.equal(setting(h.db, 'pos.business').nombre, 'Multiservicios Nuevo Amanecer');
+    assert.equal(ok.body.proposal.valor, RUC); assert.deepEqual(ok.body.proposal.resultado.aplicado, ['negocio_ruc']);
+    const logged = h.audit.filter((a) => a.tool === 'asistente.config'); assert.equal(logged.length, 1); assert.equal(logged[0].role, role);
+    assert.ok(!JSON.stringify(h.audit).includes(RUC), 'la bitácora no guarda el RUC');
+    assert.ok(!JSON.stringify(h.cap).includes(RUC), 'nada del RUC llega al modelo');
+    const again = await h.confirm(card, auth, { valor: '10 4567 8901-2' }); assert.equal(again.status, 200, JSON.stringify(again.body)); assert.equal(again.body.replay, true); assert.equal(h.db.rows.get('pos.business').revision, 4);
+    assert.equal(h.audit.filter((a) => a.tool === 'asistente.config').length, 1);
+  }
+});
+
+test('RUC inválido: 400 «El RUC debe tener 11 dígitos.» (o prefijo fuera de 10/15/16/17/20) sin escribir; la tarjeta sigue sirviendo', async () => {
+  const h = harness({ args: { ajuste: 'negocio_ruc', valor: '' } });
+  const card = cardOf(await h.chat('Cambia el RUC'));
+  for (const valor of ['123', '30123456789', '201234567890', '2012345678a', 'veinte']) {
+    const r = await h.confirm(card, OWNER, { valor }); assert.equal(r.status, 400, valor + ' ' + JSON.stringify(r.body)); assert.equal(r.body.error, 'config_invalid');
+    assert.deepEqual(r.body.fields, ['valor']);
+    assert.equal(r.body.message, valor === '30123456789' ? 'El RUC debe empezar con 10, 15, 16, 17 o 20.' : 'El RUC debe tener 11 dígitos.', valor);
+    assert.ok(!JSON.stringify(r.body).includes(valor), 'la respuesta no repite lo escrito');
+  }
+  for (const valor of [12345678901, null, ['20123456789']]) { const r = await h.confirm(card, OWNER, { valor }); assert.equal(r.status, 422, String(valor)); }
+  assert.equal(h.db.writes.length, 0); assert.equal(h.db.rows.get('pos.business').revision, 3); assert.equal(h.audit.filter((a) => a.tool === 'asistente.config').length, 0);
+  // otro aparato cambió el RUC desde la tarjeta: 409 revision_conflict, sin pisar
+  h.db.rows.set('pos.business', { value_json: JSON.stringify({ ...SEED()['pos.business'], ruc: '20111111111' }), revision: 4, updated_by: 'otro' });
+  const c = await h.confirm(card, OWNER, { valor: '20123456789' }); assert.equal(c.status, 409); assert.equal(c.body.error, 'revision_conflict');
+  assert.equal(setting(h.db, 'pos.business').ruc, '20111111111');
+});
+
+test('RUC: manual solo para el campo declarado en ESA tarjeta; la firma no cambia (completar y valor firmados)', async () => {
+  const h = harness({ args: { ajuste: 'negocio_ruc', valor: '' } });
+  const card = cardOf(await h.chat('Cambia el RUC'));
+  for (const manual of [{ valor: RUC, antes: '' }, { ajuste: 'negocio_nombre' }, { ruc: RUC }, { proveedor: 'X' }, [RUC], 'x']) {
+    const r = await h.confirm(card, OWNER, manual); assert.equal(r.status, 400, JSON.stringify(manual)); assert.equal(r.body.error, 'manual_not_allowed');
+  }
+  // sin «completar» firmado (quitado o cambiado en el celular): la firma ya no cuadra
+  const { completar, ...sin } = card; assert.equal((await h.confirm(sin, OWNER, { valor: RUC })).status, 409);
+  assert.equal((await h.confirm({ ...card, completar: ['valor', 'antes'] }, OWNER, { valor: RUC })).status, 409);
+  assert.equal((await h.confirm({ ...card, valor: RUC }, OWNER)).status, 409);
+  // otra tarjeta de Configuración (sin completar): manual rechazado
+  const h2 = harness({ args: { ajuste: 'ticket_ancho', valor: '58mm' } });
+  const c2 = cardOf(await h2.chat()); const r2 = await h2.confirm(c2, OWNER, { valor: '80mm' });
+  assert.equal(r2.status, 400); assert.equal(r2.body.error, 'manual_not_allowed'); assert.equal(h2.db.writes.length, 0);
+  assert.equal(h.db.writes.length, 0);
+});
+
+test('RUC: sin permiso → 403 sin leer la base, también con manual', async () => {
+  const h = harness({ role: COSTS_ROLE, auth: EMP, args: { ajuste: 'negocio_ruc', valor: '' } });
+  const card = cardOf(await h.chat('Cambia el RUC')); const before = h.db.reads.length;
+  h.deps.resolveRole = async () => 'empleado:' + LEVEL_NAMES[2];
+  const r = await h.confirm(card, EMP, { valor: RUC }); assert.equal(r.status, 403); assert.equal(h.db.reads.length, before); assert.equal(h.db.writes.length, 0);
+});
+
+test('RUC: nada del número llega al modelo (texto del dueño y del nivel 3, ni en la segunda llamada)', async () => {
+  for (const [role, auth] of [['owner', OWNER], [COSTS_ROLE, EMP]]) {
+    const h = harness({ role, auth, args: { ajuste: 'negocio_ruc', valor: '10*******12' } });
+    const r = await h.chat('Mi RUC es ' + RUC + ', cámbialo en el ticket'); assert.equal(r.status, 200, r.raw);
+    assert.ok(h.cap.length >= 1); const sent = JSON.stringify(h.cap);
+    assert.ok(!sent.includes(RUC) && !sent.includes('45678901'), role + ': el RUC no va al modelo');
+    await h.confirm(cardOf(r), auth, { valor: RUC });
+    assert.ok(!JSON.stringify(h.cap).includes(RUC), 'el confirm no llama al modelo');
+  }
 });
