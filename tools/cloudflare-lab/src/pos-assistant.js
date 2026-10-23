@@ -74,7 +74,9 @@ const CREDIT_LIMIT_RE = /\b(cuanto|maximo|hasta cuanto)\b[^.?!]{0,40}\bfiar(le|l
 const CREDIT_LIMIT_RULE = 'LÍMITE DE FIADO: «cuánto le puedo fiar», «su límite», «hasta cuánto le fío» = consultar deuda_cliente con cliente_id: trae su deuda y su límite de fiado registrado. El límite NO es la deuda; si no hay límite registrado dilo (se ve en Clientes > ficha del cliente > Línea de crédito) y nunca inventes un monto.';
 const CREDIT_PAYMENTS_RE = /\b(cobr\w*|me pagaron|pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/;
 const CREDIT_PAYMENTS_RULE = 'COBROS DE FIADOS: «cuánto cobré de fiados o créditos», «cuánto me abonaron» = consultar cobros_creditos con el periodo; NO es ventas_periodo (las ventas no son cobros).';
-export const asksCreditPayments = (text) => { const t = foldText(text); return CREDIT_PAYMENTS_RE.test(t) && !/\bvend|\bventa/.test(t); };
+// Mención de lo VENDIDO o FIADO (vendí, vendo, vendido, ventas, fié, fío, fiamos…): eso son ventas al fiado, no cobros; no se cambia.
+const SALES_MENTION_RE = /\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/;
+export const asksCreditPayments = (text) => { const t = foldText(text); return CREDIT_PAYMENTS_RE.test(t) && !SALES_MENTION_RE.test(t); };
 // (CLI-024) El modelo pidió las ventas para «¿cuánto cobré de fiados…?»: va la consulta de cobros del mismo período. Solo el Admin (cobros_creditos
 // es solo suyo) y solo si el mensaje no pregunta también por ventas.
 function creditPaymentsNotSales(proposals, text, role) {

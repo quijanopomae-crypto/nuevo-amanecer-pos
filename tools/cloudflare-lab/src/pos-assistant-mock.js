@@ -40,7 +40,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/no se vend|sin ventas|no (se )?vendi|no sale|no salen/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'productos_sin_ventas', ...(/\d{4}-\d{2}-\d{2}|\bhoy\b|\bayer\b|semana|\bmes\b/.test(t) ? queryDates(t) : {}) })] };
   if (/a que hora|por hora|que hora(s)? (vendo|se vende|hay mas)|horas? de mas venta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_por_hora', ...queryDates(t) })] };
   // (auditoría 500, CLI-024) cobros de fiados del período: no son ventas ni la deuda.
-  if (/\b(cobr\w*|me pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(t) && !/\bvend|\bventa/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t) })] };
+  if (/\b(cobr\w*|me pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(t) && !/\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t) })] };
   { const cli = /\bcliente\s*#?\s*([A-Za-z0-9_-]{1,40})\b/i.exec(String(text || '')); // solo el código («cliente #12» o «cliente 12»), nunca el nombre
     if (cli && /debe|deuda|saldo|\bfiar|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }
   if (/vend|carrito|cobra/.test(t) && !/vendid|ventas|reporte/.test(t)) return { content: 'Las ventas se hacen a mano en Venta. Yo te ayudo con stock, compras, precios, productos y reportes.', calls: [] };
