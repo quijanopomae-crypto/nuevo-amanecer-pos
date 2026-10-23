@@ -163,6 +163,37 @@ test('CLI-024 chat del Admin: «cuánto cobré de fiados esta semana» contesta 
   const d = await r.json(); assert.match(d.reply, /Ventas/);
 });
 
+// (pedido de alfa, 23-10) Negativos: lo VENDIDO al fiado no es lo COBRADO. «¿cuánto vendí al fiado hoy?», «¿cuánto fié esta semana?»
+// y variantes se quedan en ventas_periodo; si el mensaje habla de ventas o de fiar (fié, fío…) aunque también pregunte por cobros,
+// tampoco se cambia (igual que «cuánto vendí y cuánto cobré»). Los positivos siguen cambiando.
+const VENDIDO_AL_FIADO = [
+  '¿cuánto vendí al fiado hoy?', '¿cuánto fié esta semana?', 'cuánto vendí a crédito esta semana', '¿cuánto he vendido al crédito esta semana?',
+  'el fiado que vendí esta semana', 'ventas al fiado de esta semana', 'cuánto vendo fiado por semana', '¿cuánto fío a la semana?',
+  '¿cuánto fié y cuánto me pagaron de fiados esta semana?', 'cuánto fié esta semana y cuánto cobré de deudas', 'ventas a crédito y cobros de fiados de esta semana',
+];
+const COBRADO_DE_FIADOS = ['¿cuánto cobré de fiados esta semana?', 'cuánto me pagaron de fiados esta semana', 'cuánto cobré de créditos esta semana', '¿cuánto me abonaron esta semana?'];
+
+test('CLI-024 negativos: lo vendido al fiado se queda en ventas_periodo; lo cobrado de fiados sí va a cobros_creditos', async () => {
+  for (const text of VENDIDO_AL_FIADO) {
+    const { r, cap } = await route(text, [{ content: '', tool_calls: [call('consultar', { tipo: 'ventas_periodo', periodo: 'esta_semana' })] }]);
+    assert.equal(r.status, 200, text); const d = await r.json();
+    assert.match(d.reply, /Ventas/, text);
+    assert.ok(!/Cobros de fiados|44\.00/.test(d.reply), text + ' -> ' + d.reply);
+    if (!/cobr|pagaron/.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) assert.ok(!/COBROS DE FIADOS/.test(JSON.parse(cap[0]).messages[0].content), text);
+    noNames(cap);
+    // El modo demostración tampoco lo manda a los cobros.
+    const m = mockAssistantReply({ role: 'owner', ctx: { products: [] }, text });
+    assert.ok(!(m.calls || []).some((c) => /cobros_creditos/.test(c.function?.arguments ?? JSON.stringify(c))), 'mock ' + text);
+  }
+  for (const text of COBRADO_DE_FIADOS) {
+    const { r } = await route(text, [{ content: '', tool_calls: [call('consultar', { tipo: 'ventas_periodo', periodo: 'esta_semana' })] }]);
+    const d = await r.json();
+    assert.equal(d.reply.trim(), 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 44.00 en 3 cobros.', text);
+    const m = mockAssistantReply({ role: 'owner', ctx: { products: [] }, text });
+    assert.ok((m.calls || []).some((c) => /cobros_creditos/.test(c.function?.arguments ?? JSON.stringify(c))), 'mock ' + text);
+  }
+});
+
 test('CLI-024 empleado: cobros_creditos no existe para él y si la pide es solo del Admin (barrera de montos intacta)', async () => {
   for (const role of ['empleado:consultas', 'empleado:completo', 'empleado:completo+costos']) {
     const c = toolsForRole(role).find((t) => t.function.name === 'consultar')?.function;
