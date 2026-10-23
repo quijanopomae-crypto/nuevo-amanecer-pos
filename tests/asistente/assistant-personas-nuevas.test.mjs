@@ -33,11 +33,11 @@ function seq(content, bodies, stream) { return async (_u, init) => { bodies.push
   if (!stream) return jsonR({ choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }] });
   const parts = [...(content.match(/[\s\S]{1,3}/g) || []).map((x) => delta({ content: x })), delta({}, 'stop')];
   return new Response(new ReadableStream({ start(c) { for (const p of parts) c.enqueue(enc.encode(p)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } }); }; }
-async function chat(text, { role = 'owner', stream = true, history, resumen, store = A.createMemoryUsageStore() } = {}) {
+async function chat(text, { role = 'owner', stream = true, history, resumen, store = A.createMemoryUsageStore(), reply = 'Anotado.' } = {}) {
   const bodies = [];
   const r = await A.assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: {}, ...(history ? { history } : {}), ...(resumen ? { resumen } : {}) }) }),
     { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:personas-nuevas', posRole: role === 'owner' ? 'owner' : 'empleado' }, jsonR,
-    { store, resolveRole: async () => role, fetch: seq('Anotado.', bodies, stream), reader: memoryReader(DATA), audit: async () => {}, now: () => NOW, statusEveryMs: 60000 });
+    { store, resolveRole: async () => role, fetch: seq(reply, bodies, stream), reader: memoryReader(DATA), audit: async () => {}, now: () => NOW, statusEveryMs: 60000 });
   const raw = await new Response(r.body).text();
   return { status: r.status, raw, bodies, lastUser: bodies.length ? String(JSON.parse(bodies[0]).messages.filter((m) => m.role === 'user').at(-1).content) : null };
 }
@@ -286,4 +286,39 @@ test('alfa) palabra tras el nombre tapado: lecciones (sanitizeLesson) guardan «
   }
   assert.equal(A.sanitizeLesson('fideo don vittorio', [], DATA.products), 'fideo don vittorio');
   assert.equal(A.sanitizeLesson('doña pepa viene en caja de 6', [], DATA.products), 'doña pepa viene en caja de 6');
+});
+
+// (alfa) el empleado recibe el MISMO «known» (productos y clientes) que el Admin para el filtro final de la respuesta: las marcas del
+// catálogo («Galleta Doña Pepa», «Fideo Don Vittorio») no se tapan; los nombres de personas sí. Hacia la IA el tapado es igual para los dos.
+// Solo cambian las listas del tapado: el empleado no recibe costos ni ganancias.
+const finalReply = (raw) => { const m = raw.match(/event: final\ndata: (.*)\n/); return JSON.parse(m ? m[1] : raw).reply; };
+const BRAND_REPLY = 'Quedan 30 de Galleta Doña Pepa 6 un y 30 de Fideo Don Vittorio spaghetti; don Ernesto Villar pagó.';
+test('alfa) empleado: la respuesta deja las marcas del catálogo (mismo known que el Admin) y tapa las personas (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const role of ['owner', EMP]) for (const stream of [true, false]) {
+    const r = await chat('stock de galleta y fideo', { role, stream, reply: BRAND_REPLY });
+    const shown = finalReply(r.raw), tag = role + ' stream=' + stream + ': ' + shown;
+    assert.match(shown, /Galleta Doña Pepa 6 un/, tag); assert.match(shown, /Fideo Don Vittorio spaghetti/, tag);
+    assert.doesNotMatch(shown, /Ernesto|Villar/, tag); assert.match(shown, /don \[nombre oculto\]/, tag);
+    if (stream) assert.doesNotMatch(r.raw, /Ernesto|Villar/, 'en partes, ningún trozo con el nombre: ' + tag);
+  }
+});
+test('alfa) empleado: hacia la IA «cliente compra Bolívar» y «rebaja a Gloria a 4.50» dejan la marca; la persona se tapa (igual que el Admin)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const same = {};
+    for (const role of ['owner', EMP]) for (const [text, keep] of [['cliente compra Bolívar', /cliente compra Bolívar/], ['rebaja a Gloria a 4.50', /rebaja a Gloria a 4\.50/], ['le fié a Rosa Quispe 2 kg de arroz', /le fié a \[nombre oculto\] 2 kg de arroz/]]) {
+      const r = await chat(text, { role, stream });
+      assert.match(r.lastUser, keep, role + ' stream=' + stream + ': ' + r.lastUser); assert.doesNotMatch(r.bodies[0], NAMES);
+      (same[text] = same[text] || []).push(r.lastUser.replace(/^[\s\S]*<dato_usuario>/, ''));
+    }
+    for (const [text, v] of Object.entries(same)) assert.equal(v[0], v[1], 'mismo tapado Admin/empleado: ' + text);
+  }
+});
+test('alfa) empleado: con el known del Admin no recibe costos ni ganancias (ni hacia la IA ni en la respuesta)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const r = await chat('stock de galleta y fideo', { role: EMP, stream, reply: BRAND_REPLY });
+    assert.doesNotMatch(r.bodies[0] + r.raw, /"(?:costo\w*|ganancia\w*|margen\w*|utilidad\w*|cost\w*)"\s*:/i);
+  }
 });
