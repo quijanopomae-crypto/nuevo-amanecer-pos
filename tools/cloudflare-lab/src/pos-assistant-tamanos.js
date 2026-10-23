@@ -59,13 +59,31 @@ export const packTopic = (text) => PACK_TOPIC_RE.test(fold(text));
 const packWord = (text) => { const t = fold(text); return /(?<![a-z])(?:displays?|disp)(?![a-z])/.test(t) ? 'display' : /(?<![a-z])(?:paquetes?|pqts?)(?![a-z])/.test(t) ? 'paquete' : 'caja'; };
 // La persona dijo el tamaño en este mensaje («la caja trae 72», «cajas de 72», «72 unidades por caja») o contestó con un número a la
 // pregunta del servidor «¿Cuántas unidades trae…?».
-const STATED_RE = new RegExp('(?<![a-z])' + PACK_NOUN + '\\s+(?:de|x|con|trae|traen|tiene|tienen|viene|vienen|lleva|llevan|cerradas?\\s+de)\\s+\\d+|\\d+\\s*(?:unidades|unid|und|uds|u)\\s+(?:por|cada|la|el)\\s+' + PACK_NOUN + '|(?:trae|traen|viene|vienen|tiene|tienen)\\s+\\d+');
+// (revisión #999) El verbo tiene que ir pegado a la caja o al producto: «la caja trae 12», «cajas de 12», «caja de wafer nik trae 72»,
+// «viene de 24», «trae 12 unidades», «12 unidades por caja». Un «tiene 10» suelto («la vitrina tiene 10») NO es el tamaño de la caja.
+const VERB = '(?:trae|traen|tiene|tienen|viene|vienen|lleva|llevan)';
+const STOP = '(?:y|e|o|u|pero|que|mas|en|la|el|los|las|lo|mi|su|tengo|hay|con|para|por|son|es|esta|estan|aparte|ademas|vitrina|tienda|almacen|stock|sistema)';
+const UNITS = '(?:unidades?|unid|unids|und|unds|uds|u)';
+const STATED_RE = new RegExp([
+  '(?<![a-z])' + PACK_NOUN + '\\s+(?:de|x|con|cerradas?\\s+de)\\s+\\d+(?![\\d.,]?\\d*\\s*(?:' + PACK_NOUN + '|kg|kilos?|gr?|ml|lt?|litros?)(?![a-z]))',
+  '(?<![a-z])' + PACK_NOUN + '(?:\\s+de(?:\\s+(?!' + STOP + '(?![a-z]))[a-z0-9ñ]+){1,5})?(?:\\s*,)?(?:\\s+que)?\\s+' + VERB + '\\s+(?:de\\s+|x\\s+|con\\s+)?\\d+',
+  '(?<![a-z])(?:viene|vienen)\\s+(?:de|x|con|en)\\s+\\d+',
+  '(?<![a-z])(?:trae|traen|viene|vienen)\\s+\\d+\\s*' + UNITS + '(?![a-z])',
+  '\\d+\\s*' + UNITS + '\\s+(?:por|cada|la|el|en\\s+cada)\\s+(?:' + PACK_NOUN + '|una|uno)(?![a-z])'
+].join('|'));
+// Respuesta a la pregunta del servidor: un número de UNIDADES («12», «trae 12», «12 unidades», «son 12»). «son 2 cajas» no cuenta.
+const SIZE_ANSWER_RE = new RegExp('^(?:(?:la\\s+caja|el\\s+display|el\\s+paquete|cada\\s+una|cada\\s+caja)\\s+)?(?:son|trae|traen|tiene|tienen|viene|vienen|lleva|llevan)?\\s*(?:de\\s+|x\\s+)?\\d+\\s*(?:' + UNITS + ')?(?:\\s+(?:por|cada)\\s+(?:caja|display|paquete|una|uno))?\\s*[.!]*$');
+const PACK_COUNTS_G = new RegExp(PACK_COUNT_RE.source, 'g');
 export const ASK_SIZE_RE = /¿Cuántas unidades trae (?:la caja|el display|el paquete) de /;
 export function statedSize(text, history) {
-  const t = fold(text);
+  const t = fold(text).trim();
   if (STATED_RE.test(t)) return true;
   const last = (history || []).filter((h) => h && h.role === 'assistant').slice(-1)[0];
-  return !!(last && ASK_SIZE_RE.test(String(last.content || '')) && /\d/.test(t));
+  if (!(last && ASK_SIZE_RE.test(String(last.content || '')))) return false;
+  if (SIZE_ANSWER_RE.test(t)) return true;
+  // «son 2 cajas, 12 unidades»: sin las cuentas de cajas tiene que quedar un número con «unidades» (o «trae 12»).
+  const rest = t.replace(PACK_COUNTS_G, ' ');
+  return new RegExp('\\d+\\s*' + UNITS + '(?![a-z])|(?<![a-z])(?:trae|traen|viene|vienen)\\s+(?:de\\s+)?\\d+').test(rest);
 }
 
 // ---------- UNI-032: regla general para todas las cajas ----------
@@ -146,7 +164,7 @@ export async function resolvePackProposals(reader, proposals, dropped) {
     const cur = map && map.get(String(p.product_id));
     if (!cur) { proposals.splice(proposals.indexOf(p), 1); dropped.push({ dropped: map ? 'pack_product_missing' : 'pack_read_failed', tool: PACK_TOOL, nombre: p.nombre }); continue; }
     p.unidades_antes = cur.caja > 0 ? cur.caja : null; p.precio_caja_antes = cur.precio_caja != null ? cur.precio_caja : null;
-    if (p.precio_caja == null) p.precio_caja = p.precio_caja_antes;
+    if (p.precio_caja == null) { p.precio_caja = p.precio_caja_antes; p.precio_de_ficha = true; }
     if (p.precio_caja == null) { proposals.splice(proposals.indexOf(p), 1); dropped.push({ dropped: 'pack_price_missing', tool: PACK_TOOL, nombre: p.nombre }); asks.push(p.nombre); continue; }
     p.origen = 'Lo dijo el Admin en el chat';
   }
@@ -173,7 +191,27 @@ const nowIso = (ms) => new Date(ms).toISOString(); // AAAA-MM-DDTHH:MM:SS.mmmZ (
 
 // Confirmación (solo Admin, ya revisado en /auth/assistant/confirm). Escribe UNA revisión product.update con operation_id = el del token
 // (un reenvío del mismo toque no escribe dos veces) y deja dos filas en la bitácora: lo aplicado (antes -> después) y quién.
-export async function applyPackCard(db, auth, card, opId, audit, now = Date.now()) {
+// (revisión #999) La tarjeta firma lo que había en la ficha al armarla (unidades_antes, precio_caja_antes). Si otro aparato cambió la
+// caja desde entonces, NO se pisa a ciegas: 409 stock_changed (mismo formato que el #983) con una tarjeta NUEVA firmada (reissue) con
+// lo de ahora; la vieja no escribe nada. El precio que dijo el Admin se mantiene; el que salió de la ficha se toma de nuevo.
+const soles = (c) => (c == null ? null : Number(c) / 100);
+async function stalePackCard(card, eff, reissue) {
+  if (!Object.hasOwn(card || {}, 'unidades_antes') && !Object.hasOwn(card || {}, 'precio_caja_antes')) return null;
+  const uNow = Number(eff.units_per_box) > 0 ? Number(eff.units_per_box) : null, cNow = eff.box_price_cents == null ? null : Number(eff.box_price_cents);
+  const uWas = Number(card.unidades_antes) > 0 ? Number(card.unidades_antes) : null, cWas = card.precio_caja_antes == null ? null : cents(card.precio_caja_antes);
+  if (uNow === uWas && cNow === cWas) return null;
+  const precio = card.precio_de_ficha ? soles(cNow) : card.precio_caja;
+  const fmt = (u, c) => (u == null ? 'sin tamaño' : u + ' unidades') + ' a ' + (c == null ? 'sin precio de caja' : 'S/ ' + (c / 100).toFixed(2));
+  const base = { error: 'stock_changed', nombre: card.nombre, unidades_antes: uWas, unidades_ahora: uNow, precio_caja_antes: soles(cWas), precio_caja_ahora: soles(cNow) };
+  const cambio = 'La caja de ' + card.nombre + ' cambió de ' + fmt(uWas, cWas) + ' a ' + fmt(uNow, cNow) + ' desde que preparé la tarjeta.';
+  if (uNow === Number(card.unidades) && precio != null && cNow === cents(precio)) return { ...base, proposal: null, message: cambio + ' Ya está guardada como pedías. No hace falta aplicar.' };
+  if (precio == null || typeof reissue !== 'function') return { ...base, proposal: null, message: cambio + ' Pide la tarjeta de nuevo.' };
+  const { confirm_token, resultado, ...rest } = card;
+  const fresh = { ...rest, id: String(card.id || PACK_CARD) + '-r', unidades_antes: uNow, precio_caja_antes: soles(cNow), precio_caja: precio };
+  fresh.confirm_token = await reissue(fresh);
+  return { ...base, proposal: fresh, message: cambio + ' Revisa la tarjeta nueva: guarda ' + card.unidades + ' unidades a S/ ' + Number(precio).toFixed(2) + ' la caja.' };
+}
+export async function applyPackCard(db, auth, card, opId, audit, now = Date.now(), reissue = null) {
   const fail = (status, error, message) => ({ status, body: { error, message } });
   if (!db) return fail(503, 'save_failed', 'No se pudo guardar. Intenta de nuevo.');
   const u = Number(card?.unidades), price = cents(card?.precio_caja);
@@ -187,6 +225,8 @@ export async function applyPackCard(db, auth, card, opId, audit, now = Date.now(
     eff = await effectiveProduct(db, ctl.active_promotion_id, String(card.product_id));
   } catch { return fail(503, 'save_failed', 'No se pudo guardar. Intenta de nuevo.'); }
   if (!eff) return fail(409, 'product_not_found', 'Ese producto ya no está en el inventario.');
+  const stale = await stalePackCard(card, eff, reissue);
+  if (stale) return { status: 409, body: stale };
   const antes = Number(eff.units_per_box) > 0 ? Number(eff.units_per_box) : null;
   let alt = []; try { alt = JSON.parse(eff.alternate_codes_json || '[]'); } catch { alt = []; }
   alt = [...new Set([...(Array.isArray(alt) ? alt : []), ...(eff.legacy_alternate_code ? [eff.legacy_alternate_code] : [])].map((c) => String(c).trim()).filter(Boolean))].filter((c) => c !== eff.sku && c !== eff.barcode);
@@ -209,8 +249,27 @@ export async function applyPackCard(db, auth, card, opId, audit, now = Date.now(
 }
 
 // ---------- UNI-007: precio de lista o de factura ----------
-const SUPPLIER_SRC_RE = /(?<![a-z])(?:lista|listas|proveedor(?:es)?|factura|facturas|boleta|distribuidor\w*|mayorista|catalogo)(?![a-z])/;
-export const asksSupplierPrice = (text, priceAsk) => SUPPLIER_SRC_RE.test(fold(text)) && priceAsk.test(String(text || ''));
+// (revisión #999) «lista» sola NO es del proveedor: el POS tiene su propia «lista de precios» («a cuánto está el arroz en mi lista de
+// precios», «pásame el precio para la lista» = precio de venta). La lista cuenta como del proveedor solo con «proveedor», «distribuidor»,
+// «mayorista» o el nombre de un proveedor conocido (de las compras). Factura, boleta y catálogo siguen siendo del proveedor.
+const SUPPLIER_SRC_RE = /(?<![a-z])(?:proveedor(?:es)?|factura|facturas|boletas?|distribuidor\w*|mayoristas?|catalogo)(?![a-z])/;
+const LIST_RE = /(?<![a-z])listas?(?![a-z])/;
+const NAME_NOISE = new Set(['distribuidora', 'distribuidor', 'comercial', 'comercializadora', 'corporacion', 'inversiones', 'negociaciones', 'importaciones', 'grupo', 'empresa', 'sac', 'saa', 'eirl', 'srl', 'del', 'los', 'las', 'peru']);
+// Palabras de los nombres de proveedor (de 4 letras o más, sin «distribuidora», «S.A.C.», etc.) para reconocer «la lista de alicorp».
+export function supplierNameWords(names) {
+  const out = new Set();
+  for (const n of names || []) for (const w of fold(n).replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/)) if (w.length >= 4 && !NAME_NOISE.has(w) && !/^\d+$/.test(w)) out.add(w);
+  return [...out].slice(0, 200);
+}
+export const mentionsList = (text) => LIST_RE.test(fold(text));
+export function supplierSource(text, supplierWords = []) {
+  const t = fold(text);
+  if (SUPPLIER_SRC_RE.test(t)) return true;
+  if (!LIST_RE.test(t)) return false;
+  const words = new Set(t.replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/));
+  return (supplierWords || []).some((w) => words.has(w));
+}
+export const asksSupplierPrice = (text, priceAsk, supplierWords = []) => priceAsk.test(String(text || '')) && supplierSource(text, supplierWords);
 export const SUPPLIER_PRICE_RULE = 'PRECIO DE LISTA O FACTURA: un precio que sale de una lista de proveedor, factura o boleta es «precio del proveedor» (lo que cobra el proveedor): dilo con esas palabras y nunca lo presentes como tu precio de venta. El precio de venta es solo el de <precios_del_sistema>.';
 const AMOUNT_RE = /s\/\s*\d|\d+[.,]\d{2}(?!\d)/i;
 // sale: { nombre, precio } si el producto se reconoce sin dudas (un solo candidato); si no, null.

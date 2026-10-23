@@ -9,7 +9,7 @@
   ['cash.closes.view', 'purchases.costs.view', 'expense.create', 'expense.update', 'expense.void', 'settings.set', 'product-images.write', 'reports.view', 'devices.manage', 'owner-pin.set', 'pairing-code.create', 'reviews.resolve'].forEach(function (id) { ACTIONS[id] = owner; });
   ['cash.expense', 'sync.write'].forEach(function (id) { ACTIONS[id] = both; });
   // Asistente (prototipo): SOLO dueño (modo admin). No vende ni llena carritos.
-  ['assistant.chat', 'assistant.query', 'assistant.document', 'assistant.price.propose', 'assistant.purchase.propose', 'assistant.stock.propose', 'assistant.product.propose', 'assistant.levels.set'].forEach(function (id) { ACTIONS[id] = owner; });
+  ['assistant.chat', 'assistant.query', 'assistant.document', 'assistant.price.propose', 'assistant.purchase.propose', 'assistant.stock.propose', 'assistant.product.propose', 'assistant.levels.set', 'assistant.pack.set'].forEach(function (id) { ACTIONS[id] = owner; });
   SCREENS['pageReporteDeuda'] = owner;
   SCREENS['pageCodigosDuplicados'] = owner;
   var SYNC_ENTITIES = {};

@@ -30,7 +30,7 @@ import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './p
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
   bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
-import { PACK_TOOL, PACK_CARD, PACK_TOOL_DEF, PACK_RULE, PACK_TOOL_RULE, SUPPLIER_PRICE_RULE, GENERAL_PACK_TEXT, GENERAL_PACK_EMPLOYEE_TEXT, asksPack, packTopic, asksGeneralPack, asksSupplierPrice,
+import { PACK_TOOL, PACK_CARD, PACK_TOOL_DEF, PACK_RULE, PACK_TOOL_RULE, SUPPLIER_PRICE_RULE, GENERAL_PACK_TEXT, GENERAL_PACK_EMPLOYEE_TEXT, asksPack, packTopic, asksGeneralPack, asksSupplierPrice, mentionsList, supplierNameWords,
   packFactsMessage, holdPackCards, holdText, usedText, packToolProposal, resolvePackProposals, packPriceAskText, applyPackCard, supplierPriceFix } from './pos-assistant-tamanos.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
 import { CONFIG_CARD, CONFIG_DEST, isServerKey, employeeServerKey, CONFIG_ADMIN_ONLY_TEXT, resolveConfigProposals, applyConfigCard, configFillNames, configFillValue } from './pos-assistant-config-route.js';
@@ -1629,7 +1629,7 @@ export const STOCK_NOT_UP_RE = /\b(?:compr\w*|ingres\w*|registr\w*)\b[^.?!\n]{0,
 export const STOCK_NOT_UP_RULE = 'COMPRA QUE NO SUBE EL STOCK: 1) Inventario > Compras > Historial: ¿se guardó? Si no, regístrala en Nueva compra. 2) Si está, revisa su stock (stock_producto) y Kardex.';
 // Prompt por rol (pedido de alfa, 22-10): cada rol recibe solo sus líneas. El empleado no recibe las guías de caja, boleta/factura de compra
 // ni deudas/estado de cuenta (herramientas y tipos que no tiene); el Admin recibe todo. Los cortes del servidor siguen igual (defensa en profundidad).
-export function systemPrompt(role, ctx, text = '') {
+export function systemPrompt(role, ctx, text = '', opts = {}) {
   const business = sanitizeBusinessName(ctx && ctx.business), admin = role === 'owner';
   return [
     // Pedido del dueño (22-10): al presentarse, «tienda de abarrotes» (nunca otro tipo de negocio).
@@ -1677,7 +1677,7 @@ export function systemPrompt(role, ctx, text = '') {
     // (auditoría 500, UNI-018/019/032/033/007) cajas, displays y paquetes; precio de lista o factura. Solo cuando el mensaje lo pide.
     ...(asksPack(text) || asksGeneralPack(text) ? [PACK_RULE] : []),
     ...(toolAllowed(role, PACK_TOOL) && packTopic(text) ? [PACK_TOOL_RULE] : []),
-    ...(seesOwnerData(role) && asksSupplierPrice(text, PRICE_ASK_RE) ? [SUPPLIER_PRICE_RULE] : []),
+    ...(seesOwnerData(role) && (opts.supplierAsk ?? asksSupplierPrice(text, PRICE_ASK_RE)) ? [SUPPLIER_PRICE_RULE] : []),
     screensPromptLine(),
     'Guía: vender = Punto de Venta. Compra = Inventario > Compras > Nueva compra. Movimiento = Inventario > producto > Movimiento. Producto nuevo = Inventario > + Nuevo. Abono = Clientes > ficha > Abonar. Deudas = Clientes > Reporte de deuda.',
     // (lote en vivo 22-10, b) «compré 10 Inka Kola y no aparecen en el stock»
@@ -2183,8 +2183,8 @@ export async function reserveUsage(store, auth, env, nowMs, hasImage) {
 }
 
 // ---------- DeepSeek ----------
-export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceMemory, lessons, priceFacts, packFacts = null, resumen = null, cards }) {
-  const messages = [{ role: 'system', content: systemPrompt(role, ctx, text) }, contextMessage(ctx)];
+export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceMemory, lessons, priceFacts, packFacts = null, resumen = null, cards, supplierAsk }) {
+  const messages = [{ role: 'system', content: systemPrompt(role, ctx, text, { supplierAsk }) }, contextMessage(ctx)];
   // Empleado (defensa en datos): el historial lo manda el aparato (un aparato que antes fue del dueño puede guardar respuestas con costos):
   // antes del modelo pasa por el mismo filtro de montos del dueño. El texto nuevo de la persona va tal cual (es lo que ella escribió).
   // Un turno anterior que nombra al dueño (costo, compré, margen, proveedor…) NO va al modelo: se cambia por un aviso corto (puede venir de
@@ -2986,7 +2986,9 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   // Las del aparato (#972, sin destino servidor) las guarda el teléfono con su ejecutor, como antes.
   if (tok.t === CONFIG_CARD && (applied.destino === CONFIG_DEST || isServerKey(applied.ajuste))) { const cf = await applyConfigCard(deps.db, auth, role, applied, tok.op, deps.audit || auditWrite); if (cf.status !== 200) return json(cf.body, cf.status); applied = { ...applied, resultado: cf.body }; }
   // Tarjeta «Guardar tamaño de caja» (solo Admin, un toque, sin PIN): el servidor escribe la revisión product.update y la anota (pos-assistant-tamanos.js).
-  if (tok.t === PACK_CARD) { const pk = await applyPackCard(deps.db, auth, applied, tok.op, deps.audit || auditWrite, now); if (pk.status !== 200) return json(pk.body, pk.status); applied = { ...applied, resultado: pk.body }; }
+  // Si la caja de la ficha cambió desde la tarjeta: 409 stock_changed con tarjeta nueva firmada (como #983); la vieja no escribe ni se marca usada.
+  if (tok.t === PACK_CARD) { const pk = await applyPackCard(deps.db, auth, applied, tok.op, deps.audit || auditWrite, now, (fresh) => issueConfirmToken(fresh, role, auth, secret, now));
+    if (pk.status !== 200) return json(pk.body.error === 'stock_changed' ? { ...pk.body, operation_id: tok.op } : pk.body, pk.status); applied = { ...applied, resultado: pk.body }; }
   const rvUsed = tok.t === 'compra' ? { accept: applied.aceptadas || [], drop: applied.quitadas || [] } : null;
   if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(tok.t === 'compra' ? { acc: applied.aceptadas || [] } : {}),
     s: sess, rh: await replayHash(secret, tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
@@ -3228,6 +3230,13 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const priceFacts = sysProducts && priceAsk ? priceLookupMessage(role, parsed.text, sysProducts) : null;
   // (auditoría 500, UNI-018/019) «son 2 cajas»: el tamaño conocido de los productos del mensaje y de los últimos de la persona.
   const packFacts = sysProducts && packAsk ? packFactsMessage(sysProducts, matchProducts, parsed.text, parsed.history) : null;
+  // (UNI-007, revisión #999) «lista» sola es la lista de precios del POS; cuenta como del proveedor con «proveedor», «distribuidor»,
+  // «mayorista» o el nombre de un proveedor de las compras (solo se leen si el mensaje dice «lista»; nunca van al modelo).
+  let supplierWords = [];
+  if (seesOwnerData(role) && priceAsk && mentionsList(parsed.text) && !asksSupplierPrice(parsed.text, PRICE_ASK_RE) && rd0 && typeof rd0.purchases === 'function') {
+    try { const rows = await rd0.purchases(100); supplierWords = supplierNameWords((Array.isArray(rows) ? rows : []).map((r) => r && r.supplier).filter(Boolean)); } catch { supplierWords = []; }
+  }
+  const supplierAsk = seesOwnerData(role) && asksSupplierPrice(parsed.text, PRICE_ASK_RE, supplierWords);
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
   const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, seesOwnerData(role) ? null : ownerHold, prime) : null;
@@ -3251,7 +3260,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } if (!confirmHeld(emit)) emit.flush(); }
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
-    req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, packFacts, resumen: resumenIn || null, cards: parsed.cards });
+    req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, packFacts, resumen: resumenIn || null, cards: parsed.cards, supplierAsk });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
@@ -3460,7 +3469,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (packAsks.length) reply = (proposals.some((p) => p.needsConfirm) ? reply + ' ' : '') + packPriceAskText(packAsks);
   if (generalPack) reply = role === 'owner' ? GENERAL_PACK_TEXT : GENERAL_PACK_EMPLOYEE_TEXT;
   // (UNI-007) monto de una lista de proveedor o factura: «precio del proveedor», nunca el precio de venta (solo quien ve datos del dueño).
-  if (seesOwnerData(role) && asksSupplierPrice(parsed.text, PRICE_ASK_RE)) {
+  if (supplierAsk) {
     const hits = Array.isArray(sysProducts) ? matchProducts(sysProducts, parsed.text) : [];
     reply = supplierPriceFix(reply, hits.length === 1 ? hits[0] : null);
   }
