@@ -22,7 +22,7 @@ import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemo
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { retargetCall, cajaPromptLines, focusedText, creditLimitAsk, CREDIT_LIMIT_TEXT } from './pos-assistant-caja-foco.js';
-import { precioPromptLines, PRICE_TALK, priceChangeAsk, priceZeroAsk, priceAmountMissing, keepCorrectedPrice, settlePriceCards, tiedProducts, DISCOUNT_NOTE } from './pos-assistant-precio-foco.js';
+import { precioPromptLines, PRICE_TALK, priceChangeAsk, priceZeroAsk, priceAmountMissing, keepCorrectedPrice, settlePriceCards, tiedProducts, noteCovered, retargetPriceCall, costHistoryAsk, namesAnother, DISCOUNT_NOTE } from './pos-assistant-precio-foco.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
@@ -3069,7 +3069,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (result.calls && result.calls.length) beat.start();
   const proposals = [], dropped = preDropped ? [preDropped] : [];
   // (auditoría 500, caja) Admin: «ayer» nunca con la caja abierta de hoy; gastos/devoluciones/cobros de hoy con caja_abierta (pos-assistant-caja-foco.js).
-  if (role === 'owner' && Array.isArray(result.calls)) result.calls = result.calls.map((c) => retargetCall(c, parsed.text));
+  if (role === 'owner' && Array.isArray(result.calls)) result.calls = result.calls.map((c) => retargetPriceCall(retargetCall(c, parsed.text), parsed.text));
   const seenCalls = new Set();
   result.calls = result.calls.filter((c) => { let a = c?.arguments; if (typeof a === 'string') { try { a = JSON.parse(a); } catch { /* se queda como texto */ } }
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
@@ -3188,10 +3188,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       const priceTool = role === 'owner' && priceChangeAsk(parsed.text) && !priceZeroAsk(parsed.text) && !priceAmountMissing(parsed.text) && !proposals.some((p) => p.type === 'precio')
         ? (req.tools || []).filter((t) => t?.function?.name === 'proponer_cambio_precio') : [];
       if (priceTool.length) {
-        // Un solo producto nombrado y con monto: la tarjeta es obligatoria (el modelo real escribía «abre la ficha y cambia…» en vez de proponerla).
+        // Un solo producto nombrado: la tarjeta es obligatoria (el modelo real escribía «abre la ficha y cambia…» en vez de proponerla).
         if (!sysProducts) sysProducts = await loadProducts();
-        const only = tiedProducts(priceCtx(ctx, sysProducts).products, parsed.text).length === 1;
-        req2.tools = priceTool; req2.tool_choice = only ? { type: 'function', function: { name: 'proponer_cambio_precio' } } : 'auto';
+        const only = tiedProducts(priceCtx(ctx, sysProducts).products, parsed.text).length === 1 && !namesAnother(parsed.text);
+        req2.tools = priceTool; req2.tool_choice = only ? { type: 'function', function: { name: priceTool[0].function.name } } : 'auto';
       }
       bytes.push(payloadBytes(req2));
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
@@ -3207,7 +3207,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (priceTool.length && !second.error && Array.isArray(second.calls) && second.calls.length) {
         if (!sysProducts) sysProducts = await loadProducts();
         const ctx2 = priceCtx(ctx, sysProducts); let added = 0;
-        second.calls.filter((c) => c?.name === 'proponer_cambio_precio').forEach((c, i) => { const p = toProposal(c, role, ctx2, result.calls.length + i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); added++; } });
+        const tool = priceTool[0].function.name;
+        second.calls.filter((c) => c?.name === tool).forEach((c, i) => { const p = toProposal(c, role, ctx2, result.calls.length + i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); added++; } });
         keepCorrectedPrice(proposals, parsed.text); dedupeActions(proposals, dropped);
         if (added && !String(second.content || '').trim()) reply = ''; // solo la tarjeta: abajo queda «Listo. Revisa y pulsa Confirmar.»
       }
@@ -3217,9 +3218,13 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // caja/paquete -> pasos en la ficha, ofertas/descuentos -> no existen (pos-assistant-precio-foco.js). Solo el Admin cambia precios.
   let priceSettle = null;
   if (role === 'owner') {
-    if (priceChangeAsk(parsed.text) && !sysProducts) sysProducts = await loadProducts();
+    if ((priceChangeAsk(parsed.text) || costHistoryAsk(parsed.text)) && !sysProducts) sysProducts = await loadProducts();
     const lastAssistant = [...parsed.history].reverse().find((m) => m.role === 'assistant')?.content || '';
     priceSettle = settlePriceCards({ proposals, dropped, text: parsed.text, products: priceCtx(ctx, sysProducts).products, lastAssistant });
+    for (const rb of priceSettle.rebuilds) { // «costo + 1.20»: la tarjeta con costo real + monto
+      const k = proposals.findIndex((p) => p.type === 'precio' && String(p.product_id) === String(rb.product_id)), p = toProposal({ name: 'proponer_cambio_precio', arguments: rb }, role, priceCtx(ctx, sysProducts), 91 + k);
+      if (k >= 0 && p && !p.dropped) proposals[k] = p;
+    }
     if (priceSettle.rebuild) {
       const k = proposals.findIndex((p) => p.type === 'precio'), p = toProposal({ name: 'proponer_cambio_precio', arguments: priceSettle.rebuild }, role, priceCtx(ctx, sysProducts), 90);
       if (k >= 0 && p && !p.dropped) proposals[k] = p;
@@ -3262,7 +3267,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (emit) { emit.reset(); emit.push(reply); emit.flush(); }
   }
   if (!resetAsk && priceSettle && (priceSettle.reply || priceSettle.note)) {
-    const note = priceSettle.note, covered = note === DISCOUNT_NOTE ? /no existen?/i.test(reply) : /precio por caja/i.test(reply);
+    const note = priceSettle.note, covered = noteCovered(note, reply);
     const next = priceSettle.reply ? priceSettle.reply : covered ? reply : (note === DISCOUNT_NOTE ? note + ' ' + reply : reply + ' ' + note).trim();
     if (next !== reply) { reply = finalText(next); if (emit) { emit.reset(); emit.push(reply); emit.flush(); } }
   }
