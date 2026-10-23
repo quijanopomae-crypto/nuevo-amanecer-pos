@@ -2178,7 +2178,10 @@ const COMMON_AFTER = new Set(['nuevo', 'nueva', 'nuevos', 'nuevas', 'frecuente',
   'direccion', 'credito', 'deuda', 'cuenta', 'saldo', 'granel', 'precio', 'costo', 'mitad', 'medias', 'cuotas', 'plazo', 'tiempo', 'hora', 'diario', 'semana', 'mes', 'dia',
   'ver', 'buscar', 'crear', 'registrar', 'agregar', 'editar', 'borrar', 'todos', 'cada', 'alguno', 'ninguno', 'cualquiera', 'quien', 'nadie', 'alguien', 'ella', 'ellos', 'ellas',
   'compra', 'compran', 'lleva', 'llevan', 'pide', 'quiere', 'trae', 'vino', 'viene', 'tiene', 'vive', 'sabe', 'dice', 'esta', 'estan', 'siempre', 'nunca', 'hoy', 'ayer', 'manana',
-  'aqui', 'ahi', 'alla', 'casa', 'tienda', 'puesto', 'mercado', 'bodega', 'kilo', 'kilos', 'unidad', 'unidades', 'docena', 'litro', 'sol', 'soles']);
+  'aqui', 'ahi', 'alla', 'casa', 'tienda', 'puesto', 'mercado', 'bodega', 'kilo', 'kilos', 'unidad', 'unidades', 'docena', 'litro', 'sol', 'soles',
+  // plurales: «clientes morosos/deudores/activos…»
+  'morosos', 'morosas', 'deudores', 'deudoras', 'activos', 'activas', 'activo', 'activa', 'inactivos', 'inactivas', 'frecuentes', 'habituales', 'fieles', 'mayoristas',
+  'minoristas', 'especiales', 'registrados', 'registradas', 'antiguos', 'antiguas', 'recientes', 'finales', 'ocasionales', 'regulares', 'domicilio', 'plazos', 'mano', 'cero']);
 const HONOR = new Set(['don', 'dona', 'senor', 'senora', 'senorita', 'sr', 'sra', 'srta']);
 // Proveedores/empresas no son «persona nueva»: «la compraste a Distribuidora Secreta SAC», «le compré a Alicorp».
 const BIZ_WORD = new Set(['distribuidora', 'distribuidor', 'distribuciones', 'comercial', 'comercializadora', 'inversiones', 'corporacion', 'empresa', 'importadora',
@@ -2186,51 +2189,110 @@ const BIZ_WORD = new Set(['distribuidora', 'distribuidor', 'distribuciones', 'co
 const BUY_VERB = /^(?:compr\w*|ped\w*|pid\w*|encarg\w*|surt\w*)$/;
 const CUED_TOKEN = /[\p{L}][\p{L}'’-]*|[\d#S][^\s,;:!?()«»"]*/gu;
 const isCap = (w) => /^\p{Lu}/u.test(w);
+// Preguntas, rellenos y partículas (revisión de alfa): «¿cuánto me debe…?» no es nombre; «Rosa Quispe ya pagó», «María del Carmen».
+const QWORD = new Set(['cuanto', 'cuantos', 'cuanta', 'cuantas', 'cual', 'cuales', 'que', 'quien', 'quienes', 'como', 'donde', 'cuando']);
+const FILLER = new Set(['ya', 'tambien', 'todavia', 'aun', 'recien', 'siempre', 'nunca', 'no', 'hoy', 'ayer', 'ahora', 'solo']);
+const NAME_PARTICLE = new Set(['de', 'del']), NAME_ART = new Set(['la', 'los', 'las']);
+// tras «cliente…» se saltan «un/una», «nuevo/nueva», «llamado», «es» y «se llama»/«de nombre» antes del nombre
+const CUE_SKIP = new Set(['un', 'una', 'nuevo', 'nueva', 'llamado', 'llamada', 'es']);
+const NAME_MAX = 5; // palabras de nombre (sin contar partículas)
 function cuedWordOk(w, lower) {
   const f = LESSON_FOLD(w);
-  if (!/^\p{L}/u.test(w) || f.length < 2 || NAME_NOT.has(w.toLowerCase()) || NAME_NOT.has(f) || HONOR.has(f) || CUE_STRONG.has(f) || NAME_UNIT.has(f) || PRODUCT_WORD.has(f)) return false;
-  if (DEBT_VERB.test(' ' + f + ' ') || DEBT_WORD.test(f) || NAME_STOP_VERB.has(f) || COMMON_AFTER.has(f) || POS_WORD.has(f) || BIZ_WORD.has(f)) return false;
+  if (!/^\p{L}/u.test(w) || f.length < 2 || QWORD.has(f) || NAME_NOT.has(w.toLowerCase()) || NAME_NOT.has(f) || HONOR.has(f) || CUE_STRONG.has(f) || NAME_UNIT.has(f) || PRODUCT_WORD.has(f)) return false;
+  if (DEBT_VERB.test(' ' + f + ' ') || DEBT_WORD.test(f) || NAME_STOP_VERB.has(f) || COMMON_AFTER.has(f) || POS_WORD.has(f) || BIZ_WORD.has(f) || FILLER.has(f)) return false;
+  // lower = minúscula SIN señal fuerte: ahí se descartan terminaciones de verbo/adjetivo; con señal fuerte («le fié a oscar aguilar») no
   return !lower || !/(?:mente|ante|ente|ivo|iva|ado|ada|ido|ida|cion|ar|er|ir)$/.test(f);
 }
-const inCatalog = (words, known) => { const key = ' ' + words.map((w) => LESSON_FOLD(w)).join(' ') + ' ';
-  return (Array.isArray(known) ? known : []).some((p) => { const n = typeof p === 'string' ? p : p && p.nombre; return n && (' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(key); }); };
+const catalogKeys = (known) => (Array.isArray(known) ? known : []).map((p) => { const n = typeof p === 'string' ? p : p && p.nombre; return n ? ' ' + LESSON_FOLD(n).replace(/[^a-z0-9ñ]+/g, ' ') + ' ' : ''; }).filter(Boolean);
+const inCatalog = (words, known, keys) => { const key = ' ' + words.map((w) => LESSON_FOLD(w)).join(' ') + ' ';
+  return (keys || catalogKeys(known)).some((n) => n.includes(key)); };
 export function maskCuedPeople(text, known = []) {
   const s = String(text ?? ''); if (!s) return s;
   const tk = [...s.matchAll(CUED_TOKEN)].map((m) => ({ w: m[0], s: m.index, e: m.index + m[0].length }));
-  const joined = (i) => i > 0 && /^[ \t]+$/.test(s.slice(tk[i - 1].e, tk[i].s)); // tk[i] sigue a tk[i-1] solo con espacios
+  const F = (i) => LESSON_FOLD(tk[i].w);
+  const gap = (i) => s.slice(tk[i - 1].e, tk[i].s);
+  const joined = (i) => i > 0 && i < tk.length && /^[ \t]+$/.test(gap(i)); // tk[i] sigue a tk[i-1] solo con espacios
+  let keys = null; const cat = (words) => inCatalog(words, known, keys || (keys = catalogKeys(known))); // catálogo preparado una vez por llamada
+  const style = (w, lower) => (lower ? !isCap(w) : isCap(w));
   const spans = [];
-  const forward = (i, mode) => { // mode: 'strong' (minúscula vale), 'cap' (solo Nombre con mayúscula)
-    const first = tk[i]; if (!first || !joined(i)) return;
-    const lower = !isCap(first.w); if (lower && mode === 'cap') return;
-    if (!cuedWordOk(first.w, lower) || (mode === 'cap' && LESSON_FOLD(first.w).length < 3)) return;
-    let j = i; while (j + 1 < tk.length && j - i < 3 && joined(j + 1) && (lower ? !isCap(tk[j + 1].w) : isCap(tk[j + 1].w)) && cuedWordOk(tk[j + 1].w, lower)) j++;
-    const words = tk.slice(i, j + 1).map((t) => t.w);
-    if (mode === 'cap' && !nearDebt(i, j) && inCatalog(words, known)) return; // «a Gloria» con «Leche Gloria» en el catálogo: marca
+  // grupo de nombre hacia adelante desde i: palabras del mismo estilo y partículas «de/del/de la/de los» entre ellas
+  const groupFwd = (i, lower, relax) => {
+    let j = i, n = 1;
+    while (n < NAME_MAX) {
+      const a = j + 1; if (!joined(a)) break;
+      if (style(tk[a].w, lower) && cuedWordOk(tk[a].w, relax)) { j = a; n++; continue; }
+      if (NAME_PARTICLE.has(F(a))) {
+        let b = a + 1; if (F(a) === 'de' && joined(b) && NAME_ART.has(F(b))) b++;
+        if (joined(b) && style(tk[b].w, lower) && cuedWordOk(tk[b].w, relax) && F(b).length >= 3) { j = b; n++; continue; }
+      }
+      break;
+    }
+    return j;
+  };
+  // grupo hacia atrás terminando en k; devuelve el inicio o -1
+  const groupBack = (k, lower, relax) => {
+    if (k < 0 || !style(tk[k].w, lower) || !cuedWordOk(tk[k].w, relax)) return -1;
+    let p = k, n = 1;
+    while (n < NAME_MAX && p > 0 && joined(p)) {
+      const q = p - 1;
+      if (style(tk[q].w, lower) && cuedWordOk(tk[q].w, relax)) { p = q; n++; continue; }
+      let r = q; if (NAME_ART.has(F(r)) && r > 0 && joined(r) && F(r - 1) === 'de') r--;
+      if (NAME_PARTICLE.has(F(r)) && (r === q || F(r) === 'de') && r > 0 && joined(r) && style(tk[r - 1].w, lower) && cuedWordOk(tk[r - 1].w, relax) && F(p).length >= 3) { p = r - 1; n++; continue; }
+      break;
+    }
+    return p;
+  };
+  // kind: 'noun' («cliente[:] [un] [nuevo] [se llama] X»), 'verb' («le fié a x»), 'cap' (solo Nombre con mayúscula)
+  const forward = (i, kind) => {
+    if (i >= tk.length) return;
+    if (kind === 'noun') {
+      if (!(joined(i) || /^[ \t]*:[ \t]*$/.test(gap(i)))) return;
+      for (let skip = 0; skip < 4 && i < tk.length; skip++) {
+        const f = F(i);
+        if (CUE_SKIP.has(f) && joined(i + 1)) i++;
+        else if ((f === 'se' && i + 1 < tk.length && F(i + 1) === 'llama') || (f === 'de' && i + 1 < tk.length && F(i + 1) === 'nombre')) { if (!joined(i + 1) || !joined(i + 2)) return; i += 2; }
+        else break;
+      }
+      if (i >= tk.length) return;
+    } else if (!joined(i)) return;
+    const first = tk[i], lower = !isCap(first.w); if (lower && kind === 'cap') return;
+    if (!cuedWordOk(first.w, false) || (kind === 'cap' && F(i).length < 3)) return;
+    const j = groupFwd(i, lower, false);
+    // marca/proveedor del catálogo: «rebaja a Sublime», «pagué a Gloria», «pagó Inca Kola» (gana a la deuda cerca). Tras «cliente» es persona.
+    if (kind !== 'noun' && cat(tk.slice(i, j + 1).map((t) => t.w))) return;
     spans.push([first.s, tk[j].e]);
   };
-  const nearDebt = (i, j) => tk.slice(Math.max(0, i - 4), j + 5).some((t) => DEBT_WORD.test(LESSON_FOLD(t.w)) || /^fi[eé]$/i.test(t.w));
+  const atStartOf = (st) => st === 0 || /[.!?;:\n]\s*$|^\s*$/.test(s.slice(tk[st - 1].e, tk[st].s)) || /^(?:que|y|pero|ojo|recuerda|anota|apunta)$/.test(F(st - 1));
   for (let i = 0; i < tk.length; i++) {
-    const f = LESSON_FOLD(tk[i].w);
-    if (CUE_STRONG.has(f)) forward(i + 1, 'strong');
+    const f = F(i);
+    if (CUE_STRONG.has(f)) forward(i + 1, 'noun');
     else if ((f === 'a' || f === 'al') && joined(i + 1 < tk.length ? i + 1 : i)) {
       // «le vendí a», «registra a», «agrega al» (verbo justo antes, o con «le/les» delante): persona también en minúscula
-      const v = i > 0 && joined(i) ? LESSON_FOLD(tk[i - 1].w) : '';
+      const v = i > 0 && joined(i) ? F(i - 1) : '';
       // «compré/pedí a X» es proveedor; «a S/ 7.77 a Distribuidora…» tampoco cuenta: el verbo de compra manda en la frase
       const buy = tk.slice(Math.max(0, i - 6), i).some((t) => BUY_VERB.test(LESSON_FOLD(t.w)));
-      if (CUE_VERB_A.test(v) && !PRODUCT_WORD.has(v)) forward(i + 1, 'strong'); else if (!buy) forward(i + 1, 'cap');
+      if (CUE_VERB_A.test(v) && !PRODUCT_WORD.has(v)) forward(i + 1, 'verb'); else if (!buy) forward(i + 1, 'cap');
     } else if (DEBT_WORD.test(f)) {
       forward(i + 1, 'cap');
-      // hacia atrás: «Rosa Quispe (me) debe»
-      let k = i - 1; if (k >= 0 && /^(?:me|le|les|nos|te)$/.test(LESSON_FOLD(tk[k].w)) && joined(k + 1)) k--;
-      if (k < 0 || !joined(k + 1)) continue;
-      const lower = !isCap(tk[k].w); let st = k;
-      while (st >= 0 && k - st < 3 && (lower ? !isCap(tk[st].w) : isCap(tk[st].w)) && cuedWordOk(tk[st].w, lower) && (st === k || joined(st + 1))) st--;
-      st++; if (st > k) continue;
-      const atStart = st === 0 || /[.!?;:\n]\s*$|^\s*$/.test(s.slice(st > 0 ? tk[st - 1].e : 0, tk[st].s)) || /^(?:que|y|pero|ojo|recuerda|anota|apunta)$/.test(LESSON_FOLD(tk[st - 1].w));
-      if (lower && !atStart) continue;
-      if (st > 0 && PRODUCT_WORD.has(LESSON_FOLD(tk[st - 1].w))) continue; // «la leche Gloria debe…»: lo decide el resto (no es nombre suelto)
-      if (inCatalog(tk.slice(st, k + 1).map((t) => t.w), known) && !isCap(tk[st].w)) continue;
-      spans.push([tk[st].s, tk[k].e]);
+      // hacia atrás: «Rosa Quispe (ya) (me) debe», «Rosa Quispe, cliente nueva, me debe», «Rosa Quispe y Juan Pérez me deben»
+      let k = i - 1, strong = false;
+      if (k >= 0 && /^(?:me|le|les|nos|te)$/.test(F(k)) && joined(k + 1)) { k--; strong = true; }
+      for (let n = 0; n < 2 && k >= 0 && FILLER.has(F(k)) && joined(k + 1); n++) k--;
+      if (k < 0) continue;
+      if (/^[ \t]*,[ \t]*$/.test(gap(k + 1))) { // inciso entre comas (≤3 palabras)
+        let c = k; while (c > 0 && k - c < 3 && joined(c)) c--;
+        if (c <= 0 || !/^[ \t]*,[ \t]*$/.test(gap(c)) || tk.slice(c, k + 1).some((t) => DEBT_WORD.test(LESSON_FOLD(t.w)))) continue;
+        k = c - 1;
+      } else if (!joined(k + 1)) continue;
+      const lower = !isCap(tk[k].w), relax = lower && !strong;
+      let st = groupBack(k, lower, relax); if (st < 0) continue;
+      let from = st, end = k;
+      // «Rosa Quispe y Juan Pérez»: el grupo anterior unido por «y/e» también
+      if (st >= 2 && /^(?:y|e)$/.test(F(st - 1)) && joined(st) && joined(st - 1)) { const st2 = groupBack(st - 2, lower, relax); if (st2 >= 0) { spans.push([tk[st2].s, tk[st - 2].e]); from = st2; } }
+      if (lower && !atStartOf(from)) { if (from !== st) spans.pop(); continue; }
+      if (st > 0 && PRODUCT_WORD.has(F(st - 1))) continue; // «la leche Gloria debe…»: lo decide el resto (no es nombre suelto)
+      if (lower && cat(tk.slice(st, end + 1).map((t) => t.w))) continue;
+      spans.push([tk[st].s, tk[end].e]);
     }
   }
   if (!spans.length) return s;
@@ -2762,11 +2824,11 @@ export function safeProductName(nombre, customers = []) {
 // (revisión #998) historial que manda el teléfono del Admin (mensajes anteriores, los escribe/guarda el aparato): antes del modelo, el nombre
 // tras «don/doña/señora…» se tapa con maskReplyPeople (misma regla isBrandDon); «fideo don vittorio» o un producto conocido quedan.
 // (fix/asist-tapar-personas-nuevas) y luego la regla compartida maskCuedPeople: persona nueva tras «cliente», «registra a», «le vendí a»… o
-// antes de «me debe/pagó» («Rosa Quispe me debe»). known.products: el catálogo (las marcas quedan). known.cuedOnly (empleado): solo esta regla.
+// antes de «me debe/pagó» («Rosa Quispe me debe»). known.products: el catálogo (las marcas quedan). Igual para Admin y empleado (revisión 4).
 export function maskHistoryPeople(history, known) {
-  const prods = known && typeof known === 'object' ? known.products : [], only = !!(known && known.cuedOnly);
+  const prods = known && typeof known === 'object' ? known.products : [];
   return (Array.isArray(history) ? history : []).map((m) => (m && typeof m.content === 'string'
-    ? { ...m, content: maskCuedPeople(only ? m.content : maskReplyPeople(m.content, known), prods) } : m));
+    ? { ...m, content: maskCuedPeople(maskReplyPeople(m.content, known), prods) } : m));
 }
 export function finalReplyFilter(text, { change = true } = {}) { return change ? String(text ?? '') : stripConfirmHint(text); }
 // known (opcional, chatCore): lo conocido del pedido para el filtro final ({ products, customers } -> maskReplyPeople; Admin: nameRefs + names ->
@@ -3441,12 +3503,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
     // (revisión #998) Admin: el historial, el resumen y el mensaje actual van al modelo sin el nombre tras «don/doña/señora» (isBrandDon).
-    // Si solo un «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
+    // Si solo un «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: igual (revisión 4).
     let histToModel = parsed.history, resumenToModel = resumenIn || null, textToModel = parsed.text;
-    // (fix/asist-tapar-personas-nuevas) también la persona NUEVA (maskCuedPeople): Admin y empleado (el empleado solo esta regla, sin #998).
+    // (fix/asist-tapar-personas-nuevas) también la persona NUEVA (maskCuedPeople): Admin y empleado, los dos con #998 + esta regla.
     {
       const all = [...parsed.history, { content: resumenToModel || '' }, { content: textToModel || '' }];
-      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, knownR ? k : { ...k, cuedOnly: true });
+      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, k);
         return { out, changed: out.some((m, i) => m.content !== all[i].content) }; };
       let r = maskAll();
       if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
