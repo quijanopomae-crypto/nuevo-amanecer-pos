@@ -44,7 +44,8 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
       assert.equal(P.FEATURE_LOCKS[f.id], false); assert.equal(f.page, unlocked[f.id]);
       assert.ok(indexHtml.includes(`id="${f.page}"`)); assert.equal(api.isUnlocked(f), true);
     } else {
-      assert.equal(P.FEATURE_LOCKS[f.id], true, f.id); assert.equal(f.page, f.id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : null); assert.equal(api.isUnlocked(f), false); assert.ok(f.pending || ['cotizaciones', 'cuentas-pagar', 'compartir-pdf-whatsapp'].includes(f.id));
+      // Owner 2026-10-23: 'Enciende todas igual'; solo venta-por-presentacion sigue cerrado (presentaciones.js no cargado, CANON rechaza caja).
+      assert.equal(P.FEATURE_LOCKS[f.id], f.id === 'venta-por-presentacion', f.id); assert.equal(f.page, f.id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : null); assert.equal(api.isUnlocked(f), false); assert.ok(f.pending || ['cotizaciones', 'cuentas-pagar', 'compartir-pdf-whatsapp'].includes(f.id));
     }
   }
   const prioritized = api.list().filter(f => f.priority);
@@ -217,7 +218,7 @@ test('new candidates stay locked and attendance keeps its owner policy when unlo
   for (const id of addedIds) {
     const entry = c.NA_PROXIMAMENTE.get(id);
     assert.ok(entry, id);
-    assert.equal(c.NA_PERMISSIONS.FEATURE_LOCKS[id], true, id);
+    assert.equal(c.NA_PERMISSIONS.FEATURE_LOCKS[id], false, id); // abierto; sin página sigue en vista previa inofensiva
     assert.equal(entry.page, id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : null);
     assert.ok(['alta', 'media', 'baja'].includes(entry.priority));
   }
