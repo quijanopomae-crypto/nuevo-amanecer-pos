@@ -128,6 +128,8 @@ export function rivalsOf(hits, text, id) {
   const rivals = hits.filter((h) => h !== own && mine.some((w) => fold(h.nombre).includes(w)));
   return rivals.length ? [own, ...rivals] : [];
 }
+// «sube los tres», «a todos», «esos»: se refiere a lo ya hablado (los montos vinieron antes); las tarjetas del modelo no se tiran por «sin monto».
+const REFERS_BACK = /\b(?:los|las)\s+(?:dos|tres|cuatro|cinco|seis)\b|\b(?:todos|todas|ambos|ambas|esos|esas|estos|estas)\b/;
 const lastAmount = (text) => { const m = fold(text).match(/\d+(?:[.,]\d+)?/g); return m ? Number(m[m.length - 1].replace(',', '.')) : null; };
 
 // Antes de dedupeActions: «11.90… no, mejor 11.50» con dos tarjetas del mismo producto -> queda la del último precio.
@@ -159,7 +161,7 @@ export function settlePriceCards({ proposals, dropped, text, products, lastAssis
     if (!cards().length) { out.reply = BOX_PRICE_TEXT; return out; }
   } else if (boxPriceAsk(text)) out.note = BOX_PRICE_NOTE;
   const hits = tiedProducts(products, text);
-  if (priceAmountMissing(text)) { drop(() => true, 'price_amount_missing'); out.reply = amountAskText(hits); out.note = null; return out; }
+  if (priceAmountMissing(text) && !(cards().length && REFERS_BACK.test(t))) { drop(() => true, 'price_amount_missing'); out.reply = amountAskText(hits); out.note = null; return out; }
   const answered = /\bcual\b/.test(fold(lastAssistant)); // ya se preguntó «¿cuál?» y esto es la respuesta
   const one = cards();
   const rivals = one.length === 1 ? rivalsOf(hits, text, one[0].product_id) : [];

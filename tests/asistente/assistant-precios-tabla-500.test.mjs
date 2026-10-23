@@ -180,3 +180,16 @@ test('precio + ajuste de productos distintos en una frase: las dos tarjetas qued
   const h = await chat('sube el arroz a 4 y saca 2 de atún', [tools(precio('A1', 4), ajusteCall('T1', 2))], []);
   assert.equal(cards(h).length, 0); assert.match(h.reply, /^¿Cuál de estos\? .*Costeño.*Faraón/); assert.doesNotMatch(h.reply, /Atún/);
 });
+
+// Mezcla con #987 (prueba 4): «sube los tres» se refiere a lo que ya se habló (los montos vienen de antes): las tarjetas del modelo quedan.
+// «súbele al arroz» (P-043, sin monto ni referencia) sigue preguntando a qué precio.
+test('«sube los tres» / «ponles a todos»: tarjetas con monto de lo ya hablado quedan; sin referencia sigue «¿A qué precio?»', async (t) => {
+  quiet(t);
+  const three = tools(precio('A1', 4.5, 0), precio('T1', 6.5, 1), precio('O1', 13, 2));
+  for (const text of ['sube los tres', 'súbeles a todos', 'cámbiales a esos']) {
+    const f = await chat(text, [three], []);
+    assert.deepEqual(cards(f).map((p) => p.product_id), ['A1', 'T1', 'O1'], text + ' -> ' + f.reply);
+  }
+  const g = await chat('súbele al atún', [tools(precio('T1', 7))], []);
+  assert.equal(cards(g).length, 0); assert.match(g.reply, /^¿A qué precio lo pongo\?/);
+});
