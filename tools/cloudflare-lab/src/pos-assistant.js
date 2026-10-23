@@ -625,12 +625,19 @@ function createWsStage(out) {
     flush() { if (ws || zw) { out(ws || zw); } tail = ''; ws = ''; zw = ''; pend = false; drop = false; seen = false; }
   };
 }
+// (auditoría 500, OCR-023) «PIN» dentro de un nombre de producto («CHUPETIN PIN POP», «pin pon»): «pin» + espacio + una palabra de solo letras,
+// sin «:», «=», «es», flecha ni un número de 3 a 8 dígitos cerca, NO es una clave: no se tapa la palabra (ni lo que sigue). La «p» se cambia
+// por un carácter privado del mismo largo mientras corren los patrones y se devuelve al final (lo de afuera nunca trae ese carácter).
+const PIN_NAME_RE = /(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])([pP])([iI][nN])(?=[ \t]+(?!(?:es|era|fue|de|del|al|en|a|la|el|actual|nuevo|nueva|secreto|correcto|numero|número|code|codigo|código|codigos|códigos|cod|cód|ean|para|por|y|o|precio|precios|costo|costos|monto|valor|total|importe|cobro|pago|soles|pin|clave|sin|siempre|nunca)(?![A-Za-záéíóúñüÁÉÍÓÚÑÜ]))[A-Za-záéíóúñüÁÉÍÓÚÑÜ]{2,}(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ]|[ \t]*[:=])(?![^\n]{0,24}?(?<![\d.,/])\d{3,8}(?![\d.,])(?![ \t]*(?:unid|und|u\b|x\b|kg|g\b|gr|ml|l\b|lt|cajas?|paq|bols|sobres?|pzas?|piezas?))))/g;
+const PIN_NAME_P = '\uF8F0', PIN_NAME_PU = '\uF8F1';
+function pinNameShield(v) { const s = /[\uF8F0\uF8F1]/.test(v) ? v.replace(/[\uF8F0\uF8F1]/g, ' ') : v; return /pin/i.test(s) ? s.replace(PIN_NAME_RE, (m, p, rest) => (p === 'p' ? PIN_NAME_P : PIN_NAME_PU) + rest) : s; }
+function pinNameRestore(v) { return /[\uF8F0\uF8F1]/.test(v) ? v.replace(/\uF8F0/g, 'p').replace(/\uF8F1/g, 'P') : v; }
 const WS_LONG = new RegExp('\\s{' + (WS_RUN_MAX + 1) + '}');
 function collapseWs(v) { if (!WS_LONG.test(v) && !WS_ZW.test(v)) return v; let o = ''; const st = createWsStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 export function redactText(value) {
-  let out = supQuotes(collapseWs(String(value ?? '')));
+  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
   const kw = PIN_GATE.test(out); for (const [re, label] of PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return out;
+  return pinNameRestore(out);
 }
 // (Bot 2 sobre 6280deae, revisado por la sala) Lo que va AL MODELO cuando el rol del SERVIDOR es dueño (mensaje, historial, contexto) y los
 // campos proveedor/documento de su tarjeta de compra: igual que redactText, salvo
@@ -696,9 +703,9 @@ const MODEL_OWNER_PATTERNS = PATTERNS.map((pt) => {
   return [pt[0], (m, d4, off, str) => (/^\d/.test(m) && (RECEIPT_BEFORE.test(str.slice(Math.max(0, off - 6), off)) || CODE_LABEL_RE.test(idBefore(str, off)) || idCodeColumn(str, off)) ? m : /^\d/.test(m) ? idLabel8(m, d4, off, str) : 'DNI ****' + d4), 'id'];
 });
 export function redactModelOwner(value) {
-  let out = supQuotes(collapseWs(String(value ?? '')));
+  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
   const kw = PIN_GATE.test(out); for (const [re, label] of MODEL_OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return out;
+  return pinNameRestore(out);
 }
 // ¿Quedó algo tapado? («****», «[dato del dueño]», «[oculto]», «[imagen omitida]», «[correo oculto]»…): en una tarjeta ese campo va VACÍO
 // (Bot 5 sobre 58200f60) también máscaras no ASCII: «∗∗∗∗6789», «＊＊6789», «••••6789», «●●●●6789», «**6789», «…6789», «xxxx6789», «(oculto)».
@@ -708,9 +715,9 @@ export function redactModelOwner(value) {
 export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
-  let out = supQuotes(collapseWs(String(value ?? '')));
+  let out = supQuotes(collapseWs(pinNameShield(String(value ?? ''))));
   const kw = PIN_GATE.test(out); for (const [re, label] of OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
-  return out;
+  return pinNameRestore(out);
 }
 // Bot 5 + sala: para un EMPLEADO se tapa SOLO EL MONTO de un dato del dueño (la palabra queda: «El costo es [dato del dueño]»).
 // Lectura de izquierda a derecha con un estado chico: una palabra del dueño (costo, costó, costaron, cto., c. unit, precio de compra,
@@ -3288,7 +3295,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
 // Tarjetas de cambio de UN producto cada una (precio, costo, stock, producto nuevo). Con 2 o más, la respuesta lo dice con una frase fija.
 const PER_PRODUCT_CARDS = new Set(['precio', 'costo', 'ajuste', 'producto']);
 const CHANGE_COUNT_RE = /\s*Son \d+ productos; cada uno se aplica aparte con su «(?:Confirmar|Aplicar)»\./g;
-export function changeCountText(n) { return 'Son ' + n + ' productos; cada uno se aplica aparte con su «Confirmar».'; }
+export function changeCountText(n) { return 'Son ' + n + ' productos; cada uno se aplica aparte con su «Aplicar».'; }
 export function withChangeCount(reply, proposals) {
   const n = (proposals || []).filter((p) => p && p.needsConfirm && PER_PRODUCT_CARDS.has(p.type)).length;
   if (n < 2) return reply;

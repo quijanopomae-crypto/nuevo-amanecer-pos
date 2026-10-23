@@ -188,7 +188,7 @@ test('4) varias tarjetas de cambio: el texto dice cuántos productos y que cada 
   for (const responses of [[three], [{ ...three, content: 'Te preparé los cambios de precio.' }]]) {
     const r = await chat({ text: 'sube el arroz a 4.50, el azúcar a 4.80 y el aceite a 12' }, { responses });
     assert.equal(r.status, 200, r.raw); assert.equal(r.body.proposals.filter((p) => p.needsConfirm).length, 3, r.raw);
-    assert.match(r.body.reply, /Son 3 productos; cada uno se aplica aparte con su «Confirmar»\./, r.body.reply);
+    assert.match(r.body.reply, /Son 3 productos; cada uno se aplica aparte con su «Aplicar»\./, r.body.reply);
     assert.equal(r.body.turns?.[1]?.content ?? r.body.reply, r.body.reply);
   }
   const mixed = await chat({ text: 'sube el arroz a 4.50 y saca 2 de azúcar' }, { responses: [calls(['proponer_cambio_precio', { product_id: 'p1', precio_nuevo: 4.5 }], ['proponer_ajuste_stock', { product_id: 'p2', tipo: 'salida', cantidad: 2, motivo: 'merma' }])] });
@@ -199,7 +199,7 @@ test('4) varias tarjetas de cambio: el texto dice cuántos productos y que cada 
   const info = await chat({ text: '¿cómo cambio un precio?' }, { responses: [calls(['explicar_pasos', { tema: 'Precio', pasos: ['Entra a Inventario', 'Edita el producto'] }])] });
   assert.doesNotMatch(info.body.reply, /Son \d+ productos/);
   // si el modelo ya lo dijo con el mismo número, no se repite
-  const said = await chat({ text: 'sube los tres' }, { responses: [{ ...three, content: 'Son 3 productos; cada uno se aplica aparte con su «Confirmar».' }] });
+  const said = await chat({ text: 'sube los tres' }, { responses: [{ ...three, content: 'Son 3 productos; cada uno se aplica aparte con su «Aplicar».' }] });
   assert.equal((said.body.reply.match(/Son 3 productos/g) || []).length, 1, said.body.reply);
 });
 
@@ -280,4 +280,23 @@ test('8) ruta: la respuesta del modelo con «señora Rosa» y DNI sale tapada pa
   assert.equal(e1.status, 200, e1.raw); assert.doesNotMatch(e1.body.reply, /3\.18/); assert.match(e1.body.reply, /S\/ 4\.50/);
   const c = await chat({ text: 'arroz' }, { role: COSTS_ROLE, responses: [{ content: 'El arroz te cuesta S/ 3.18 y lo vendes a S/ 4.50.' }] });
   assert.equal(c.status, 200, c.raw); assert.match(c.body.reply, /S\/ 3\.18/, 'nivel 3 con costos ve el costo');
+});
+
+// ---------- OCR-023: «CHUPETIN PIN POP» salía «PIN [oculto]». «pin» + palabra de solo letras es nombre; la clave es un número ----------
+test('OCR-023) «PIN» dentro de un nombre de producto no se tapa (entrada al modelo, respuesta Admin/empleado, celular); el PIN numérico sí', () => {
+  const C5 = C;
+  const NAMES = ['CHUPETIN PIN POP', 'Chupetín Pin Pop x 24', 'CHUPETIN PIN POP S/ 0.50', 'pin pon', 'Pin Pon de colores 12 unid', 'pinza', 'pinza para ropa x 12', 'Pinzas Tramontina', 'Pin Pop fresa 100 unid'];
+  const all = (t) => [A.redactText(t), A.redactModelOwner(t), A.redactFor('owner')(t), A.redactFor('empleado:consultas')(t), C5.redactText(t), A.maskCredentialValues(t)];
+  for (const t of NAMES) for (const got of all(t)) assert.equal(got, t, t);
+  const table = '| Producto | Cant | Importe |\n|---|---|---|\n| CHUPETIN PIN POP | 24 | S/ 12.00 |\n| Pinza ropa | 12 | S/ 6.00 |';
+  assert.equal(A.redactFor('owner')(table), table);
+  for (const t of ['el PIN es 4321', 'PIN 4321', 'pin: 123456', 'pin de la caja 4321', 'PIN POP 4321', 'pin caja 98765', 'mi pin es tortuga', 'pin -> tortuga'])
+    assert.match(A.redactText(t), /\[oculto\]/, t);
+  for (const t of ['el PIN es 4321', 'PIN 4321', 'pin: 123456']) assert.match(C5.redactText(t), /\[oculto\]/, 'celular: ' + t);
+  // en partes también: el nombre sale igual y el PIN numérico tapado
+  for (const t of ['Compré CHUPETIN PIN POP a S/ 0.50 y pin pon x 12.', 'Chupetín Pin Pop; y el PIN es 4321.']) for (const role of ['owner', 'empleado:consultas']) for (const ch of [1, 3, 7]) {
+    let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, REPLY_MAX, redactFor(role), role === 'owner' ? null : ownerHold);
+    for (let k = 0; k < t.length; k += ch) e.push(t.slice(k, k + ch)); e.flush();
+    assert.equal(o, capReply(redactFor(role)(t)), role + ' ' + ch); assert.match(o, /Pin Pop|PIN POP/); assert.doesNotMatch(o, /4321/);
+  }
 });
