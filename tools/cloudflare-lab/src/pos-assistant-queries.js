@@ -7,7 +7,7 @@ import { canonicalRead } from './a6-canonical.js';
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
 export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes', 'sugerencias_compra', 'resumen_dia', 'resumen_mes', 'caja_abierta',
-  'ganancia', 'productos_sin_ventas', 'deuda_cliente', 'ventas_por_hora']);
+  'ganancia', 'productos_sin_ventas', 'deuda_cliente', 'ventas_por_hora', 'cobros_creditos']);
 // Ganancia: usa costos. Solo quien ve costos (purchases.costs.view = hoy solo el Admin); el permiso se revisa en pos-assistant.js.
 export const COST_QUERY_TYPES = Object.freeze(['ganancia']);
 // Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
@@ -20,7 +20,7 @@ const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos po
   top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', creditos_atrasados: 'Créditos atrasados', compras_recientes: 'Compras recientes',
   sugerencias_compra: 'Sugerencias de compra',
   resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes', caja_abierta: 'Caja abierta', ganancia: 'Ganancia', productos_sin_ventas: 'Productos sin ventas',
-  deuda_cliente: 'Deuda del cliente', ventas_por_hora: 'Ventas por hora' };
+  deuda_cliente: 'Deuda del cliente', ventas_por_hora: 'Ventas por hora', cobros_creditos: 'Cobros de fiados' };
 // Topes de las consultas nuevas: filas que vuelven de SQL (agrupadas) y filas de la tabla «sin ventas».
 export const NEW_QUERY_LIMITS = Object.freeze({ sqlRows: 5000, idleRows: 50, idleDays: 30 });
 // Sugerencias de compra (solo Admin, solo lectura): con el stock, el mínimo y lo vendido en los últimos días (todo dato que ya existe).
@@ -341,6 +341,19 @@ export function canonicalReader(db) {
       list.truncated = rows.truncated; return list; },
     async customers() { const rows = await all('customers'); const list = rows.map((c) => ({ id: String(c.customer_id), nombre: c.name, dni: c.document == null ? null : String(c.document), tel: c.phone == null ? null : String(c.phone) }));
       list.truncated = rows.truncated; return list; },
+    // (auditoría 500, CLI-010) Límite de fiado de UN cliente: la misma fila que usa la venta a crédito (a6-commerce: credit_limit_exceeded),
+    // de la promoción activa. -> { mode, limite (soles o null) }; sin fila: null (línea automática del POS); sin la tabla: undefined (no disponible).
+    async creditPolicy(code) {
+      const c = await ctl();
+      try { const r = await db.prepare('SELECT mode,manual_limit_cents FROM canonical_customer_credit_policies WHERE promotion_id=?1 AND customer_id=?2').bind(c.active_promotion_id, String(code)).first();
+        return r ? { mode: String(r.mode), limite: r.mode === 'MANUAL' ? cents(r.manual_limit_cents) : null } : null; }
+      catch (e) { if (/no such table/i.test(String(e?.message || e))) return undefined; throw e; }
+    },
+    // (auditoría 500, CLI-024) Cobros de créditos: la misma lectura canónica de credit-payments que el resumen (periodSummary). Solo día y monto
+    // (ni el cliente ni el nombre que trae el pago). Si la lectura falla: null («no disponible»).
+    async creditPayments() {
+      try { const y = await all('credit-payments'); const l = y.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0 })); l.truncated = !!y.truncated; return l; } catch { return null; }
+    },
     // Ventas por producto del período (agrupado en SQL): { product_id, q, c }. Tope NEW_QUERY_LIMITS.sqlRows (truncated si llega).
     async itemsByProduct(p) {
       const lim = NEW_QUERY_LIMITS.sqlRows;
@@ -473,6 +486,10 @@ export function memoryReader(data) {
     async productsById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), { ...p }); return out; },
     async credits() { const l = (data.credits || []).map((c) => ({ ...c })); l.truncated = !!data.creditsTruncated; return l; },
     async customers() { const l = (data.customers || []).map((c) => ({ ...c })); l.truncated = !!data.customersTruncated; return l; },
+    // Igual que el lector real: sin data.creditPolicies -> undefined (no disponible); sin fila -> null.
+    async creditPolicy(code) { if (!data.creditPolicies) return undefined; const r = data.creditPolicies[String(code)];
+      return r ? { mode: String(r.mode), limite: r.mode === 'MANUAL' ? cents(r.manual_limit_cents) : null } : null; },
+    async creditPayments() { return data.payments ? data.payments.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0 })) : null; },
     async itemsByProduct(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)), m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const k = String(it.product_id), r = m.get(k) || { product_id: k, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(k, r); }
       return [...m.values()].sort((a, b) => b.c - a.c); },
@@ -727,6 +744,7 @@ async function runQuery(reader, args, nowMs, checked) {
   if (tipo === 'productos_sin_ventas') return idleProductsQuery(reader, args, nowMs, base);
   if (tipo === 'deuda_cliente') return customerDebtQuery(reader, args, base);
   if (tipo === 'ventas_por_hora') return hourlySalesQuery(reader, args, nowMs, base);
+  if (tipo === 'cobros_creditos') return creditPaymentsQuery(reader, args, nowMs, base);
   if (tipo === 'deudas_clientes') {
     const [credits, customers] = await Promise.all([reader.credits(), reader.customers()]);
     const names = new Map(customers.map((c) => [c.id, c.nombre])), by = new Map();
@@ -738,7 +756,9 @@ async function runQuery(reader, args, nowMs, checked) {
     const { customerCode } = await import('./pos-assistant.js');
     const cli = (id, i) => customerCode(id) === String(id) ? 'cliente #' + id : 'Cliente ' + (i + 1);
     return { ...base, columnas: ['Cliente', 'Saldo S/'], filas: top.slice(0, N).map(([id, s], i) => [cli(id, i), r2(s)]), total, clientes: top.length,
-      texto: top.length ? (top.length === 1 ? '1 cliente debe' : top.length + ' clientes deben') + ' en total S/ ' + total.toFixed(2) + '.' : 'Ningún cliente tiene deuda.',
+      // (auditoría 500, CLI-014) «¿quién me debe más?»: con un solo pedido la respuesta es este texto; con dos o más clientes nombra al de mayor saldo (solo el código).
+      texto: top.length ? (top.length === 1 ? '1 cliente debe' : top.length + ' clientes deben') + ' en total S/ ' + total.toFixed(2) + '.'
+        + (top.length > 1 ? ' Debe más: ' + cli(top[0][0], 0) + ' (S/ ' + r2(top[0][1]).toFixed(2) + ').' : '') : 'Ningún cliente tiene deuda.',
       // Al modelo: sin nombres ni documentos.
       resumen: { clientes_con_deuda: top.length, total_soles: total, mayores_saldos: top.slice(0, M).map(([id, s], i) => ({ cliente: cli(id, i), soles: r2(s) })) } };
   }
@@ -968,12 +988,42 @@ async function customerDebtQuery(reader, args, base) {
   const total = r2(open.reduce((s, c) => s + Number(c.saldo), 0)), first = open.find((c) => c.vence)?.vence || null;
   let known = mine.length > 0;
   if (!known && typeof reader.customers === 'function') { const cs = await reader.customers(); known = cs.some((c) => String(c.id) === code || String(c.id).toLowerCase() === code.toLowerCase()); }
-  const texto = open.length
+  // (auditoría 500, CLI-010) «¿cuánto le puedo fiar?»: el límite de fiado NO es la deuda. Con línea MANUAL va el límite y cuánto le queda
+  // (límite − deuda, nunca negativo); sin límite fijo (línea automática o sin fila) se dice y dónde se ve, sin inventar un monto.
+  // Lector sin el dato (undefined) o cliente que no existe: no se habla de límite.
+  const pol = known && typeof reader.creditPolicy === 'function' ? await reader.creditPolicy(code) : undefined;
+  let limText = '', limRes = {};
+  if (pol !== undefined) {
+    if (pol && pol.mode === 'MANUAL' && pol.limite != null) {
+      const disp = r2(Math.max(0, pol.limite - total));
+      limText = ' Límite de fiado registrado: S/ ' + r2(pol.limite).toFixed(2) + (disp > 0 ? '; puede fiarle hasta S/ ' + disp.toFixed(2) + ' más.' : '; ya llegó a su límite (no le queda para fiar).');
+      limRes = { limite_fiado_soles: r2(pol.limite), disponible_fiado_soles: disp };
+    } else {
+      limText = ' No tengo registrado un límite de fiado fijo para ' + ref + ' (su línea es automática): se ve y se ajusta en Clientes > ficha del cliente > Línea de crédito.';
+      limRes = { limite_fiado: 'no_registrado' };
+    }
+  }
+  const texto = (open.length
     ? ref + ' debe S/ ' + total.toFixed(2) + ' en ' + open.length + (open.length === 1 ? ' crédito abierto' : ' créditos abiertos') + (first ? '; el primero vence el ' + first : '') + '.'
-    : known ? ref + ' no tiene deudas pendientes.' : 'No encontré deudas de ' + ref + '. Revise el código en Clientes.';
+    : known ? ref + ' no tiene deudas pendientes.' : 'No encontré deudas de ' + ref + '. Revise el código en Clientes.') + limText;
   return { ...base, titulo: 'Deuda de ' + ref, columnas: ['Vence', 'Saldo S/'], filas: open.slice(0, QUERY_LIMITS.topRows).map((c) => [c.vence || '-', r2(c.saldo)]),
     ...(open.length > QUERY_LIMITS.topRows ? { total: open.length } : {}), texto,
-    resumen: { cliente: ref, saldo_soles: total, creditos_abiertos: open.length, vence_primero: first } };
+    resumen: { cliente: ref, saldo_soles: total, creditos_abiertos: open.length, vence_primero: first, ...limRes } };
+}
+
+// (auditoría 500, CLI-024) Cobros de créditos («fiados») de un día o período (por defecto hoy): suma y número de cobros. No son ventas.
+// Solo Admin (ADMIN_ONLY_QUERY_TYPES). El período sale de period(), igual que las demás consultas; sin la lectura de cobros: «no disponible».
+async function creditPaymentsQuery(reader, args, nowMs, base) {
+  const p = period(args, nowMs), rango = rangeLabel(p);
+  const pays = typeof reader.creditPayments === 'function' ? await reader.creditPayments() : null;
+  if (!pays) return { ...base, columnas: [], filas: [], texto: 'No tengo ese dato disponible: no pude leer los cobros de créditos. Se ven en Clientes > Reporte de deuda.', resumen: { desde: p.desde, hasta: p.hasta, no_disponible: true } };
+  const inP = pays.filter((x) => x.dia && x.dia >= p.desde && x.dia <= p.hasta && x.c > 0), byDay = new Map();
+  for (const x of inP) { const r = byDay.get(x.dia) || { n: 0, c: 0 }; r.n++; r.c += x.c; byDay.set(x.dia, r); }
+  const n = inP.length, c = inP.reduce((s, x) => s + x.c, 0), corte = pays.truncated ? ' (lista larga: se revisó una parte)' : '';
+  if (pays.truncated) base.truncado = true;
+  return { ...base, titulo: 'Cobros de fiados ' + rango, columnas: ['Día', 'Cobros', 'Total S/'], filas: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([d, r]) => [d, r.n, soles(r.c)]),
+    total: soles(c), texto: (n ? 'Cobros de fiados ' + rango + ': ' + money(c) + ' en ' + n + (n === 1 ? ' cobro' : ' cobros') + '.' : 'No hubo cobros de fiados ' + rango + '.') + corte,
+    resumen: { desde: p.desde, hasta: p.hasta, cobros_soles: soles(c), cobros: n, ...(corte ? { lista_cortada: true } : {}) } };
 }
 
 // Ventas por hora de Lima (período por defecto hoy): número y total por hora. Sin clientes ni productos.

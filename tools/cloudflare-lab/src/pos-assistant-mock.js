@@ -39,8 +39,10 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/\bgane\b|\bganamos\b|ganancia|utilidad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ganancia', ...queryDates(t) })] };
   if (/no se vend|sin ventas|no (se )?vendi|no sale|no salen/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'productos_sin_ventas', ...(/\d{4}-\d{2}-\d{2}|\bhoy\b|\bayer\b|semana|\bmes\b/.test(t) ? queryDates(t) : {}) })] };
   if (/a que hora|por hora|que hora(s)? (vendo|se vende|hay mas)|horas? de mas venta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_por_hora', ...queryDates(t) })] };
+  // (auditoría 500, CLI-024) cobros de fiados del período: no son ventas ni la deuda.
+  if (/\b(cobr\w*|me pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(t) && !/\bvend|\bventa/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t) })] };
   { const cli = /\bcliente\s*#?\s*([A-Za-z0-9_-]{1,40})\b/i.exec(String(text || '')); // solo el código («cliente #12» o «cliente 12»), nunca el nombre
-    if (cli && /debe|deuda|saldo/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }
+    if (cli && /debe|deuda|saldo|\bfiar|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }
   if (/vend|carrito|cobra/.test(t) && !/vendid|ventas|reporte/.test(t)) return { content: 'Las ventas se hacen a mano en Venta. Yo te ayudo con stock, compras, precios, productos y reportes.', calls: [] };
   if (/document|pdf|imprim|reporte de|lista de precios|estado de cuenta|inventario valorizado|valorizado|cierre de caja|pedido para|lista de pedido/.test(t)) {
     const tipo = /lista de precios/.test(t) ? 'lista_precios' : /valoriz/.test(t) ? 'inventario_valorizado' : /reponer|pedido/.test(t) ? 'lista_pedido'
@@ -53,7 +55,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
   if (/atrasad|moros|creditos? vencid/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'creditos_atrasados' })] };
-  if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
+  if (/deud|deben|fiado|me debe|debe mas/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
   if (/compras (recientes|ultimas)|ultimas compras/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'compras_recientes' })] };
   if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...queryDates(t) })] };
   if (/ventas|vendi|vendimos/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_periodo', ...queryDates(t) })] };
