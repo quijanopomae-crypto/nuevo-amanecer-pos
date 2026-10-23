@@ -91,7 +91,7 @@ test('1) servidor: el estado de cuenta va por cliente_id (código), nunca por no
   { store: createMemoryUsageStore(), resolveRole: async () => 'owner', audit: async () => {}, mockChunkMs: 0,
     fetch: async (u, init) => { cap.push(JSON.parse(init.body)); return jsonR({ choices: [{ message: { content: 'Listo, cliente #c1.', tool_calls: [{ id: 't1', type: 'function', function: { name: 'preparar_documento', arguments: JSON.stringify({ tipo: 'estado_cuenta', cliente_id: 'c1' }) } }] } }], usage: { prompt_tokens: 5, completion_tokens: 5 } }); } });
   const d = await r.json(), sent = JSON.stringify(cap);
-  assert.ok(sent.includes('cliente #c1') && !/Rosa|Quispe|Olivos/.test(sent), sent);
+  assert.ok(sent.includes('cliente #C-0001') && !sent.includes('cliente #c1') && !/Rosa|Quispe|Olivos/.test(sent), sent); // hacia la IA, código neutro
   assert.equal(d.proposals[0].cliente_id, 'c1'); assert.match(d.reply, /cliente #c1/);
 });
 test('1) aparato: el documento busca al cliente por su código y pone el nombre en la hoja (el modelo nunca lo vio)', async () => {
@@ -124,7 +124,7 @@ test('7) <datos_pos>: el nombre de producto pasa por el redactor (cualquier rol)
   const q = await runAssistantQuery(reader, { tipo: 'compras_recientes' });
   const forModel = redactDeep(q.resumen);
   assert.ok(!/987654321|45678912/.test(JSON.stringify(forModel)), JSON.stringify(forModel)); assert.equal(forModel.compras, 1);
-  assert.match(SRV, /resumen: redactDeep\(role === 'owner' \? r\.resumen : stripOwnerKeys\(r\.resumen\), 0, redactRefs\)/); // #931: mismo redactor, con «producto #código» protegido
+  assert.match(SRV, /resumen: redactDeep\(seesOwnerData\(role\) \? r\.resumen : stripOwnerKeys\(r\.resumen\), 0, redactRefs\)/); // #931: mismo redactor, con «producto #código» protegido
   assert.deepEqual(redactDeep({ a: ['x 987654321', 2, null], b: { c: 'ok' } }), { a: ['x ' + redactText('987654321'), 2, null], b: { c: 'ok' } });
 });
 

@@ -7,6 +7,7 @@
 // - Tres adaptadores con los mismos eventos internos (texto, herramienta, uso, fin, error):
 //   OpenAI compatible (DeepSeek, OpenAI, xAI Grok, OpenRouter, Groq, Mistral, Together), Anthropic Messages y Google Gemini.
 
+import { createCodeMap } from './pos-assistant-codigos.js';
 const any = () => true;
 const re = (r) => (m) => r.test(String(m || ''));
 export const PROVIDERS = Object.freeze({
@@ -280,6 +281,13 @@ function adapterOf(cfg) { const a = cfg && cfg.ok !== false ? ADAPTERS[cfg.kind]
 // reintento. Solo si NO llegó texto todavía (nada se repite en pantalla). Con foto, solo respaldos que leen fotos. Esperas cortas: no
 // gastan CPU del Worker y el tope de 90 s del pedido sigue mandando (outer corta también la espera). 401/403/404/400 no se reintentan.
 export const RETRY_WAITS_MS = Object.freeze([800, 1500]);
+// (lentitud 22-10) Modelos gratis (sufijo «:free», p. ej. los de Routeway): dan 429 a menudo y tardan. Con cfg.noFreeFallback (la segunda
+// llamada que explica una consulta: si falla, ya está el texto armado con los números) NO se pasa a ellos; el primero de la cadena (el que
+// eligió el Admin) se usa siempre, aunque sea gratis.
+export const isFreeModel = (m) => /:free$/i.test(String(m || ''));
+// (lentitud 22-10) Espera SIN datos al empezar una respuesta en partes: si en 12 s no llegó ni un byte, se corta (antes 25 s). Después del
+// primer trozo manda idleMs (25 s) como siempre. Con foto no se acorta (leer una foto tarda más en empezar).
+export const FIRST_DATA_MS = 12000;
 const MAX_RETRY_AFTER_MS = 3000;
 function waitMs(ms, outer) {
   if (!(ms > 0) || outer?.aborted) return Promise.resolve();
@@ -295,25 +303,33 @@ async function withRetries(cfg, req, outer, once) {
   const chain = [cfg, ...(Array.isArray(cfg.fallbacks) ? cfg.fallbacks : [])]
     .map((c) => (typeof c === 'string' ? { ...cfg, model: c } : { ...c, retryWaits: cfg.retryWaits }))
     .filter((c, i, a) => c.model && a.findIndex((x) => x.base === c.base && x.model === c.model) === i)
-    .filter((c, i) => i === 0 || !hasImage(req) || c.vision);
-  let r = null;
+    .filter((c, i) => i === 0 || !hasImage(req) || c.vision)
+    .filter((c, i) => i === 0 || !(cfg.noFreeFallback && isFreeModel(c.model)));
+  let r = null, n = 0; // n: intentos hechos (tiempos del asistente: cuántas veces se llamó al proveedor)
+  const tag = (x, k) => (x && typeof x === 'object' ? Object.assign(x, { attempts: n, fallback: k > 0 }) : x);
   for (let k = 0; k < chain.length; k++) {
     const c = chain[k];
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) await waitMs(retryAfter(r, k, cfg), outer);
-      if (outer?.aborted) return r || { error: 'upstream_timeout' };
-      r = await once(c);
-      if (!isRetryable(r)) return k === 0 ? r : { ...r, model: c.model, provider: c.id };
+      if (outer?.aborted) return tag(r || { error: 'upstream_timeout' }, k);
+      r = await once(c); n++;
+      if (!isRetryable(r)) return k === 0 ? tag(r, 0) : tag({ ...r, model: c.model, provider: c.id }, k);
     }
   }
-  return r;
+  return tag(r, chain.length - 1);
 }
 function retryAfterS(res) { const v = Number(res?.headers?.get?.('retry-after')); return Number.isFinite(v) && v > 0 ? v : null; }
 
+// Códigos de cliente neutros (pos-assistant-codigos.js): cfg.codes es el mapa de la conversación (pos-assistant.js lo comparte entre la
+// primera y la segunda llamada); sin él, uno por llamada. El cuerpo se reescribe en el fetch (todos los adaptadores, reintentos y respaldo)
+// y la respuesta vuelve con los códigos reales antes de cualquier lectura de la base o del aparato.
+const codesOf = (cfg) => (cfg && cfg.codes) || createCodeMap();
+const realResult = (codes, r) => (!r || typeof r !== 'object' ? r : { ...r, ...(typeof r.content === 'string' ? { content: codes.toReal(r.content) } : {}), ...(Array.isArray(r.calls) ? { calls: codes.callsToReal(r.calls) } : {}) });
 export async function callModel(cfg, req, fetchImpl, timeoutMs, outer) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, fetchImpl, timeoutMs, outer));
-  return r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r;
+  const codes = codesOf(cfg), f = codes.fetch(fetchImpl);
+  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, f, timeoutMs, outer));
+  return realResult(codes, r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r);
 }
 async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
@@ -330,19 +346,26 @@ async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
 
 // En partes: cada trozo de texto va a onText en cuanto llega; las llamadas a herramientas se juntan aquí y recién al final se devuelven
 // (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs). Si se corta a mitad: { error, partial:true }.
-export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
+// opts.stallMs: espera máxima entre trozos (y hasta el primero), sin foto. opts.firstMs: espera máxima hasta el PRIMER byte (por defecto FIRST_DATA_MS sin foto; con foto, idleMs). Nunca más que idleMs.
+export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, opts = {}) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer));
+  const firstMs = Math.min(idleMs, Number(opts.firstMs) > 0 ? Number(opts.firstMs) : hasImage(req) ? idleMs : FIRST_DATA_MS);
+  // opts.stallMs (segunda llamada): corte por ESPERA SIN DATOS en todo el flujo (no un tope total: cada trozo reinicia la cuenta). Con foto, idleMs.
+  const idle = Number(opts.stallMs) > 0 && !hasImage(req) ? Math.min(idleMs, Number(opts.stallMs)) : idleMs;
+  const codes = codesOf(cfg), f = codes.fetch(fetchImpl); let st = null;
+  const r = await withRetries(cfg, req, outer, (c) => { st = codes.streamer(onText); return callModelStreamOnce(c, req, f, idle, st.push, onTool, guard, outer, Math.min(firstMs, idle)); });
+  if (st) { if (r && !r.error && !r.forbidden) st.flush(); else st.drop(); } // la cola retenida («C-00») sale solo si terminó bien
+  return realResult(codes, r);
 }
-async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
+async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, firstMs = idleMs) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
   const think = createThinkStripper(); // <think>…</think> fuera antes de la redacción (onText) y del texto final
   const controller = new AbortController(); let timer = null; let reader = null; linkAbort(controller, outer);
   controller.signal.addEventListener('abort', () => { try { if (reader) reader.cancel().catch(() => {}); } catch { /* ya cortado */ } }, { once: true });
-  const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), idleMs); };
+  const arm = (ms = idleMs) => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), ms); };
   let content = '', usage = null, forbidden = null, failed = null; const calls = [];
   try {
-    arm();
+    arm(firstMs); // hasta el primer byte: firstMs; luego, idleMs desde el último trozo
     const res = await fetchImpl(A.url(cfg, true), { method: 'POST', signal: controller.signal, headers: A.headers(cfg, true), body: JSON.stringify(A.body(cfg, req, true)) });
     if (!res.ok) return { error: A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
     if (!res.body || typeof res.body.getReader !== 'function') return { error: 'upstream_error' };

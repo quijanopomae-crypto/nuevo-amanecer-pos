@@ -44,7 +44,8 @@ test('a) servidor: herramienta antes de cualquier texto -> «status» enseguida 
   const bodies = [];
   const first = [[0, consulta('c1', 'stock_producto')], [0, delta({}, 'tool_calls')]];
   const second = [[260, delta({ content: 'Tiene 40 unidades de Arroz, ' })], [20, delta({ content: 'está bien de stock.' })], [0, delta({}, 'stop')]];
-  const r = await chat({ text: '¿cuánto arroz hay?', stream: true }, { fetch: dsSeq([first, second], bodies), reader: READER, statusEveryMs: 60 });
+  // (lentitud 22-10) pregunta que pide explicación: sigue la segunda llamada (la consulta simple se contesta directo, ver assistant-respuesta-directa)
+  const r = await chat({ text: '¿cuánto arroz hay y por qué?', stream: true }, { fetch: dsSeq([first, second], bodies), reader: READER, statusEveryMs: 60 });
   const e = await events(r);
   const kinds = e.map((x) => x.ev), firstText = kinds.indexOf('text'), fin = kinds.indexOf('final');
   assert.equal(kinds[0], 'open'); assert.ok(firstText > 0 && fin > firstText, kinds.join(','));
@@ -124,8 +125,8 @@ test('Bot 5: empleado en partes -> ni el modelo ni ningún trozo (status, text, 
   const bodies = [];
   const first = [[0, consulta('c1', 'stock_producto')], [0, delta({}, 'tool_calls')]];
   const second = [[30, delta({ content: 'Hay 40 unidades de Arroz.' })], [0, delta({}, 'stop')]];
-  const r = await chat({ text: '¿cuánto arroz hay?', stream: true, context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, costo: 777.77, stock: 40 }] } },
-    { role: 'empleado:consultas', fetch: dsSeq([first, second], bodies), reader: OWNER_READER, statusEveryMs: 50 });
+  const r = await chat({ text: '¿cuánto arroz hay? explícame', stream: true, context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, costo: 777.77, stock: 40 }] } },
+    { role: 'empleado:consultas', fetch: dsSeq([first, second], bodies), reader: OWNER_READER, statusEveryMs: 50 }); // (lentitud 22-10) con segunda llamada
   assert.match(r.headers.get('content-type'), /event-stream/);
   const raw = await new Response(r.body).text();
   for (const c of CANARY) { assert.ok(!raw.includes(c), 'trozo con dato del Admin ' + c); for (const b of bodies) assert.ok(!b.includes(c), 'al modelo llegó ' + c); }
@@ -154,7 +155,7 @@ test('Bot 5: employeeQueryResult deja solo la lista blanca (columnas y resumen),
   for (const c of CANARY) assert.ok(!JSON.stringify(r).includes(c));
   assert.deepEqual(employeeQueryResult({ error: 'x' }), { error: 'x' });
   const src = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant.js', import.meta.url), 'utf8');
-  const i = src.indexOf('runAssistantQuery(reader, p.query, now)'), j = src.indexOf("if (role !== 'owner') r = employeeQueryResult(r);"), k = src.indexOf("toolMsgs.push({ role: 'tool'");
+  const i = src.indexOf('runAssistantQuery(reader, p.query, now)'), j = src.indexOf("if (!seesOwnerData(role)) r = employeeQueryResult(r);"), k = src.indexOf("toolMsgs.push({ role: 'tool'");
   assert.ok(i > 0 && j > i && k > j, 'se filtra justo después de leer y antes de pantalla y modelo');
 });
 
@@ -181,4 +182,28 @@ test('Bot 4: «Pensando…» se vuelve la respuesta en el mismo lugar; mascota �
   assert.equal((sendFn.match(/var shown = C\.stripDisplay \? C\.stripDisplay\(d\.reply\) : d\.reply; announce\(shown\)/g) || []).length, 1, 'se anuncia la respuesta completa una vez');
   assert.match(sendFn, /bubble\.setAttribute\('aria-busy', 'true'\)/); assert.match(sendFn, /bubble\.removeAttribute\('aria-busy'\)/);
   assert.match(CSS, /\.na-asst-live\{position:absolute;width:1px;height:1px/);
+});
+
+// ---------- (#957 sobre #962) «pulsa Confirmar» partido entre trozos: el mismo filtro final del texto entero ----------
+const painted = (e) => { let s = ''; for (const x of e) if (x.ev === 'text') { if (x.d.reset) s = ''; else s += x.d.t || ''; } return s; };
+test('#957/#962: «pulsa Confirmar» partido entre trozos («pul» | «sa Confirm» | «ar») sin tarjeta de cambio -> nunca se pinta; con tarjeta de cambio sí', async () => {
+  const pasos = JSON.stringify({ tema: 'Kardex', pasos: ['Entra a Inventario', 'Abre Kardex'] });
+  const info = [[0, delta({ content: 'Te dejo los pasos para ver el Kardex en la tarjeta de abajo, son cortos. Revisa y pul' })], [5, delta({ content: 'sa Confirm' })], [5, delta({ content: 'ar cuando quieras.' })],
+    [0, delta({ tool_calls: [{ index: 0, id: 'p1', function: { name: 'explicar_pasos', arguments: pasos } }] })], [0, delta({}, 'tool_calls')]];
+  const r = await chat({ text: '¿cómo veo el kardex?', stream: true }, { fetch: dsSeq([info], []), reader: READER });
+  const e = await events(r), fin = e.at(-1);
+  assert.equal(fin.ev, 'final'); assert.equal(fin.d.proposals.length, 1);
+  assert.doesNotMatch(fin.d.reply, /puls|Confirmar/i, fin.d.reply);
+  assert.ok(e.filter((x) => x.ev === 'text').every((x) => !/puls|Confirm/i.test(x.d.t || '')), 'ningún trozo lleva «pulsa Confirmar»');
+  assert.equal(painted(e), fin.d.reply, 'lo pintado en partes es la respuesta final (mismo filtro)');
+  assert.ok(!e.some((x) => x.ev === 'status'), 'sin «buscando» por la retención');
+
+  const args = JSON.stringify({ product_id: 'A', tipo: 'salida', cantidad: 1, motivo: 'Merma / daño' });
+  const change = [[0, delta({ content: 'Preparé la salida de 1 Arroz por merma en la tarjeta. Revisa y pul' })], [5, delta({ content: 'sa Confirm' })], [5, delta({ content: 'ar.' })],
+    [0, delta({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'proponer_ajuste_stock', arguments: args } }] })], [0, delta({}, 'tool_calls')]];
+  const r2 = await chat({ text: 'merma de 1 arroz', context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, stock: 40 }] }, stream: true }, { fetch: dsSeq([change], []), reader: READER });
+  const e2 = await events(r2), fin2 = e2.at(-1);
+  assert.equal(fin2.ev, 'final'); assert.equal(fin2.d.proposals.length, 1); assert.ok(fin2.d.proposals[0].confirm_token);
+  assert.match(fin2.d.reply, /pulsa Confirmar/);
+  assert.equal(painted(e2), fin2.d.reply, 'con tarjeta de cambio la frase queda y lo pintado coincide');
 });

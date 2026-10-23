@@ -19,7 +19,8 @@ function dates(t) { const m = t.match(/\d{4}-\d{2}-\d{2}/g) || [];
   if (m.length) return { desde: m[0], hasta: m[1] || m[0] };
   return dateWordRange(periodWord(t)); }
 // Consultas: igual que el modelo, la palabra de fecha va como «periodo» y el servidor calcula el rango en hora de Lima (pos-assistant-queries.js).
-function periodWord(t) { return /semana pasada/.test(t) ? 'semana_pasada' : /semana/.test(t) ? 'esta_semana' : /mes pasado/.test(t) ? 'mes_pasado'
+function periodWord(t) { return /mismo dia de la (otra semana|semana pasada)|hace (una semana|7 dias)/.test(t) ? 'mismo_dia_semana_pasada' : /antier|anteayer|antes de ayer/.test(t) ? 'antier'
+  : /semana pasada/.test(t) ? 'semana_pasada' : /semana/.test(t) ? 'esta_semana' : /mes pasado/.test(t) ? 'mes_pasado'
   : /\bmes\b/.test(t) ? 'este_mes' : /\bayer\b/.test(t) ? 'ayer' : 'hoy'; }
 function queryDates(t) { const m = t.match(/\d{4}-\d{2}-\d{2}/g) || []; return m.length ? { desde: m[0], hasta: m[1] || m[0] } : { periodo: periodWord(t) }; }
 
@@ -34,6 +35,12 @@ export function mockAssistantReply({ role, ctx, text, image }) {
     return { content: 'Leí la factura de la foto (demostración). Encontré ' + lineas.length + ' líneas. Revisa y pulsa Confirmar.',
       calls: [call('leer_factura_compra', { proveedor: 'Distribuidora Ejemplo SAC', documento: 'F001-000123', fecha: '2026-10-16', lineas })] };
   }
+  // Consultas nuevas (solo lectura), antes de «vend…» (que manda a la pantalla Venta) y de las deudas en general.
+  if (/\bgane\b|\bganamos\b|ganancia|utilidad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ganancia', ...queryDates(t) })] };
+  if (/no se vend|sin ventas|no (se )?vendi|no sale|no salen/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'productos_sin_ventas', ...(/\d{4}-\d{2}-\d{2}|\bhoy\b|\bayer\b|semana|\bmes\b/.test(t) ? queryDates(t) : {}) })] };
+  if (/a que hora|por hora|que hora(s)? (vendo|se vende|hay mas)|horas? de mas venta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_por_hora', ...queryDates(t) })] };
+  { const cli = /\bcliente\s*#?\s*([A-Za-z0-9_-]{1,40})\b/i.exec(String(text || '')); // solo el código («cliente #12» o «cliente 12»), nunca el nombre
+    if (cli && /debe|deuda|saldo/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }
   if (/vend|carrito|cobra/.test(t) && !/vendid|ventas|reporte/.test(t)) return { content: 'Las ventas se hacen a mano en Venta. Yo te ayudo con stock, compras, precios, productos y reportes.', calls: [] };
   if (/document|pdf|imprim|reporte de|lista de precios|estado de cuenta|inventario valorizado|valorizado|cierre de caja|pedido para|lista de pedido/.test(t)) {
     const tipo = /lista de precios/.test(t) ? 'lista_precios' : /valoriz/.test(t) ? 'inventario_valorizado' : /reponer|pedido/.test(t) ? 'lista_pedido'
@@ -41,9 +48,11 @@ export function mockAssistantReply({ role, ctx, text, image }) {
     const cli = /cliente #([A-Za-z0-9_-]{1,40})/.exec(String(text || '')); // el aparato manda «cliente #código», nunca el nombre
     return { content: 'Armé el documento. Es interno, NO es comprobante SUNAT.', calls: [call('preparar_documento', { tipo, ...dates(t), ...(cli ? { cliente_id: cli[1] } : {}) })] };
   }
-  if (/resumen/.test(t) && !/cierre|caja/.test(t)) return { content: '', calls: [call('consultar', { tipo: /mes|mensual/.test(t) ? 'resumen_mes' : 'resumen_dia', ...(/\d{4}-\d{2}-\d{2}/.test(t) ? { hasta: t.match(/\d{4}-\d{2}-\d{2}/)[0] } : /\bayer\b|mes pasado/.test(t) ? { periodo: /mes pasado/.test(t) ? 'mes_pasado' : 'ayer' } : {}) })] };
+  if (/sugerencias? de compra|sugiereme (que )?comprar|que (debo|tengo que|me conviene|deberia) comprar|cuanto (debo|tengo que|deberia) (comprar|pedir)/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sugerencias_compra' })] };
+  if (/resumen/.test(t) && !/cierre|caja/.test(t)) return { content: '', calls: [call('consultar', { tipo: /mes|mensual/.test(t) ? 'resumen_mes' : 'resumen_dia', ...(/\d{4}-\d{2}-\d{2}/.test(t) ? { hasta: t.match(/\d{4}-\d{2}-\d{2}/)[0] } : /\bayer\b|mes pasado|antier|anteayer|mismo dia de la/.test(t) ? { periodo: periodWord(t) } : {}) })] };
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
+  if (/atrasad|moros|creditos? vencid/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'creditos_atrasados' })] };
   if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
   if (/compras (recientes|ultimas)|ultimas compras/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'compras_recientes' })] };
   if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...queryDates(t) })] };

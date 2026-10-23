@@ -80,7 +80,7 @@ test('1) instrucciones del modelo: compras con preparar_compra (todas las filas)
   assert.match(tools.preparar_compra, /me llegaron/); assert.match(tools.preparar_compra, /TODAS las líneas/); assert.match(tools.preparar_compra, /omítelo/);
   assert.match(tools.proponer_ajuste_stock, /NO lo uses para mercadería que llegó/);
   const sp = systemPrompt('owner', { products: [] });
-  assert.match(sp, /MERCADERÍA QUE LLEGÓ/); assert.match(sp.split('\n')[0], /farmacia\/botica/, 'la primera línea no se toca');
+  assert.match(sp, /MERCADERÍA QUE LLEGÓ/); assert.match(sp.split('\n')[0], /^Eres "Burbuja", el asistente del negocio/, 'la primera línea no se toca'); assert.doesNotMatch(sp.split('\n')[0], /compra|MERCADER/i);
   assert.doesNotMatch(systemPrompt('empleado:consultas_documentos', { products: [] }), /MERCADERÍA QUE LLEGÓ/);
 });
 
