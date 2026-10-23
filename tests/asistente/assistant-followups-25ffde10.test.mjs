@@ -183,8 +183,8 @@ test('Bot 3 (1): filtro previo de la etapa de espacios: todas las etiquetas (due
   let n = 0;
   for (const l of LABELS) for (const ws of [' '.repeat(170), '\n'.repeat(3) + ' '.repeat(200), '\t'.repeat(165)]) for (const role of ['owner', EMP]) {
     const v = /ruc/i.test(l) ? VAL.RUC : /dni/i.test(l) ? VAL.DNI : 'abc12345'; const t = 'Dato ' + l + ws + v + ' fin.';
-    // (Bot 2 sobre 25ffde10) el dueño ve DNI/RUC exactos: para él solo se comprueba que la racha se junte en un espacio
-    const f = red(t, role); if (role === 'owner' && /ruc|dni/i.test(l)) assert.ok(f.includes(' ' + v) && !/\s{2,}/.test(f), JSON.stringify(f)); else assert.ok(!f.includes(v), role + ' ' + JSON.stringify(l) + ' -> ' + JSON.stringify(f.replace(/\s+/g, ' ')));
+    // (Bot 2 sobre 25ffde10) el dueño ve el RUC exacto (el DNI ya no: auditoría 500, 8): para él solo se comprueba que la racha se junte en un espacio
+    const f = red(t, role); if (role === 'owner' && /ruc/i.test(l)) assert.ok(f.includes(' ' + v) && !/\s{2,}/.test(f), JSON.stringify(f)); else assert.ok(!f.includes(v), role + ' ' + JSON.stringify(l) + ' -> ' + JSON.stringify(f.replace(/\s+/g, ' ')));
     for (const k of [1, 3, 7]) assert.equal(emit(t, role, k), f, role + ' ' + l + ' trozos de ' + k); n++;
   }
   assert.ok(n >= 150);
@@ -229,8 +229,10 @@ test('Bots 4/5/2: series de comprobante y guía intactas en ambos roles; «2024-
   assert.match(same('RUC 20100055237', EMP), /RUC \*{7}5237/);
   // dueño (Bot 2, ev/dueno-comprobantes.json): sin DNI/RUC tapados; PIN, clave, token y data: siguen tapados
   const doc = 'Compra registrada\n| Comprobante | Proveedor | RUC | Total |\n|---|---|---|---|\n| F001-00012345 | Alicorp SAC | 20100055237 | S/ 229.40 |\n| B001-00000123 | Gloria SA | RUC 20100190797 | S/ 58.10 |\nCódigo interno 12345678\nDNI del cliente 44556677';
-  for (const k of [1, 2, 3, 7, 13, 47]) assert.equal(emit(doc, 'owner', k), doc, 'dueño trozos de ' + k);
-  assert.equal(red(doc, 'owner'), doc);
+  // (auditoría 500, 8) el DNI escrito en la respuesta ya se tapa también para el dueño; RUC, series y códigos siguen exactos
+  const docOwner = doc.replace('DNI del cliente 44556677', 'DNI del cliente ****6677');
+  for (const k of [1, 2, 3, 7, 13, 47]) assert.equal(emit(doc, 'owner', k), docOwner, 'dueño trozos de ' + k);
+  assert.equal(red(doc, 'owner'), docOwner);
   for (const [t, v] of [['clave: abc123', 'abc123'], ['PIN 4321', '4321'], ['token = sk-999999', 'sk-999999'], ['data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFS', 'QUJD']]) assert.ok(!same(t, 'owner').includes(v), t);
   // lo que va al modelo sigue con el filtro completo
   assert.equal(redactText('RUC 20100055237 y 12345678'), 'RUC *******5237 y código ****5678');
