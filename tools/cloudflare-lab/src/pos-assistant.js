@@ -130,6 +130,10 @@ const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'do
   'alguien', 'nadie', 'mi', 'mis', 'tu', 'tus', 'su', 'sus', 'nuestro', 'nuestros', 'nuestra', 'nuestras', 'ellos', 'ellas', 'varios', 'cada', 'uno',
   'entre', 'ambos', 'todos', 'gente', 'vecina', 'vecinas', 'solo', 'recien',
   'tarjeta', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre', 'burbuja', 'oye', 'oiga', 'hola', 'buenas', 'buenos', 'dime', 'digame', 'mira', 'pues', 'bueno', 'entonces', 'gracias', 'porfa', 'favor']);
+// (bloqueo en 764d2ee3) Palabras de tiempo: no son nombres y, como la lista fija y los artículos, no cortan la cercanía verbo–nombre
+// («¿me pagó hoy Rosa?», «¿me pagó solo Rosa?», «la vecina Gumercinda»).
+const PAYER_TIME = new Set(['hoy', 'ayer', 'anteayer', 'antier', 'manana', 'anoche', 'temprano', 'recien']);
+const PAYER_GAP = new Set(['el', 'la', 'los', 'las', 'a', 'al']);
 const payerStop = (f) => !f || /\d/.test(f) || PAYER_STOP.has(f) || PAYER_HON.has(f) || PAYER_VERBS.has(f) || NAME_NOT.has(f) || NAME_UNIT.has(f) || NAME_STOP_VERB.has(f) || DEBT_VERB.test(' ' + f + ' ');
 function personTokens(text) {
   const s = String(text ?? ''), out = []; let sent = 0, last = 0;
@@ -183,8 +187,9 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) {
     const start = hon ? toks[i - 1].s : t.s;
     const { len, hits } = personAt(toks, i, ck);
     if (len) { ments.push({ s: start, e: toks[i + len - 1].e, hits }); i += len - 1; continue; }
-    if (payerStop(t.f) || t.f.length < 2) continue;
-    const prevVerb = same(i - 1) && (isVerb(i - 1) || (['el', 'la', 'a', 'al'].includes(toks[i - 1].f) && same(i - 2) && isVerb(i - 2)));
+    if (payerStop(t.f) || PAYER_TIME.has(t.f) || t.f.length < 2) continue;
+    let pv = i - 1; while (pv > i - 5 && same(pv) && !isVerb(pv) && (PAYER_STOP.has(toks[pv].f) || PAYER_TIME.has(toks[pv].f) || PAYER_GLUE.has(toks[pv].f) || PAYER_GAP.has(toks[pv].f))) pv--;
+    const prevVerb = same(pv) && isVerb(pv);
     let n = i + 1; while (same(n) && PAYER_GLUE.has(toks[n].f) && n < i + 3) n++;
     const nextVerb = same(n) && isVerb(n);
     const afterAnd = same(i - 1) && ['y', 'e'].includes(toks[i - 1].f) && ments.length && ments.at(-1).e <= toks[i - 1].s;
