@@ -150,6 +150,12 @@ test('2) sanitizeLesson con la regla compartida: frases de las dos revisiones', 
     assert.doesNotMatch(A.sanitizeLesson(t, [], KNOWN), /pedro|juan|rosa|lucho/i, t);
   assert.equal(A.sanitizeLesson('FIDEO DON VITTORIO SPAGHETTI 500GR X 20', [], KNOWN), 'FIDEO DON VITTORIO SPAGHETTI 500GR X 20');
 });
+test('2) persona tapada: se va el nombre completo con apellidos en minúscula; «X 2» que sigue se queda', () => {
+  const KNOWN = [{ nombre: 'Café Don Juan 250g' }];
+  for (const [t, want] of [['doña juana pérez debe 5', 'doña debe 5'], ['doña juana maría pérez debe 5', 'doña debe 5'], ['leche doña rosa pérez debe 2', 'leche doña debe 2'],
+    ['don pedro ramos quispe paga 20', 'don paga 20'], ['DON PEDRO X 2', 'DON X 2'], ['don pedro x 2 kg', 'don x 2 kg']])
+    assert.equal(A.sanitizeLesson(t, [], KNOWN), want, t);
+});
 test('2) chat del Admin: P-027 se guarda con la marca', async () => {
   const p027 = 'pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50';
   const r = await chat(p027);
