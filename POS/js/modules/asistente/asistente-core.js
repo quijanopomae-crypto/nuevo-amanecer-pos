@@ -1213,12 +1213,68 @@
     } else if (redactText(u.content) !== u.content || redactText(a.content) !== a.content || !u.sig) h.splice(h.length - 2, 2);
   }
 
+  // (fix/asist-alta-cliente-local) «agrega cliente Rosa Quispe 987654321» -> { nombre, tel, dni } (tel: 9 dígitos, dni: 8; '' si no hay)
+  // o null. Pide «cliente» + verbo de alta (agrega, añade, nuevo, registra, crea, da de alta). Nunca: preguntas («cuánto debe el cliente…»),
+  // códigos («cliente #5 lleva Gloria»), «clientes» en plural ni un mensaje sin nombre. Quita don/doña/señor/señora. Solo en el aparato.
+  var CUST_WORD_RE = /(?:^|[^\p{L}])client[ea](?=[^\p{L}]|$)/iu;
+  var CUST_ADD_RE = /(?:^|[^\p{L}])(?:agreg\p{L}*|a[ñn]ad\p{L}*|nuev[oa]|registr[ae]r?|cre[ae]r?|d(?:a|ar|e)\s+de\s+alta)(?=[^\p{L}]|$)/iu;
+  var CUST_ASK_RE = /[¿?#]|^\s*(?:y\s+)?(?:cu[aá]nt\p{L}*|cu[aá]l\p{L}*|qu[eé]|qui[eé]n\p{L}*|d[oó]nde|c[oó]mo|cu[aá]ndo|por\s*qu[eé])(?=[^\p{L}]|$)/iu;
+  var CUST_HON = { don: 1, 'doña': 1, dona: 1, 'señor': 1, 'señora': 1, senor: 1, senora: 1, sr: 1, sra: 1, srta: 1, 'señorita': 1, senorita: 1 };
+  var CUST_STOP = { dni: 1, tel: 1, 'teléfono': 1, telefono: 1, celular: 1, cel: 1, 'número': 1, numero: 1, nro: 1, con: 1, y: 1, e: 1, su: 1, ruc: 1, como: 1, que: 1, para: 1, en: 1 };
+  var CUST_LEAD = { a: 1, al: 1, el: 1, la: 1, nuevo: 1, nueva: 1, de: 1, alta: 1, da: 1, dar: 1, dale: 1, un: 1, una: 1 };
+  var CUST_PART = { de: 1, del: 1, la: 1, las: 1, los: 1 };
+  function customerIntent(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 200 || CUST_ASK_RE.test(t) || !CUST_WORD_RE.test(t) || !CUST_ADD_RE.test(t)) return null;
+    var tel = '', dni = '';
+    // números: «955 444 333» junto = celular; «41234567 987111222» = DNI + celular
+    t = t.replace(/\d[\d .-]*\d|\d/g, function (g) {
+      var all = g.replace(/\D/g, ''), parts = all.length === 8 || all.length === 9 ? [all] : g.split(/[ ]+/).map(function (x) { return x.replace(/\D/g, ''); });
+      parts.forEach(function (d) { if (d.length === 9 && !tel) tel = d; else if (d.length === 8 && !dni) dni = d; });
+      return ' , ';
+    });
+    var toks = t.match(/[\p{L}][\p{L}'’-]*\.?|[,;:]/gu) || [], ci = -1;
+    for (var i = 0; i < toks.length; i++) if (/^client[ea]$/i.test(toks[i])) { ci = i; break; }
+    if (ci < 0) return null;
+    var low = function (w) { return String(w).toLowerCase().replace(/\.$/, ''); };
+    function take(list) {
+      var out = [], k = 0;
+      while (k < list.length && (/^[:;,]$/.test(list[k]) || CUST_LEAD[low(list[k])] || CUST_HON[low(list[k])] || CUST_ADD_RE.test(' ' + list[k] + ' '))) k++;
+      for (; k < list.length && out.length < 6; k++) { var w = list[k], lw = low(w);
+        if (/^[:;,]$/.test(w) || CUST_STOP[lw] || /^client/i.test(w)) break;
+        if (CUST_HON[lw]) continue;
+        out.push(w.replace(/\.$/, '')); }
+      while (out.length && CUST_PART[low(out[out.length - 1])]) out.pop();
+      return out;
+    }
+    var words = take(toks.slice(ci + 1));
+    if (!words.length) words = take(toks.slice(0, ci));
+    if (!words.length || !words.some(function (w) { return w.replace(/[^\p{L}]/gu, '').length >= 2; })) return null;
+    var nombre = words.map(function (w, j) { var lw = w.toLowerCase(); if (j && CUST_PART[lw]) return lw; return w === lw ? w.charAt(0).toUpperCase() + w.slice(1) : w; }).join(' ');
+    return { nombre: nombre, tel: tel, dni: dni };
+  }
+  // Clientes del aparato con el mismo nombre (sin tildes, mayúsculas ni espacios de más) o el mismo DNI.
+  function custKey(v) { return foldStr(v).replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function findCustomers(clientes, p) {
+    var key = custKey(p && p.nombre), dni = p && p.dni ? String(p.dni) : '';
+    return (Array.isArray(clientes) ? clientes : []).filter(function (c) {
+      if (!c || c.nombre == null) return false;
+      return (key && custKey(c.nombre) === key) || (dni && String(c.dni || '').replace(/\D/g, '') === dni);
+    }).slice(0, 20);
+  }
+  // Respuesta local (Admin y empleado ven el nombre real; nunca sale del aparato ni va al historial).
+  function customerExistsReply(list) {
+    var show = function (c) { return String(c.nombre).replace(/\s+/g, ' ').trim() + ' (#' + c.id + ')'; };
+    if (!list || !list.length) return '';
+    if (list.length === 1) return 'Ya existe el cliente ' + show(list[0]);
+    return 'Ya existen ' + list.length + ' clientes con ese nombre: ' + list.map(show).join(', ');
+  }
   function configurationIntent(text, previous) {
     var t = String(text || '').trim().toLowerCase();
     if (/\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/.test(t)) return true;
     return !!previous && /^(?:s[ií]|no|hazlo|apl[ií]calo|normal|chico|grande|muy grande|azul|verde|naranja|celeste|simple|claro|noche|auto|\d{1,6}%?)[.!]?$/i.test(t);
   }
-  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { configurationIntent: configurationIntent, customerIntent: customerIntent, findCustomers: findCustomers, customerExistsReply: customerExistsReply, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -62,7 +62,7 @@ function field(id) { return { id, tagName: 'INPUT', value: '', style: {}, events
 function phone({ owner, clientes = CLIENTES, open = true } = {}) {
   const els = { cNombre: field('cNombre'), cTel: field('cTel'), cDni: field('cDni'), cDir: field('cDir'),
     mCli: { cls: new Set(), get classList() { const s = this.cls; return { add: (c) => s.add(c), contains: (c) => s.has(c) }; } } };
-  const msgs = [], fetches = [], history = [], opened = [];
+  const msgs = [], fetches = [], history = [], opened = [], closed = [];
   const ctx = vm.createContext({
     C, Event: class { constructor(t) { this.type = t; } }, history, msgs, fetches, CL: clientes,
     doc: { getElementById: (id) => els[id] || null },
@@ -70,13 +70,13 @@ function phone({ owner, clientes = CLIENTES, open = true } = {}) {
     inputEl: { value: 'x' },
     isOwnerAccess: () => !!owner, isAdmin: () => true,
     addMsg: (k, t) => { msgs.push([k, String(t)]); return {}; },
-    mark: () => {},
+    mark: () => {}, closePanel: () => closed.push(1),
     g: (n) => n === 'abrirModalCli' ? () => { opened.push(1); ['cNombre', 'cTel', 'cDni', 'cDir'].forEach((k) => { els[k].value = ''; }); if (open) els.mCli.cls.add('open'); } : undefined
   });
   vm.runInContext(sliceFn(UI, '  function openNewCustomer(p) {', '\n  }\n') + '\n  }\n', ctx);
   vm.runInContext('var deps = { clientes: function () { return CL; }, openNewCustomer: openNewCustomer };', ctx);
   vm.runInContext(sliceFn(UI, '  function customerShortcut(text) {', '\n  }\n') + '\n  }\n', ctx);
-  return { ctx, els, msgs, fetches, history, opened };
+  return { ctx, els, msgs, fetches, history, opened, closed };
 }
 
 test('nuevo: abre «Nuevo cliente» (#mCli) lleno; sin fetch, sin historial; la persona guarda', () => {
@@ -90,6 +90,7 @@ test('nuevo: abre «Nuevo cliente» (#mCli) lleno; sin fetch, sin historial; la 
     assert.equal(p.fetches.length, 0); assert.equal(p.history.length, 0); assert.equal(p.ctx.inputEl.value, '');
     assert.deepEqual(p.msgs.map((m) => m[0]), ['u', 'a']);
     assert.match(p.msgs[1][1], /Nuevo cliente/); assert.match(p.msgs[1][1], /Guardar/);
+    assert.equal(p.closed.length, 1, 'el panel se cierra para ver el formulario');
   }
 });
 
@@ -103,7 +104,7 @@ test('ya existe (Admin y empleado): nombre real + código, no abre el formulario
     const one = phone({ owner });
     assert.equal(one.ctx.customerShortcut('agrega cliente Juan Perez'), true);
     assert.equal(one.msgs[1][1], 'Ya existe el cliente Juan Pérez (#20)', owner ? 'Admin' : 'empleado');
-    assert.equal(one.opened.length, 0); assert.equal(one.fetches.length, 0); assert.equal(one.history.length, 0);
+    assert.equal(one.opened.length, 0); assert.equal(one.fetches.length, 0); assert.equal(one.history.length, 0); assert.equal(one.closed.length, 0);
     const two = phone({ owner });
     two.ctx.customerShortcut('registra al cliente señora Rosa Quispe');
     assert.match(two.msgs[1][1], /^Ya existen 2 clientes con ese nombre:/); assert.match(two.msgs[1][1], /Rosa Quispe \(#12\)/); assert.match(two.msgs[1][1], /ROSA QUISPE \(#15\)/);
