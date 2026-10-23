@@ -83,7 +83,7 @@ test('tarjeta: una línea con product_id del catálogo local muestra el nombre d
   assert.equal(lineName({ product_id: 7, nombre: 'Leche DNI ****5678' }), 'Leche Gloria 400g');
   assert.equal(lineName({ product_id: '7', nombre: 'x' }), 'Leche Gloria 400g');
   assert.equal(lineName({ product_id: 99, nombre: 'Galleta' }), 'Galleta'); assert.equal(lineName({ nombre: 'Arroz' }), 'Arroz');
-  assert.match(src, /E\(l\.cantidad\) \+ ' × ' \+ E\(lineName\(l\)\)/);
+  assert.match(src, /E\(l\.cantidad\) \+ ' × '\) \+ E\(lineName\(l\)\)/); // (fila-mixta) sin cantidad: «Falta la cantidad · nombre»
 });
 
 test('403: el texto de asistente-core.js es EXACTAMENTE el de CONTRATO.md', () => {
