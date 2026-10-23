@@ -15,7 +15,9 @@ test('real Worker authenticates then returns feature_locked for every locked reg
   const context = vm.createContext({});
   vm.runInContext(readFileSync('POS/js/modules/proximamente-registry.js', 'utf8'), context);
   const ids = context.NA_PROXIMAMENTE_REGISTRY.map(f => f.id).filter(id => PERMISSIONS.featureLocked(id));
-  for (const id of addedIds) assert.ok(ids.includes(id), id);
+  // Dueño 2026-10-23 'Enciende todas igual': solo venta-por-presentacion sigue cerrado.
+  assert.deepEqual([...ids], ['venta-por-presentacion']);
+  for (const id of addedIds) assert.equal(PERMISSIONS.featureLocked(id), false, id);
   const before = f.database.prepare('SELECT * FROM canonical_control').all();
   for (const id of [...ids, 'unknown-feature']) {
     for (const method of ['GET', 'POST']) {
