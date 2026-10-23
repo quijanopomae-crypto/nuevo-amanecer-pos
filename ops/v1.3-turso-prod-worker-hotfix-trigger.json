@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-23 in chat: 'Publica las 5 mejoras y los 7 cambios del asistente, con respaldo antes'. Deploy the 7 merged assistant PRs #987 #986 #984 #985 #994 #989 #997 (up to merge b0145097). Later merges (#1001 #988 #998) are NOT included. DB backup run 40007559977 first. Backend first then web. No schema, migrations, business data or secret changes.",
-  "rollback_ref": "065a8311e9936de8c6551f1c1d5e60a85d64483a",
+  "authorization_context": "Owner approved 2026-10-23: 'ok aprobado' (#1001 #988 #998 #1005) and 'Apruebo la #1002, publica todo con respaldo'. Target = default head 2356dc12. Also includes already-live web-only merges #1007 #1008 #1010 #901 #903 #912 #1009 #1012 (locks closed). DB backup run 40021422369 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "b0145097df67e200e9d49254b4756906d5fa424a",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 77,
-  "optimization": "ASSISTANT_SEVEN_FIXES",
-  "target_commit": "b0145097df67e200e9d49254b4756906d5fa424a"
+  "attempt": 78,
+  "optimization": "ASSISTANT_FIVE_FIXES",
+  "target_commit": "2356dc12fc030869a6feab12136bb5ef7377391b"
 }
