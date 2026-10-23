@@ -876,3 +876,16 @@ test('#995 (decisión del lead) «paga / pagará / va a pagar / abona / abonará
     assert.equal(miss.cap.length, 0, why);
   }
 });
+
+// (decisión del lead, red de seguridad) Siempre que se lee la lista de Clientes, cualquier nombre de esa lista en el mensaje, el historial o el
+// resumen va a la IA cambiado por su código (o [nombre oculto] si hay varios con ese nombre), sea cual sea el verbo o la oración.
+test('#995 (red de seguridad) con Rosa en Clientes, «Rosa» nunca llega a la IA: mensaje, historial y resumen (con y sin partes)', async () => {
+  const history = [{ role: 'user', content: 'Rosa Huamán me debe 80 soles' }, { role: 'assistant', content: 'Anotado lo de Rosa.' }];
+  const resumen = 'Se habló de la deuda de Rosa y de Carmen Quispe.';
+  for (const text of ['¿cuándo me paga Rosa?', '¿Rosa me pagará el viernes?', 'Hablé con Rosa. ¿Cuándo me paga?', 'Rosa dijo que sí. ¿Me pagará?', '¿y cuándo me paga?'])
+    for (const stream of [false, true]) for (const extra of [{}, { history, resumen }]) {
+      const why = text + ' stream=' + stream + ' hist=' + !!extra.history;
+      const { cap } = await askP(text, { stream, ...extra });
+      for (const b of cap) assert.ok(!/Rosa|Huam|Carmen|Quispe/i.test(b), 'llegó un nombre a la IA (' + why + '): ' + b.slice(0, 400));
+    }
+});
