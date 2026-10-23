@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 199: 7 PR del asistente (#987 #986 #984 #985 #994 #989 #997, merge b0145097). Worker 77 ya publicado (run 40007736289). Respaldo D1 run 40007559977. No incluye #1001 #988 #998. Rollback Web 198 (4025b847).",
-  "retry_attempt": 199,
+  "note": "Web 200: #1007 kárdex en cola, #1008 stock negativo (candado cerrado), #1010 kg/presentaciones (candado cerrado), merge 5d247f92. Solo web, sin cambio de Worker (Worker 77 sigue). Respaldo D1 run 40007559977. Rollback Web 199 (dc65a195).",
+  "retry_attempt": 200,
   "retry_reason": "OK del dueño 2026-10-23: 'Publica las 5 mejoras y los 7 cambios del asistente, con respaldo antes'.",
-  "requested_at_utc": "2026-10-23T19:05:00Z",
-  "approved_base": "b0145097df67e200e9d49254b4756906d5fa424a"
+  "requested_at_utc": "2026-10-23T19:40:00Z",
+  "approved_base": "5d247f92446469c72e958fb38d1c4679a0111f26"
 }
