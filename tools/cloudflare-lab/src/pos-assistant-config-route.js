@@ -1,17 +1,19 @@
-// Herramienta «proponer_configuracion»: cambia ajustes que YA existen en Configuración (datos del negocio, ticket, impresión y avisos).
+// Datos del negocio y del ticket dentro de «configurar_app» (#972): misma herramienta y misma tarjeta «configuracion», con destino:'servidor'.
 // - Lista CERRADA de claves (CONFIG_KEYS). Cada clave apunta a un campo de una fila de pos_settings que ya guarda el POS (config-g.js, SHARED).
 //   Nunca crea una fila ni una clave nueva: si la fila no existe en el servidor, la tarjeta se descarta (config_sin_datos).
 //   Clave desconocida o valor inválido: fuera. Borrar todo / reiniciar: no existe aquí (ninguna clave lo hace).
+//   Las claves de #972 (stock mínimo, avisos de stock, impresión automática, apariencia, lector) NO están aquí: siguen solo del Admin y las
+//   guarda el aparato (pos-assistant-settings.js).
 // - Quién: el mismo permiso «cambios» de pos-assistant-levels.js (Admin, o nivel 3 + «costos y cambios»). Sin permiso nuevo ni migración.
-// - La tarjeta muestra una fila por clave: actual → nuevo. Un toque en «Aplicar» (sin PIN) llega a /auth/assistant/confirm, que valida el
-//   token firmado y el servidor guarda aquí (applyConfigCard): fusiona el campo en la fila existente con revisión condicional (revision+1),
-//   así un aparato con una copia vieja recibe revision_conflict y toma la del servidor. Cada clave cambiada queda en la bitácora
-//   (pos-assistant-audit.js) con el aparato que aplicó (Admin o empleado), sin los valores.
+// - La tarjeta es la de #972 (ajuste, nombre, alcance, antes, valor) más destino:'servidor'. Un toque en «Confirmar» (sin PIN) llega a
+//   /auth/assistant/confirm, que valida el token firmado y el servidor guarda aquí (applyConfigCard): fusiona el campo en la fila existente con
+//   revisión condicional (revision+1), así un aparato con una copia vieja recibe revision_conflict y toma la del servidor. El cambio queda en
+//   la bitácora (pos-assistant-audit.js) con el aparato que aplicó (Admin o empleado), sin los valores.
 import { auditWrite } from './pos-assistant-audit.js';
 
-export const CONFIG_TOOL = 'proponer_configuracion';
 export const CONFIG_CARD = 'configuracion';
-export const CONFIG_MAX_KEYS = 12;
+export const CONFIG_DEST = 'servidor';
+export const CONFIG_ALCANCE = 'todos los aparatos';
 
 const clean = (v, max) => (typeof v === 'string' ? v.normalize('NFC').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim() : '');
 // Texto tapado por el filtro de datos personales (o con asteriscos/marcas): no se guarda nunca.
@@ -19,7 +21,6 @@ const MASKED = /\*{2,}|[∗＊]{2,}|_{3,}|#{3,}|\[[^\]]{0,30}(?:ocult|omitid|dat
 const text = (min, max) => (v) => { const s = clean(v); return s.length >= min && s.length <= max && !MASKED.test(s) ? s : undefined; };
 const bool = (v) => (v === true || v === false ? v : typeof v === 'string' && /^(true|s[ií]|activar|encender|on)$/i.test(v.trim()) ? true
   : typeof v === 'string' && /^(false|no|desactivar|apagar|off)$/i.test(v.trim()) ? false : undefined);
-const int = (lo, hi) => (v) => { const n = typeof v === 'number' ? v : typeof v === 'string' && /^\s*\d+\s*$/.test(v) ? Number(v) : NaN; return Number.isInteger(n) && n >= lo && n <= hi ? n : undefined; };
 const oneOf = (list) => (v) => { const s = clean(String(v ?? '')).toLowerCase().replace(/\s+/g, ''); return list.includes(s) ? s : undefined; };
 const ruc = (v) => { const s = String(v ?? '').replace(/[\s.-]/g, ''); return /^(10|15|16|17|20)\d{9}$/.test(s) ? s : undefined; };
 
@@ -33,31 +34,23 @@ export const CONFIG_KEYS = Object.freeze({
   ticket_logo: { setting: 'pos.ticket', field: 'showLogo', label: 'Logo en el ticket', parse: bool, def: true },
   ticket_igv: { setting: 'pos.ticket', field: 'showIGV', label: 'IGV en el ticket', parse: bool, def: false },
   ticket_forma_pago: { setting: 'pos.ticket', field: 'showPayment', label: 'Forma de pago en el ticket', parse: bool, def: true },
-  imprimir_al_cobrar: { setting: 'pos.flags', field: 'printAuto', label: 'Imprimir al cobrar', parse: bool, def: false },
-  avisos: { setting: 'pos.flags', field: 'alertsEnabled', label: 'Avisos y confirmaciones', parse: bool, def: true },
-  aviso_stock_bajo: { setting: 'pos.flags', field: 'stockAlertActive', label: 'Aviso de stock bajo', parse: bool, def: true },
-  stock_minimo: { setting: 'pos.flags', field: 'stockMin', label: 'Stock mínimo por defecto', parse: int(0, 100000), def: 5 }
+  avisos: { setting: 'pos.flags', field: 'alertsEnabled', label: 'Avisos y confirmaciones', parse: bool, def: true }
 });
 export const CONFIG_KEY_NAMES = Object.freeze(Object.keys(CONFIG_KEYS));
+export const isServerKey = (k) => typeof k === 'string' && Object.hasOwn(CONFIG_KEYS, k);
+// Catálogo para el modelo (solo en pedidos de configuración, igual que el de #972): clave, nombre y valores admitidos. NUNCA los valores
+// actuales (nombre, RUC, dirección y pie no salen al modelo; el «antes» de la tarjeta se lee de la base en resolveConfigProposals).
+const KIND = { negocio_ruc: 'RUC de 11 dígitos', ticket_ancho: ['58mm', '80mm'] };
+export function serverCatalog() {
+  return CONFIG_KEY_NAMES.map((clave) => { const s = CONFIG_KEYS[clave], k = KIND[clave] || (s.parse === bool ? 'boolean' : 'texto');
+    return { clave, nombre: s.label, ...(Array.isArray(k) ? { valores: k } : { tipo: k }) }; });
+}
 
-export const CONFIG_TOOL_DEF = Object.freeze({ name: CONFIG_TOOL,
-  description: 'Cambia ajustes que ya existen en Configuración (negocio, ticket, impresión, avisos). Una fila por clave. No borra ni reinicia nada.',
-  parameters: { type: 'object', properties: { cambios: { type: 'array', maxItems: CONFIG_MAX_KEYS, items: { type: 'object',
-    properties: { clave: { type: 'string', enum: CONFIG_KEY_NAMES }, valor: { type: ['string', 'number', 'boolean'] } }, required: ['clave', 'valor'] } } }, required: ['cambios'] } });
-
-// Llamada del modelo -> borrador (se completa con la base en resolveConfigProposals). Clave desconocida o valor inválido: fuera.
-export function configToolProposal(args, id) {
-  const list = Array.isArray(args?.cambios) ? args.cambios.slice(0, 30) : [];
-  const want = [], seen = new Set(); let descartadas = 0;
-  for (const c of list) {
-    const k = typeof c?.clave === 'string' ? c.clave.trim() : '';
-    const spec = Object.hasOwn(CONFIG_KEYS, k) ? CONFIG_KEYS[k] : null;
-    const v = spec ? spec.parse(c.valor) : undefined;
-    if (!spec || v === undefined || seen.has(k) || want.length >= CONFIG_MAX_KEYS) { descartadas++; continue; }
-    seen.add(k); want.push({ clave: k, valor: v });
-  }
-  if (!want.length) return { dropped: 'config_invalid', tool: CONFIG_TOOL };
-  return { id, type: CONFIG_CARD, needsConfirm: true, title: 'Cambiar Configuración', _want: want, _descartadas: descartadas };
+// Llamada configurar_app con una clave del servidor -> borrador (antes se completa con la base en resolveConfigProposals).
+export function serverSettingProposal(args, id) {
+  const k = args?.ajuste, v = isServerKey(k) ? CONFIG_KEYS[k].parse(args.valor) : undefined;
+  if (v === undefined) return { dropped: 'bad_setting', tool: 'configurar_app' };
+  return { id, type: CONFIG_CARD, needsConfirm: true, title: 'Cambiar configuración', ajuste: k, nombre: CONFIG_KEYS[k].label, alcance: CONFIG_ALCANCE, destino: CONFIG_DEST, valor: v, _pending: true };
 }
 
 async function readSetting(db, key) {
@@ -68,66 +61,46 @@ async function readSetting(db, key) {
 }
 const current = (row, spec) => (row && Object.hasOwn(row.value, spec.field) && row.value[spec.field] != null ? row.value[spec.field] : spec.def);
 
-// Completa cada tarjeta con lo que hay hoy en la base. Fila que no existe, lectura caída o nada que cambiar: fuera (sin escribir nada).
+// Completa cada tarjeta del servidor con lo que hay hoy en la base. Fila que no existe, lectura caída o nada que cambiar: fuera (sin escribir).
 export async function resolveConfigProposals(db, proposals, dropped) {
+  const rows = {};
   for (let k = 0; k < proposals.length; k++) {
-    const p = proposals[k]; if (p.type !== CONFIG_CARD) continue;
-    const rows = {}, ajustes = []; let bad = null;
+    const p = proposals[k]; if (p.type !== CONFIG_CARD || p.destino !== CONFIG_DEST || !p._pending) continue;
+    const spec = CONFIG_KEYS[p.ajuste]; let bad = null, antes;
     try {
-      for (const w of p._want) {
-        const spec = CONFIG_KEYS[w.clave];
-        if (!(spec.setting in rows)) rows[spec.setting] = db ? await readSetting(db, spec.setting) : null;
-        const row = rows[spec.setting];
-        if (!row) { bad = bad || 'config_sin_datos'; continue; }
-        const antes = current(row, spec);
-        if (antes === w.valor) continue; // ya está así
-        ajustes.push({ clave: w.clave, etiqueta: spec.label, antes, despues: w.valor });
-      }
-    } catch { bad = 'config_read_failed'; ajustes.length = 0; }
-    if (!ajustes.length) { dropped.push({ dropped: bad || 'config_sin_cambio', tool: CONFIG_TOOL }); proposals.splice(k, 1); k--; continue; }
-    const clean = { id: p.id, type: CONFIG_CARD, needsConfirm: true, title: p.title, ajustes, ...(p._descartadas ? { descartadas: p._descartadas } : {}) };
-    if (p._call) clean._call = p._call;
+      if (!(spec.setting in rows)) rows[spec.setting] = db ? await readSetting(db, spec.setting) : null;
+      const row = rows[spec.setting];
+      if (!row) bad = 'config_sin_datos'; else { antes = current(row, spec); if (antes === p.valor) bad = 'config_sin_cambio'; }
+    } catch { bad = 'config_read_failed'; }
+    if (bad) { dropped.push({ dropped: bad, tool: 'configurar_app' }); proposals.splice(k, 1); k--; continue; }
+    const { _pending, valor, ...rest } = p;
     for (const key of Object.keys(p)) delete p[key];
-    Object.assign(p, clean);
+    Object.assign(p, { ...rest, antes, valor });
   }
   return proposals;
 }
 
-// «Aplicar» (confirm ya validado y firmado). Vuelve a validar cada clave contra la lista cerrada, fusiona el campo en la fila que YA existe
-// (UPDATE condicional por revisión; nunca INSERT) y anota una fila de bitácora por clave con el aparato que aplicó.
+// «Confirmar» (confirm ya validado y firmado). Vuelve a validar la clave contra la lista cerrada, revisa que el valor actual siga siendo el
+// «antes» de la tarjeta, fusiona el campo en la fila que YA existe (UPDATE condicional por revisión; nunca INSERT) y anota una fila de
+// bitácora con el aparato que aplicó.
 export async function applyConfigCard(db, auth, role, proposal, opId, audit = auditWrite) {
-  const list = Array.isArray(proposal?.ajustes) ? proposal.ajustes : [];
-  const by = {};
-  for (const a of list) {
-    const spec = Object.hasOwn(CONFIG_KEYS, a?.clave) ? CONFIG_KEYS[a.clave] : null;
-    const v = spec ? spec.parse(a.despues) : undefined;
-    if (!spec || v === undefined || v !== a.despues) return { status: 400, body: { error: 'config_invalid' } };
-    (by[spec.setting] = by[spec.setting] || []).push({ clave: a.clave, field: spec.field, valor: v });
-  }
-  if (!list.length || !db) return { status: 400, body: { error: 'config_invalid' } };
-  const at = new Date().toISOString(), who = String(auth?.principalId || 'assistant').slice(0, 120), revisiones = {}, hechas = [];
-  // Bitácora: una fila por clave guardada (quién = aparato que aplicó, qué = «config:<clave>»; sin los valores).
-  const log = () => audit(db, hechas.map((k) => ({ device_id: auth?.principalId, role, tool: 'asistente.config', type: CONFIG_CARD, outcome: ('config:' + k).slice(0, 40), card_id: proposal?.id || null, operation_id: opId || null })));
+  const k = proposal?.ajuste, spec = isServerKey(k) ? CONFIG_KEYS[k] : null;
+  const v = spec ? spec.parse(proposal.valor) : undefined;
+  if (!spec || proposal.destino !== CONFIG_DEST || v === undefined || v !== proposal.valor || !db) return { status: 400, body: { error: 'config_invalid' } };
+  const at = new Date().toISOString(), who = String(auth?.principalId || 'assistant').slice(0, 120);
+  const conflict = { status: 409, body: { error: 'revision_conflict', message: 'La Configuración cambió en otro aparato. Pide la tarjeta de nuevo.' } };
+  let rev;
   try {
-    const plan = [];
-    for (const [key, items] of Object.entries(by)) {
-      const row = await readSetting(db, key);
-      if (!row) return { status: 409, body: { error: 'config_sin_datos', message: 'Ese ajuste todavía no está guardado en el servidor. Ábrelo una vez en Configuración.' } };
-      const value = { ...row.value }; for (const it of items) value[it.field] = it.valor;
-      const json = JSON.stringify(value); if (json.length > 8000) return { status: 413, body: { error: 'value_too_large' } };
-      plan.push({ key, json, rev: row.revision });
-    }
-    for (const s of plan) {
-      const res = await db.prepare('UPDATE pos_settings SET value_json=?2,revision=revision+1,updated_at=?3,updated_by=?4 WHERE key=?1 AND revision=?5')
-        .bind(s.key, s.json, at, who, s.rev).run();
-      if (res?.meta && res.meta.changes === 0) {
-        // Otro aparato guardó en medio: lo ya guardado queda anotado; repetir la tarjeta es seguro (pone los mismos valores).
-        if (hechas.length) await log();
-        return { status: 409, body: { error: 'revision_conflict', message: 'La Configuración cambió en otro aparato. Pide la tarjeta de nuevo.', aplicado: hechas } };
-      }
-      revisiones[s.key] = s.rev + 1; hechas.push(...by[s.key].map((it) => it.clave));
-    }
-  } catch { if (hechas.length) await log(); return { status: 503, body: { error: 'save_failed', aplicado: hechas } }; }
-  const logged = Number(await log()) > 0;
-  return { status: 200, body: { ok: true, aplicado: hechas, revisiones, logged } };
+    const row = await readSetting(db, spec.setting);
+    if (!row) return { status: 409, body: { error: 'config_sin_datos', message: 'Ese ajuste todavía no está guardado en el servidor. Ábrelo una vez en Configuración.' } };
+    if (current(row, spec) !== proposal.antes) return conflict; // otro aparato ya lo cambió desde que se armó la tarjeta
+    const json = JSON.stringify({ ...row.value, [spec.field]: v }); if (json.length > 8000) return { status: 413, body: { error: 'value_too_large' } };
+    const res = await db.prepare('UPDATE pos_settings SET value_json=?2,revision=revision+1,updated_at=?3,updated_by=?4 WHERE key=?1 AND revision=?5')
+      .bind(spec.setting, json, at, who, row.revision).run();
+    if (res?.meta && res.meta.changes === 0) return conflict; // otro aparato guardó en medio: no se pisa
+    rev = row.revision + 1;
+  } catch { return { status: 503, body: { error: 'save_failed' } }; }
+  // Bitácora: una fila por cambio guardado (quién = aparato que aplicó, qué = «config:<clave>»; sin los valores).
+  const logged = Number(await audit(db, [{ device_id: auth?.principalId, role, tool: 'asistente.config', type: CONFIG_CARD, outcome: ('config:' + k).slice(0, 40), card_id: proposal?.id || null, operation_id: opId || null }])) > 0;
+  return { status: 200, body: { ok: true, aplicado: [k], revisiones: { [spec.setting]: rev }, logged } };
 }

@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #962 #958 #929 #960 #957 #969 #963 #959 #932 (assistant name filter, new queries, purchase suggestions, latency, live batch lessons, neutral codes, phone memory, purchase draft cards, product label photo). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39881741834 first. Backend first then web. No schema, migrations, business data or secret changes.",
-  "target_commit": "4f08b5f85bc73279ed8602a7f7eff4d9556381c8",
-  "rollback_ref": "8e0f236b451b5003220b332648c1725449dc12ba",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PR #975 (assistant 'Color' settings fix, 4 files, no DB). CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39945418717 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "b67ffeb90092fb3b48c0a72bca17bb5b0e34af6e",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 73,
-  "optimization": "ASSISTANT_BATCH_PURCHASES_PHONE_MEMORY_PHOTO"
+  "attempt": 75,
+  "optimization": "ASSISTANT_SETTINGS_COLOR_FIX",
+  "target_commit": "cc073012fb8ca4e969d2fc18f276b83f12122b85"
 }
