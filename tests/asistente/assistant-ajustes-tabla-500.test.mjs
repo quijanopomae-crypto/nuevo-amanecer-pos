@@ -139,3 +139,23 @@ test('guardas: compras siguen siendo compras; preguntas de stock siguen con la t
   await chat('me sobraron 5 de leche gloria', [tools(consult('leche gloria')), answer('x')], bodies, 'cashier');
   assert.ok(!(bodies[1]?.tools || []).some((x) => x.function.name === 'proponer_ajuste_stock'));
 });
+
+// (re-corrida con el modelo real) La consulta de stock no le pasa el id al modelo y la segunda llamada forzada venía con product_id «»:
+// la tarjeta se caía y quedaba la tabla. Con UN solo producto nombrado, el servidor pone ese id (nunca adivina entre varios).
+test('modelo real: segunda llamada con product_id vacío y un solo producto nombrado -> la tarjeta de ese producto (ajuste y precio)', async (t) => {
+  quiet(t);
+  const b1 = [];
+  const f1 = await chat('se me rompieron 3 botellas de aceite primor', [tools(consult('aceite primor')), tools(ajuste('', 'salida', 3, 'Merma / daño'))], b1);
+  assert.equal(b1.length, 2); assert.deepEqual(b1[1].tool_choice, { type: 'function', function: { name: 'proponer_ajuste_stock' } });
+  const a = cards(f1, 'ajuste'); assert.equal(a.length, 1, JSON.stringify(f1.proposals)); assert.equal(a[0].product_id, 'O1');
+  assert.doesNotMatch(f1.reply, TABLE);
+  const b2 = [];
+  const f2 = await chat('baja la gaseosa a 1 sol aunque pierda, es pa sacarla', [tools(consult('gaseosa')), tools(precio('', 1))], b2);
+  assert.equal(b2.length, 2);
+  const p = cards(f2); assert.equal(p.length, 1, JSON.stringify(f2.proposals)); assert.equal(p[0].product_id, 'Q1');
+  assert.doesNotMatch(f2.reply, TABLE);
+  // Varios productos posibles: no se adivina; se pregunta cuál.
+  const b3 = [];
+  const f3 = await chat('se me rompieron 3 botellas de aceite', [tools(consult('aceite')), tools(ajuste('', 'salida', 3, 'Merma / daño'))], b3);
+  assert.equal(cards(f3, 'ajuste').length, 0); assert.match(f3.reply, /¿Cuál de estos\?/);
+});

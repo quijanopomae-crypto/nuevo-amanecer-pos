@@ -3188,6 +3188,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       const req2 = { model: DEEPSEEK_MODEL, messages: [...req.messages, { role: 'assistant', content: result.content || '', tool_calls: calls }, ...toolMsgs], thinking: { type: 'disabled' }, temperature: 0.2, max_tokens: 350, stream: false };
       // (auditoría 500, precios) «pon la leche gloria a 4.20» y el modelo solo consultó stock: la segunda llamada puede proponer la
       // tarjeta de precio (proponer_cambio_precio, la misma de siempre); nunca queda la tabla como respuesta a un pedido de cambio.
+      let onlyProduct = null;
       const priceTool = role === 'owner' && priceChangeAsk(parsed.text) && !priceZeroAsk(parsed.text) && !priceAmountMissing(parsed.text) && !proposals.some((p) => p.type === 'precio')
         ? (req.tools || []).filter((t) => t?.function?.name === 'proponer_cambio_precio') : [];
       // (auditoría 500, ajustes) «me sobraron 5 de leche gloria» y el modelo solo consultó stock: la segunda llamada puede proponer el ajuste.
@@ -3195,8 +3196,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (priceTool.length) {
         // Un solo producto nombrado: la tarjeta es obligatoria (el modelo real escribía «abre la ficha y cambia…» en vez de proponerla).
         if (!sysProducts) sysProducts = await loadProducts();
-        const only = tiedProducts(priceCtx(ctx, sysProducts).products, parsed.text).length === 1 && !namesAnother(parsed.text);
-        req2.tools = priceTool; req2.tool_choice = only ? { type: 'function', function: { name: priceTool[0].function.name } } : 'auto';
+        const tied = tiedProducts(priceCtx(ctx, sysProducts).products, parsed.text);
+        onlyProduct = tied.length === 1 && !namesAnother(parsed.text) ? tied[0] : null;
+        req2.tools = priceTool; req2.tool_choice = onlyProduct ? { type: 'function', function: { name: priceTool[0].function.name } } : 'auto';
       }
       bytes.push(payloadBytes(req2));
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
@@ -3213,7 +3215,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
         if (!sysProducts) sysProducts = await loadProducts();
         const ctx2 = priceCtx(ctx, sysProducts); let added = 0;
         const tool = priceTool[0].function.name, before = proposals.length;
-        second.calls.filter((c) => c?.name === tool).forEach((c, i) => { const p = toProposal(c, role, ctx2, result.calls.length + i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); added++; } });
+        // (re-corrida con el modelo real) la consulta no le pasa el id al modelo: con UN solo producto nombrado, un product_id vacío o
+        // desconocido es ese producto. Con varios no se adivina (queda el «¿cuál?» de los settle de abajo).
+        const known = new Set((ctx2.products || []).map((x) => String(x.id)));
+        const withId = (c) => { if (!onlyProduct) return c; let a = c.arguments; if (typeof a === 'string') { try { a = JSON.parse(a); } catch { return c; } }
+          if (!a || typeof a !== 'object' || known.has(String(a.product_id ?? ''))) return c; return { ...c, arguments: { ...a, product_id: onlyProduct.id } }; };
+        second.calls.filter((c) => c?.name === tool).map(withId).forEach((c, i) => { const p = toProposal(c, role, ctx2, result.calls.length + i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); added++; } });
         if (tool === 'proponer_ajuste_stock' && added) { // el mismo control de inventario que las tarjetas de la primera llamada
           const fresh = proposals.slice(before), map = await timed(() => stockControlMap(reader, ctx, proposalProductIds(fresh)));
           if (map.failed) stockFailed = dropStockCards(proposals, dropped) > 0 || stockFailed; else noStock.push(...applyStockControl(proposals, dropped, map));
