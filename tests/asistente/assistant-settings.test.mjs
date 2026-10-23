@@ -96,3 +96,25 @@ test('solo adjunta configuración en consultas pertinentes y respuestas breves d
  assert.equal(C.configurationIntent('hazlo',false),false);
  assert.equal(C.configurationIntent('¿Cuánto vendí hoy?',true),false);
 });
+test('regresión captura Web196: configurar → interfas → Color → Azul conserva herramienta y valores',()=>{
+ let previous=false;
+ for(const text of ['Una pregunta puedes configurar','Puedes cambiar la interfas','Color','Azul']){
+  previous=C.configurationIntent(text,previous);assert.equal(previous,true,text);
+  const context=sanitizeContext({products:[],settings:previous?snapshot:undefined},'owner');
+  const req=buildDeepSeekRequest({role:'owner',ctx:context,history:[],text});
+  assert.ok(req.tools.some(t=>t.function.name==='configurar_app'),text);
+  assert.match(JSON.stringify(req.messages),/Color y estilo/);
+  assert.equal(context.settings.tema,'verde');
+ }
+ const card=proposal('tema','azul');assert.equal(card.type,'configuracion');assert.equal(card.antes,'verde');assert.equal(card.valor,'azul');assert.equal(card.needsConfirm,true);
+ assert.equal(C.configurationIntent('¿Cuánto vendí hoy?',previous),false);
+});
+test('Color y colores admitidos mantienen catálogo aun sin snapshot; empleados siguen sin herramienta',()=>{
+ for(const text of ['Color','Qué colores hay','Pon azul','Celeste','Verde esmeralda','Naranja','Simple claro']){
+  assert.equal(C.configurationIntent(text,false),true,text);
+  const req=buildDeepSeekRequest({role:'owner',ctx:sanitizeContext({products:[]},'owner'),history:[],text});
+  assert.ok(req.tools.some(t=>t.function.name==='configurar_app'),text);
+  const denied=buildDeepSeekRequest({role:'empleado:completo+costos',ctx:sanitizeContext({products:[],settings:snapshot},'empleado:completo+costos'),history:[],text});
+  assert.ok(!denied.tools.some(t=>t.function.name==='configurar_app'),text);
+ }
+});
