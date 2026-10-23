@@ -73,3 +73,15 @@ test('directQueryReply: CAJ/CLI «solo la tabla» (método, gastos, quién debe)
   assert.equal(directQueryReply({ ...base('caja_abierta', 'cuanto se fue en gastos hoy'), focused: 'Gastos de hoy en la caja: S/ 12.00.' }), 'Gastos de hoy en la caja: S/ 12.00.');
   assert.equal(directQueryReply(base('ventas_periodo', 'cuanto vendi el 2026-10-20')), 'Ventas 2026-10-23: S/ 216.90 en 10 ventas.', 'una fecha no cuenta como número de la pregunta');
 });
+
+// (merge de prueba con #984, VEN-027) «el 31 de septiembre» (con p) dejaba el 31 como «número de la pregunta» y la respuesta directa con el
+// aviso «no existe» se perdía en una segunda llamada. Los meses (septiembre/setiembre) y los periodos («últimos 7 días») no son números de la pregunta.
+test('directQueryReply: fechas y periodos con número siguen directos (septiembre, setiembre, «últimos 7 días»)', () => {
+  const base = (tipo, text) => ({ result: { content: '', calls: [{ name: 'consultar' }] }, proposals: [{ type: 'consulta' }], dropped: [],
+    consultas: [{ query: { tipo }, result: { texto: 'Ventas: S/ 10.00.' } }], queryCut: false, text });
+  for (const text of ['cuanto vendi el 31 de septiembre', 'cuanto vendi el 15 de setiembre de 2026', 'cuanto vendi el 3 de Septiembre',
+    'cuanto vendi los ultimos 7 dias', 'ventas de las ultimas 2 semanas', 'cuanto vendi hace 3 días']) {
+    assert.equal(directQueryReply(base('ventas_periodo', text)), 'Ventas: S/ 10.00.', text);
+  }
+  assert.equal(directQueryReply(base('stock_producto', 'cuanto me falta para tener 30 de arroz')), null, 'un número de cantidad sigue yendo al modelo');
+});

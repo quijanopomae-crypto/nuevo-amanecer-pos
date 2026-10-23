@@ -2860,7 +2860,7 @@ const EXPLAIN_ASK = /por\s*qu[eé]|explica|expl[ií]came|recomien|consej|suger|c
 // - un número que no es fecha («para tener 20», «1000 cajas»);  - compra o llegada de mercadería («me llegó…», «compré…», «cuánto tengo que comprar»);
 // - margen, ganancia o costo con una consulta que no es de ganancia;  - método de pago, gastos, devoluciones, cobros o «quién» en ventas, caja,
 //   resumen o deudas (sin frase enfocada del servidor: pos-assistant-caja-foco.js).
-const DATE_NUM = /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|se?tiembre|octubre|noviembre|diciembre)\b|\b(?:19|20)\d{2}\b/gi;
+const DATE_NUM = /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|sep?tiembre|octubre|noviembre|diciembre)\b|\b(?:19|20)\d{2}\b|\b\d{1,3}\s+(?:d[ií]as?|semanas?|mes(?:es)?|a[ñn]os?)\b/gi;
 const DIRECT_BUY = /\bcompr[eéoa]|\bcomprar|\blleg[oóa]|\bme\s+trajeron|\brecib[ií]|\bpedid[oa]|\bencarg|\brepon|\bpara\s+tener\b/i;
 const DIRECT_COST = /margen|ganancia|\bgan(?:o|é|e)(?![\wáéíóúñ])|\bganamos\b|utilidad|rentab|\bcostos?\b|\bme\s+cuesta/i;
 const DIRECT_DETAIL = /efectivo|\byape\b|\bplin\b|transferencia|cr[eé]dito|fiad|\bgast|devol|anulaci|\bcobr|\bingres|\begres|qui[eé]n(?:es)?\b/i;
