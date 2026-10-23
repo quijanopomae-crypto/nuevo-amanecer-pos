@@ -13,10 +13,11 @@
   if (!doc || !C || root.NA_ASISTENTE) return;
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
+  var configurationTurn = false;
   var history = [], invoiceMemory = null, state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   // Memoria de la charla (#946): hasta memoria.max_bytes del servidor; lo viejo se resume (resumen_sugerido -> «resumen»). Solo en memoria,
   // nunca en el almacenamiento del aparato; se borra con «Nueva conversación». queued: lo escrito mientras se respondía (sale al terminar).
-  var mem = C.memNew ? C.memNew() : null, queued = null, queuedNote = null, shownSigs = {}, turnNo = 0;
+  var mem = C.memNew ? C.memNew() : null, queued = null, queuedNote = null, shownSigs = {}, turnNo = 0; configurationTurn = false;
   var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -695,7 +696,7 @@
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
     history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
-    mem = C.memNew ? C.memNew() : null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0;
+    mem = C.memNew ? C.memNew() : null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0; configurationTurn = false;
   }
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
@@ -938,7 +939,7 @@
   // «Nueva conversación»: se olvida la charla (historial, resumen, factura en memoria) y la pantalla del chat vuelve a empezar.
   function newChat() {
     if (busy || !msgsEl) return;
-    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; liveCard = null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0;
+    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; liveCard = null; queued = null; queuedNote = null; shownSigs = {}; turnNo = 0; configurationTurn = false;
     mem = C.memNew ? C.memNew() : null;
     try { gate.forgetAll && gate.forgetAll(); } catch (_) {}
     [].slice.call(msgsEl.children).forEach(function (n) { if (n !== newBtn) n.remove(); }); if (newBtn) newBtn.hidden = true;
@@ -981,9 +982,10 @@
     var role = isOwnerAccess() ? 'owner' : 'employee', mreq = null;
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos(), deps.proveedores ? deps.proveedores() : []) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
-    if (isOwnerAccess()) {
+    configurationTurn = C.configurationIntent(text, configurationTurn);
+    if (isOwnerAccess() && configurationTurn) {
       var configPanel=panelEl, configApi=root.NA_CONFIG_V9;
-      if(!configApi&&/configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/i.test(text)) configApi=await configurationApi();
+      if(!configApi) configApi=await configurationApi();
       if(panelEl!==configPanel) return;
       if(isOwnerAccess()&&configApi&&configApi.assistantSnapshot) body.context.settings=configApi.assistantSnapshot();
     }

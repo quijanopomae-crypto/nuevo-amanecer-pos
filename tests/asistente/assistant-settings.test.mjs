@@ -88,3 +88,11 @@ test('lector espera su guardado existente y detecta rollback antes de anunciar �
  const p=h.root.NA_CONFIG_V9.assistantApply({ajuste:'lector_sonido',antes:true,valor:false}).then(r=>{finished=true;return r;});
  await new Promise(r=>setImmediate(r));assert.equal(finished,false);release();assert.equal((await p).ok,false);assert.equal(scanner.sound,true);
 });
+test('solo adjunta configuración en consultas pertinentes y respuestas breves de seguimiento',()=>{
+ assert.equal(C.configurationIntent('Cambia al modo oscuro',false),true);
+ assert.equal(C.configurationIntent('115',true),true);
+ assert.equal(C.configurationIntent('hazlo',true),true);
+ assert.equal(C.configurationIntent('115',false),false);
+ assert.equal(C.configurationIntent('hazlo',false),false);
+ assert.equal(C.configurationIntent('¿Cuánto vendí hoy?',true),false);
+});
