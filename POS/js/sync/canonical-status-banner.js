@@ -46,9 +46,12 @@
       }
     } catch (_) {}
     try {
-      var snap = typeof c.snapshot === 'function' ? c.snapshot() : null;
+      // Solo las sesiones de caja (copia chica); si el cliente es antiguo, cae a la copia completa.
+      var sessions = null;
+      if (typeof c.cashSessionsSnapshot === 'function') sessions = c.cashSessionsSnapshot();
+      else if (typeof c.snapshot === 'function') { var snap = c.snapshot(); sessions = snap ? snap.cashSessions : null; }
       var adapter = root.NuevoAmanecerCanonicalUIAdapter;
-      var cash = snap && adapter && typeof adapter.cashState === 'function' ? adapter.cashState(snap.cashSessions) : null;
+      var cash = sessions && adapter && typeof adapter.cashState === 'function' ? adapter.cashState(sessions) : null;
       if (cash && cash.abierta && cash.fechaApertura && cash.fechaApertura !== today()) {
         state.otherDay = cash.fechaApertura; state.items.push('caja abierta del ' + cash.fechaApertura);
       }
@@ -162,13 +165,14 @@
     return true;
   }
   var ticks = 0;
-  function tick() { if (++ticks % 5 === 0) render(); retryPendingPayment().catch(function () {}); }
+  function tick() { if (++ticks % 5 === 0 && !(root.document && root.document.hidden)) render(); retryPendingPayment().catch(function () {}); }
 
   var timer = null;
   function start() {
     if (timer || typeof root.addEventListener !== 'function') return;
     root.addEventListener('na:canonical-updated', render);
     root.addEventListener('offline', render);
+    try { if (root.document && typeof root.document.addEventListener === 'function') root.document.addEventListener('visibilitychange', function () { if (!root.document.hidden) render(); }); } catch (_) {}
     root.addEventListener('online', function () { setTimeout(retryOnReconnect, 1500); });
     timer = setInterval(tick, 1000);
     render();
