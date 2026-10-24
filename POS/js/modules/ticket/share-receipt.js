@@ -102,7 +102,7 @@
     if(!customerId||customerId==='null'||customerId==='undefined')return null;
     const name=String(customer.nombre||customer.name||sale.clienteNombre||'').trim();
     if(customer.generico===true||customer.generic===true||GENERIC_CUSTOMER.test(name))return null;
-    const thisSaleId=data.kind==='credit'?creditSaleId(cr):String(sale.id||'');
+    const thisSaleId=data.kind==='credit'?creditSaleId(cr):saleKey(sale);
     const thisCreditId=cr&&cr.id!==undefined&&cr.id!==null?String(cr.id):'';
     const isThis=row=>{const sid=creditSaleId(row),id=row?.id===undefined||row?.id===null?'':String(row.id);return(thisSaleId&&(sid===thisSaleId||id==='pending:'+thisSaleId))||(thisCreditId&&id===thisCreditId);};
     const confirmed=credits().filter(row=>row&&creditCustomerId(row)===customerId);
@@ -135,7 +135,7 @@
   function ticketExtrasForSale(sale){
     if(!sale||sale._naReceiptContext?.kind==='payment'||(sale.metodo!=='credito'&&sale.metodoPago!=='credito'))return null;
     const options=sale._naReceiptContext||{};
-    const credit=options.credit&&Object.keys(options.credit).length?options.credit:(credits().find(c=>creditSaleId(c)===String(sale.id))||{});
+    const credit=options.credit&&Object.keys(options.credit).length?options.credit:(credits().find(c=>creditSaleId(c)===saleKey(sale))||{});
     const customer=options.customer||customerFor(sale.clienteId??sale.customer_id??sale.cliente?.id)||{};
     const data={kind:options.kind||'sale',sale,credit,customer,fresh:options.fresh===true,pendingSync:options.pendingSync===true||String(sale.status||'')==='PENDING_SYNC'};
     const summary=accountSummary(data,sale,credit);
@@ -159,6 +159,34 @@
     return out;
   }
   function wrap(text,width){const out=[];let line='';for(const word of String(text).split(/\s+/).filter(Boolean)){if(!line)line=word;else if((line+' '+word).length<=width)line+=' '+word;else{out.push(line);line=word;}}if(line)out.push(line);return out.flatMap(l=>{const parts=[];for(let i=0;i<l.length;i+=width)parts.push(l.slice(i,i+width));return parts;});}
+  // Venta aún en la cola local (na_canonical_sale_outbox_v1): el número es
+  // provisional (el servidor puede renumerarla al sincronizar), así que el
+  // comprobante compartido lleva la misma marca que el ticket pendiente.
+  function saleKey(sale){return String(sale?.provisionalSaleId||sale?.id||'');}
+  function saleOperation(sale){return String(sale?.operation_id||sale?.operation||'');}
+  function outboxHas(operationId){
+    const outbox=root.NuevoAmanecerCanonicalSaleOutbox;
+    if(!outbox||typeof outbox.snapshot!=='function')return null;
+    try{const intents=outbox.snapshot()?.intents;return Array.isArray(intents)?intents.some(i=>String(i?.operation_id||'')===operationId):null;}catch(_){return null;}
+  }
+  function pendingOperation(data,sale){
+    if(data.kind!=='sale')return'';
+    const op=saleOperation(sale);if(!op||data.confirmedOperation===op)return'';
+    const queued=outboxHas(op);
+    if(queued!==null)return queued?op:'';
+    return data.pendingSync===true||sale.pendingSync===true?op:'';
+  }
+  function ticketSaleFor(data,sale){
+    const op=pendingOperation(data,sale);
+    if(op)return{op,sale:{...sale,id:'PROVISIONAL',provisionalSaleId:saleKey(sale),status:'PENDING_SYNC',pendingSync:true,pendingOperationRef:op.replace(/[^0-9a-z]/gi,'').slice(0,8).toUpperCase()}};
+    if(sale.pendingSync!==true)return{op:'',sale};
+    // Ya sincronizada: número final de la venta confirmada, sin marca.
+    const confirmed=sales().find(s=>saleOperation(s)===saleOperation(sale)&&s.pendingSync!==true);
+    const final={...(confirmed||sale)};if(confirmed){['clienteNombre','clienteDni','fecha','hora','cajero','cajeroNombre'].forEach(k=>{if(final[k]===undefined)final[k]=sale[k];});}
+    else{final.id=sale.provisionalSaleId||sale.id;}
+    delete final.pendingSync;delete final.pendingOperationRef;delete final.provisionalSaleId;if(final.status==='PENDING_SYNC')delete final.status;
+    return{op:'',sale:final};
+  }
   function build(input){
     const data=copy(input),customer=data.customer||{},cr=data.credit||{},pay=data.payment||{};
     if(pay.saldoAntes===undefined)pay.saldoAntes=pay.saldoAnterior;if(pay.saldoDespues===undefined)pay.saldoDespues=pay.saldoActual;
@@ -171,7 +199,8 @@
     const generator=root._naBuildThermalTicket;
     if(typeof generator!=='function')throw new Error('Generador de ticket no disponible');
     // The share receipt appends its own account block after the credit fields.
-    const built=generator({...sale,_naSkipAccountSummary:true,_naReceiptContext:{kind:data.kind,credit:cr,customer,fresh:data.fresh===true,pendingSync:data.pendingSync===true,due:data.due}},false);let lines=built.lines.slice();const width=built.width||42;
+    const ticket=ticketSaleFor(data,sale);
+    const built=generator({...ticket.sale,_naSkipAccountSummary:true,_naReceiptContext:{kind:data.kind,credit:cr,customer,fresh:data.fresh===true,pendingSync:data.pendingSync===true,due:data.due}},false);let lines=built.lines.slice();const width=built.width||42;
     const field=(label,value)=>{const text=label+': '+value;for(let start=0;start<text.length;start+=width)lines.push(text.slice(start,start+width));};
     if(data.kind==='payment'){
       // Payment receipt contains the original purchase, explicitly labeled;
@@ -205,7 +234,7 @@
     if(data.kind!=='payment'&&sale.cajeroNombre&&!/^(Cajero|Histórico)$/.test(sale.cajeroNombre)&&!lines.some(l=>l.includes(sale.cajeroNombre)))field('Atendido por',sale.cajeroNombre);
     // Estado de outbox permanece interno; nunca se imprime ni se comparte.
     if(!root._naF11ReceiptZonesEnabled&&data.kind!=='payment'){const summary=accountSummary(data,sale,cr);if(summary)accountLines(summary,width).forEach(line=>lines.push(line));}
-    return{kind:data.kind,id:String((data.kind==='payment'&&(pay.id||pay.pagoId||pay.operation_id))||sale.id||cr.id||'comprobante'),customerName:sale.clienteNombre||'Sin cliente',phone:normalizePhone(customer.tel||customer.phone||''),lines,text:lines.join('\n'),width,mm:built.mm||80};
+    return{kind:data.kind,id:String((data.kind==='payment'&&(pay.id||pay.pagoId||pay.operation_id))||(ticket.op?'PROVISIONAL-'+ticket.sale.pendingOperationRef:ticket.sale.id)||cr.id||'comprobante'),pendingOperation:ticket.op,customerName:sale.clienteNombre||'Sin cliente',phone:normalizePhone(customer.tel||customer.phone||''),lines,text:lines.join('\n'),width,mm:built.mm||80};
   }
   function pdf(pages){
     if(!pages.length)throw new Error('PDF sin páginas');
@@ -307,7 +336,7 @@
   function open(input,automatic=false){
     if(automatic&&!settings().ask)return false;
     const receipt=build(input),overlay=ensureModal();returnFocus=root.document.activeElement;
-    active={receipt,format:settings().format,file:null};busy=false;
+    active={receipt,input,format:settings().format,file:null};busy=false;
     root.document.getElementById('naReceiptClient').textContent=receipt.customerName;
     root.document.getElementById('naReceiptPhone').value=receipt.phone?'+'+receipt.phone:'';
     root.document.getElementById('naReceiptFormat').value=active.format;
@@ -335,6 +364,17 @@
     }catch(error){if(error.name!=='AbortError')notify('No se pudo compartir. Puedes descargar el comprobante.');}
     finally{busy=false;if(active===state)send.disabled=false;}
   }
+  // Si la venta se confirma con el diálogo abierto, el texto pasa al número
+  // final (el servidor puede haberla renumerado) y pierde la marca.
+  function refreshConfirmed(event){
+    const receipt=event?.detail?.receipt,state=active;
+    if(!state||busy||!state.receipt.pendingOperation||!receipt||String(receipt.operation_id||'')!==state.receipt.pendingOperation)return;
+    const sale={...(state.input.sale||{})};sale.id=String(receipt.sale_id||sale.provisionalSaleId||sale.id||'');delete sale.pendingSync;delete sale.pendingOperationRef;delete sale.provisionalSaleId;if(sale.status==='PENDING_SYNC')delete sale.status;
+    const input={...state.input,pendingSync:false,confirmedOperation:state.receipt.pendingOperation,sale};
+    try{state.input=input;state.receipt=build(input);}catch(error){root.console?.warn('[Comprobante]',error.message);return;}
+    root.document.getElementById('naReceiptText').textContent=state.receipt.text;prepare();
+  }
+  root.addEventListener?.('na:canonical-sale-receipt',refreshConfirmed);
   function safely(input){try{open(input,true);}catch(error){notify('Operación guardada. No se pudo preparar el comprobante; reintenta desde el historial.');root.console?.warn('[Comprobante]',error.message);}}
   function customers(){try{if(typeof clientes!=='undefined')return clientes;}catch(_){}return root.clientes||[];}
   function sales(){try{if(typeof ventas!=='undefined')return ventas;}catch(_){}return root.ventas||[];}
@@ -375,7 +415,7 @@
       try{
         if(!v||v._naSkipAccountSummary||!built||!Array.isArray(built.lines))return built;
         if(v.metodo!=='credito'&&v.metodoPago!=='credito')return built;
-        const credit=credits().find(cr=>creditSaleId(cr)===String(v.id))||{};
+        const credit=credits().find(cr=>creditSaleId(cr)===saleKey(v))||{};
         const summary=accountSummary({kind:'sale',sale:v,credit,customer:customerFor(v.clienteId??v.customer_id??v.cliente?.id)||{},pendingSync:String(v.status||'')==='PENDING_SYNC'},v,credit);
         if(!summary)return built;
         const width=built.width||42,ascii=line=>String(line).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[¡]/g,'!').replace(/[¿]/g,'?').replace(/[^\x20-\x7E]/g,'').replace(/\s+$/,'');
