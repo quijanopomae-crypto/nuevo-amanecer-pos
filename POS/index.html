@@ -97,6 +97,7 @@
     <link rel="stylesheet" href="css/kardex.css">
     <link rel="stylesheet" href="css/ventas-stock.css">
     <link rel="stylesheet" href="css/reporte-arqueo.css">
+    <link rel="stylesheet" href="css/panel-tesoreria.css">
     <link rel="stylesheet" href="css/historial-compras.css">
     <link rel="stylesheet" href="css/price-history.css">
     <link rel="stylesheet" href="css/etiquetas-precios.css">
@@ -600,6 +601,14 @@
     </div>
     <p class="ra-status" data-ra-status role="status" aria-live="polite"></p>
     <div data-ra-content></div>
+    <section class="pt-section" data-pt-section aria-labelledby="panelTesoreriaTitle" hidden>
+      <details class="pt-details" data-pt-details>
+      <summary><h2 id="panelTesoreriaTitle">Panel de tesorería</h2></summary>
+      <p class="ra-description">Efectivo en cada caja abierta y lo cobrado por Yape, Plin y transferencia pendiente de acreditar. Solo lectura.</p>
+      <p class="ra-status" data-pt-status role="status" aria-live="polite"></p>
+      <div data-pt-content></div>
+      </details>
+    </section>
   </div>
 </div>
 <div class="page" id="pageClienteHistorial" aria-labelledby="clienteHistorialTitle">
@@ -1491,6 +1500,7 @@
 <script src="js/modules/kardex.js"></script>
 <script src="js/modules/ventas-stock.js"></script>
 <script src="js/modules/reporte-arqueo.js"></script>
+<script src="js/modules/panel-tesoreria.js"></script>
 <script src="js/inventory/historial-compras.js"></script>
 <script src="js/products/costo-compra-ficha.js"></script>
 <script src="js/modules/etiquetas-precios.js"></script>
