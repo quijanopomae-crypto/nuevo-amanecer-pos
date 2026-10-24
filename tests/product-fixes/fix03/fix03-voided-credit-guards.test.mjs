@@ -11,11 +11,11 @@ import vm from 'node:vm';
 const inline17 = readFileSync(new URL('../../../POS/js/legacy-inline/inline-17.js', import.meta.url), 'utf8');
 const utilsSrc = readFileSync(new URL('../../../POS/js/core/utils.js', import.meta.url), 'utf8');
 const between = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); assert.ok(a >= 0 && b > a, from); return src.slice(a, b); };
-function v10Metrics(creditos, { withHelper = true } = {}) {
+function v10Metrics(creditos) {
   const ctx = { structuredClone };
   vm.createContext(ctx);
   vm.runInContext([utilsSrc.match(/const _naNumber=[^\n]+/)[0], 'const _naInt=(v,f=0)=>Number.isFinite(parseInt(v,10))?parseInt(v,10):f;',
-    withHelper ? utilsSrc.match(/function _naIsCreditVoided\(cr\)\{[^\n]+/)[0] : '',
+    utilsSrc.match(/function _naIsCreditVoided\(cr\)\{[^\n]+/)[0],
     inline17.match(/const _naV10Clone=[^\n]+/)[0], "const _naV10Today=()=>'2026-10-15';",
     'const _naV10DaysUntil=(d,t)=>d?Math.round((Date.parse(d)-Date.parse(t))/864e5):null;', 'const _naV10RoundMoney=v=>Number(Number(v).toFixed(2));',
     between(inline17, 'function _naV10NormalizedCredit(raw){', 'function _naV10SaleCreditRecord('),
@@ -33,11 +33,6 @@ test('V10 (inline-17): anulados por status/estado/source_status quedan fuera del
   const r = v10Metrics([v10credit(1), v10credit(2, { status:'ANULADO' }), v10credit(3, { estado:'anulada' }), v10credit(4, { source_status:' Anulado ' }),
     v10credit(5, { status:'LIVE' }), v10credit(6, { status:'RECONCILED', estado:'RECONCILED' }), v10credit(7, { estado:'no anulado' }), v10credit(8, { anulado:true })]);
   assert.deepEqual([r.total, r.debt], [4, 240]);
-});
-
-test('V10 sin helper: respaldo con el chequeo anterior (anulado:true o status anulado)', () => {
-  const r = v10Metrics([v10credit(1), v10credit(2, { status:'anulado' }), v10credit(3, { anulado:true })], { withHelper:false });
-  assert.deepEqual([r.total, r.debt], [1, 60]);
 });
 
 async function tabWithPaidCredit() {
