@@ -15,6 +15,8 @@ const COPIES = [
   { file: 'POS/js/modules/proximamente.js' },
   { file: 'POS/js/modules/clientes-frecuencia.js', page: 'pageClientesFrecuencia', policy: true, exported: 'NA_CLIENTES_FRECUENCIA' },
   { file: 'POS/js/modules/reporte-arqueo.js', page: 'pageReporteArqueo', policy: true },
+  // #159: sección de medios de pago por turno dentro de pageReporteArqueo (mismo candado).
+  { file: 'POS/js/modules/reporte-medio-pago.js', page: 'pageReporteArqueo', policy: true },
   // #164: panel de tesorería dentro de pageReporteArqueo (candado propio aparte).
   { file: 'POS/js/modules/panel-tesoreria.js', page: 'pageReporteArqueo', policy: true },
   { file: 'POS/js/modules/reporte-productos-vencer.js', page: 'pageReporteProductosVencer', feature: 'reporte-productos-vencer', policy: true, exported: 'NA_REPORTE_PRODUCTOS_VENCER' },

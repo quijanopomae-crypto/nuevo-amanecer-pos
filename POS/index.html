@@ -97,6 +97,7 @@
     <link rel="stylesheet" href="css/kardex.css">
     <link rel="stylesheet" href="css/ventas-stock.css">
     <link rel="stylesheet" href="css/reporte-arqueo.css">
+    <link rel="stylesheet" href="css/reporte-medio-pago.css">
     <link rel="stylesheet" href="css/panel-tesoreria.css">
     <link rel="stylesheet" href="css/historial-compras.css">
     <link rel="stylesheet" href="css/price-history.css">
@@ -601,6 +602,20 @@
     </div>
     <p class="ra-status" data-ra-status role="status" aria-live="polite"></p>
     <div data-ra-content></div>
+    <section class="rmp-section" data-rmp-section aria-labelledby="reporteMedioPagoTitle" hidden>
+      <details class="rmp-details" data-rmp-details>
+      <summary><h2 id="reporteMedioPagoTitle">Movimientos por medio de pago por turno</h2></summary>
+      <p class="ra-description">Ventas y cobros de cada turno cerrado, separados por medio de pago. Solo lectura, con fechas de Lima.</p>
+      <div class="rmp-controls" data-rmp-controls hidden>
+        <label>Desde<input type="date" data-rmp-desde aria-label="Desde (medios de pago)"></label>
+        <label>Hasta<input type="date" data-rmp-hasta aria-label="Hasta (medios de pago)"></label>
+        <label>Cajero<select data-rmp-cajero aria-label="Cajero"><option value="">Todos</option></select></label>
+        <button type="button" data-rmp-export>Exportar CSV</button>
+      </div>
+      <p class="ra-status" data-rmp-status role="status" aria-live="polite"></p>
+      <div data-rmp-content></div>
+      </details>
+    </section>
     <section class="pt-section" data-pt-section aria-labelledby="panelTesoreriaTitle" hidden>
       <details class="pt-details" data-pt-details>
       <summary><h2 id="panelTesoreriaTitle">Panel de tesorería</h2></summary>
@@ -1500,6 +1515,7 @@
 <script src="js/modules/kardex.js"></script>
 <script src="js/modules/ventas-stock.js"></script>
 <script src="js/modules/reporte-arqueo.js"></script>
+<script src="js/modules/reporte-medio-pago.js"></script>
 <script src="js/modules/panel-tesoreria.js"></script>
 <script src="js/inventory/historial-compras.js"></script>
 <script src="js/products/costo-compra-ficha.js"></script>
