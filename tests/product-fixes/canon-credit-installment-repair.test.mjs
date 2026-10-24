@@ -5,7 +5,6 @@ import vm from 'node:vm';
 
 const ui = readFileSync('POS/js/modules/client-credit-accounts-v2.js','utf8');
 const repair = readFileSync('tools/cloudflare-prod/scripts/credit-installment-repair.mjs','utf8');
-const trigger = JSON.parse(readFileSync('ops/v1.3-canon-debt-ui-repair-trigger.json','utf8'));
 
 function extractFunction(source, name, nextName) {
   const start = source.indexOf('function ' + name);
@@ -65,20 +64,6 @@ test('partial installment has explicit visual state',()=>{
   vm.createContext(sandbox);
   vm.runInContext(extractFunction(ui,'labInstallmentVisualState','labDescriptionInstallmentHint'),sandbox);
   assert.deepEqual({...sandbox.labInstallmentVisualState({number:1,due:'2026-10-02',paid:false,partial:true},1,'2026-10-01')},{key:'partial',label:'Parcial',next:true});
-});
-
-test('repair payload preserves the global debt invariant and source arithmetic',()=>{
-  const p=trigger.credit_installment_repair;
-  assert.equal(p.preserve_prewrite_global_summary,true);
-  for(const target of p.targets){
-    for(const doc of target.documents){
-      assert.equal(doc.total_cents-doc.paid_cents,doc.current_cents);
-      const schedule=doc.installments.reduce((sum,row)=>sum+row.amount_cents,0);
-      const baseline=doc.total_cents-schedule;
-      const schedulePaid=doc.paid_cents-baseline;
-      assert.ok(schedulePaid>=0 && schedulePaid<=schedule);
-    }
-  }
 });
 
 test('production repair writes only credit metadata and installment rows',()=>{

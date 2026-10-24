@@ -45,5 +45,5 @@ Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.
 - `.github/workflows/v1.3-prod-browser-cors-hotfix.yml`
 - `.github/workflows/canon-whatsapp-receipts-activation.yml`
 - `.github/workflows/v1.3-live-migration-0018.yml`
-- `.github/workflows/v1.3-turso-prod-cutover.yml` y `.github/workflows/v1.3-turso-prod-direct-cutover.yml`
+- `.github/workflows/v1.3-turso-prod-cutover.yml`
 (No modificar sus `ops/*-trigger.json`.)
