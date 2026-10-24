@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-test.use({ hasTouch: true });
+test.use({ hasTouch: true, serviceWorkers: 'block' });
 // El candado va cerrado por defecto; la prueba lo abre solo en su copia del navegador (no cambia el archivo).
 let abierto = true;
 test.beforeEach(async ({ page }) => {
