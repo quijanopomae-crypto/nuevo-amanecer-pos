@@ -31,7 +31,13 @@
     try { state.offline = !!(root.navigator && root.navigator.onLine === false); } catch (_) {}
     try {
       var intents = o && typeof o.snapshot === 'function' ? (o.snapshot().intents || []) : [];
-      if (intents.length) { state.retrying += intents.length; state.items.push(intents.length === 1 ? '1 venta por enviar' : intents.length + ' ventas por enviar'); }
+      var expired = false; try { expired = !!(o && typeof o.sessionExpired === 'function' && o.sessionExpired()); } catch (_) {}
+      if (expired) state.session = true;
+      if (intents.length) {
+        // Con la sesión vencida no se reintenta: esperan a volver a entrar (no se promete «reintentando»).
+        if (expired) state.waiting = (state.waiting || 0) + intents.length; else state.retrying += intents.length;
+        state.items.push((intents.length === 1 ? '1 venta por enviar' : intents.length + ' ventas por enviar') + (expired ? ' (al volver a iniciar sesión)' : ''));
+      }
     } catch (_) {}
     try {
       var held = o && typeof o.quarantine === 'function' ? (o.quarantine().entries || []).filter(function (e) { return e && e.status === 'QUARANTINED'; }) : [];
@@ -39,11 +45,21 @@
     } catch (_) {}
     try {
       var pending = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null;
-      if (pending && pending.command && pending.command !== 'sale.create') {
-        if (pending.last_error && DEFINITIVE.indexOf(Number(pending.last_status)) !== -1) {
+      var whoNow = null; try { whoNow = typeof c.sessionIdentity === 'function' ? c.sessionIdentity() : null; } catch (_) {}
+      // Solo mientras siga guardada la MISMA sesión vencida; tras volver a entrar se reenvía sola.
+      if (pending && pending.command && pending.auth_failed_identity !== undefined && pending.last_error && (!whoNow || whoNow.key === pending.auth_failed_identity)) {
+        // T-10: sesión vencida: no se promete «reintentando»; se pide volver a entrar (se conserva y se envía después).
+        state.session = true; state.waiting = (state.waiting || 0) + 1; state.items.push('sesión vencida: vuelve a iniciar sesión (1 operación guardada)');
+      } else if (pending && pending.command && pending.command !== 'sale.create') {
+        if (pending.last_error && pending.auth_failed_identity === undefined && DEFINITIVE.indexOf(Number(pending.last_status)) !== -1) {
           state.blocked += 1; state.items.push('1 operación rechazada (' + String(pending.command) + ')');
         } else { state.retrying += 1; state.items.push('1 operación pendiente (' + String(pending.command) + ')'); }
       }
+    } catch (_) {}
+    try {
+      // T-47: operaciones de otra sesión apartadas para revisión del dueño (nunca se borran).
+      var heldOps = typeof c.heldOperations === 'function' ? (c.heldOperations().entries || []).filter(function (e) { return e && e.status === 'HELD'; }) : [];
+      if (heldOps.length) { state.blocked += heldOps.length; state.items.push(heldOps.length === 1 ? (typeof c.describeHeld === 'function' && c.describeHeld(heldOps[0]) || '1 operación en revisión (' + String(heldOps[0].record && heldOps[0].record.command) + ')') : heldOps.length + ' operaciones en revisión'); }
     } catch (_) {}
     try {
       var snap = typeof c.snapshot === 'function' ? c.snapshot() : null;
@@ -57,11 +73,12 @@
   }
 
   function view(state) {
-    var count = state.retrying + state.blocked;
-    if (!count && !state.otherDay && !state.offline) return null;
-    var red = state.blocked > 0 || !!state.otherDay;
+    var waiting = state.waiting || 0, count = state.retrying + state.blocked + waiting;
+    if (!count && !state.otherDay && !state.offline && !state.session) return null;
+    var red = state.blocked > 0 || !!state.otherDay || !!state.session;
     var parts = [];
     if (state.offline) parts.push('Sin conexión · ventas guardadas aquí');
+    if (state.session) parts.push('Sesión vencida: vuelve a iniciar sesión' + (waiting ? ' · ' + (waiting === 1 ? '1 operación guardada' : waiting + ' operaciones guardadas') : ''));
     var review = state.review || 0, otherBlocked = state.blocked - review;
     if (review) parts.push((review === 1 ? '1 venta en revisión' : review + ' ventas en revisión') + ' · no la cobres de nuevo');
     if (otherBlocked > 0) parts.push(otherBlocked === 1 ? '1 operación rechazada o bloqueada' : otherBlocked + ' operaciones rechazadas o bloqueadas');

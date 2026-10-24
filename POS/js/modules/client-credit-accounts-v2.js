@@ -1435,6 +1435,12 @@ function labCategorySummary(client, category) {
         return true;
       } catch (error) {
         var msg = String(error && error.message || error || '');
+        // T-47: el lote lo envió otra sesión de este aparato: quedó apartado (sin borrar) para el dueño.
+        if (/CANONICAL_IDENTITY_(CHANGED|UNCONFIRMED)/.test(msg)) {
+          if (/CHANGED/.test(msg)) naV2DraftClear();
+          if (typeof toast === 'function') toast(/CHANGED/.test(msg) ? 'El abono anterior lo registró otra sesión de este aparato con otro rol (dueño/empleado): quedó en revisión para el dueño. No lo cobres de nuevo.' : 'Comprobando la sesión de este aparato; el abono anterior sigue guardado. Vuelve a intentar en un momento.','error');
+          return false;
+        }
         var network = root.navigator.onLine === false || /fetch|network|timeout|abort|OFFLINE|PENDING/i.test(msg) || (error && error.name === 'TypeError');
         if (!network) {
           // Rechazo definitivo del servidor (nada se registró): se libera para no bloquear la ficha.
