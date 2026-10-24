@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner OK to publish PR #894 (2026-10-21 ~20:53 Lima); approved by all 5 assistants. Merge fb0daf65 adds one line to pos-permissions.js FEATURE_LOCKS ('clientes-deudores-caja': false) plus a Próximamente card; Worker before web. CI green on dcd1e4f7. No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39708986052 success (R2 recovery-drills/2026-10-22T02-01-09Z-fb0daf65….sql). Rollback to dba42e22 (worker 64).",
-  "target_commit": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8",
-  "rollback_ref": "dba42e22eab4b41ec92cbe2c7160d492cefc09a3",
+  "authorization_context": "Owner approved 2026-10-23: 'Enciéndelas todas, con copia antes' / 'pueden encender las 21 funciones de proximamente disponible'. PR #1021 opens only built+wired locks: edicion-masiva-precios, precio-por-margen, edicion-masiva-productos, stock-negativo-configurable (shared pos-permissions.js). DB backup run 40031504740 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "2356dc12fc030869a6feab12136bb5ef7377391b",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 65,
-  "optimization": "FEATURE_LOCK_CLIENTES_DEUDORES_CAJA_894"
+  "attempt": 79,
+  "optimization": "FEATURE_LOCKS_WAVE1",
+  "target_commit": "80314b962b48159c7850e9fc797ea7359244828f"
 }
