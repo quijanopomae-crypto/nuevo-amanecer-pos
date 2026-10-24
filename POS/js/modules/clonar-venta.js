@@ -165,6 +165,8 @@
   }
 
   function init() {
+    // Candado cerrado: no se instala nada (ni observadores ni escuchas). Abrir el candado exige publicar y recargar la app.
+    if (locked()) return;
     var content = doc.getElementById('ventasContent');
     if (content && typeof MutationObserver === 'function') {
       new MutationObserver(function () { decorate(); }).observe(content, { childList: true, subtree: true });

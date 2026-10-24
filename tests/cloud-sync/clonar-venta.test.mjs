@@ -87,3 +87,19 @@ test('sin innerHTML y cableado en index.html, sw.js y permisos', () => {
   assert.match(readFileSync('POS/js/config/pos-permissions.js', 'utf8'), /'clonar-venta': true,/);
   assert.match(source, /featureLocked\(FEATURE\)/);
 });
+
+test('con el candado cerrado (por defecto) clonar-venta no instala observadores ni escuchas al iniciar', () => {
+  let observers = 0, listeners = 0;
+  class MO { constructor() { observers++; } observe() {} }
+  const el = { querySelectorAll: () => [], classList: { contains: () => false } };
+  const doc = { readyState: 'complete', getElementById: () => el, querySelector: () => null, querySelectorAll: () => [], createElement: () => ({}) };
+  const run = (locked) => {
+    observers = 0; listeners = 0;
+    const ctx = vm.createContext({ MutationObserver: MO, document: doc, NA_PERMISSIONS: { featureLocked: () => locked } });
+    ctx.window = ctx; ctx.addEventListener = () => { listeners++; };
+    vm.runInContext(source, ctx);
+    return { observers, listeners };
+  };
+  assert.deepEqual(run(true), { observers: 0, listeners: 0 });
+  assert.ok(run(false).observers >= 1, 'con el candado abierto sí se instala');
+});
