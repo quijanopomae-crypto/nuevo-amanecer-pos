@@ -223,12 +223,12 @@ function _naBuildProductImportPlan(rows){
     if(existing&&touchedIds.has(String(existing.id))){skipped++;warnings.push(`Fila ${r+1}: el producto ${existing.name} ya apareció en otra fila del mismo archivo`);continue;}
     const conflicts=ownCodes.map(code=>({code,owner:_naCatalogCodeOwner(working,code,existing?.id)})).filter(item=>item.owner);
     if(conflicts.length){skipped++;warnings.push(`Fila ${r+1}: ${conflicts[0].code} ya pertenece a ${conflicts[0].owner.name}`);continue;}
-    const controlInventario=_naImportBool(get('inventory'),true),purchaseUnit=blank(get('purchaseUnit'))?'unidad':_naImportPurchaseUnit(get('purchaseUnit')),purchaseFactor=blank(get('purchaseFactor'))?1:Math.max(0.001,_naNumber(get('purchaseFactor'),1)),data={name,sku,precio:Math.max(0,price),unidadCompra:purchaseUnit,factorCompra:purchaseUnit==='unidad'?1:purchaseFactor,descripcion:blank(get('description'))?'':_naClean(get('description')),marca:blank(get('brand'))?'Sin marca':_naClean(get('brand'))||'Sin marca',cat:_naImportCategory(get('cat'),name),unidad:_naImportUnit(get('unit')),controlInventario,incluyeIGV:_naImportBool(get('igv'),true)};
+    const controlInventario=_naImportBool(get('inventory'),true),purchaseUnit=blank(get('purchaseUnit'))?'unidad':_naImportPurchaseUnit(get('purchaseUnit')),purchaseFactor=blank(get('purchaseFactor'))?1:Math.max(0.001,_naNumber(get('purchaseFactor'),1)),data={name,sku,precio:Math.max(0,price),unidadCompra:purchaseUnit,factorCompra:purchaseUnit==='unidad'?1:purchaseFactor,descripcion:blank(get('description'))?'':_naClean(get('description')),marca:blank(get('brand'))?'Sin marca':_naClean(get('brand'))||'Sin marca',cat:_naImportCategory(get('cat'),name),unidad:blank(get('unit'))&&existing?_naClean(existing.unidad)||'unidad':_naImportUnit(get('unit')),controlInventario,incluyeIGV:_naImportBool(get('igv'),true)};
     if(!blank(get('barcode')))data.barcode=barcode;
     // V2A: los códigos alternativos se resuelven por rama — update FUSIONA el histórico
     // (nunca lo reemplaza ni lo vacía) y add respeta el tope de escritura de 7 totales.
     if(!blank(get('cost')))data.costo=Math.max(0,_naNumber(get('cost')));
-    if(!blank(get('stock')))data.stock=controlInventario?Math.max(0,_naInt(get('stock'))):0;
+    if(!blank(get('stock')))data.stock=controlInventario?Math.max(0,_naStockQty(data.unidad,get('stock'))):0;
     if(!blank(get('min')))data.stockMin=controlInventario?Math.max(0,_naInt(get('min'))):0;
     if(!blank(get('due'))){const due=_naImportDate(get('due'));if(!due&&String(get('due')).trim()){warnings.push(`Fila ${r+1}: vencimiento no reconocido`);}data.venc=controlInventario?due:null;}
     if(!blank(get('icon')))data.icon=_naClean(get('icon')).slice(0,8)||'📦';
@@ -268,10 +268,10 @@ function _naRenderProductImportPreview(plan,fileName){const box=document.getElem
 function clearProductImportPreview(){_naPendingProductImport=null;const box=document.getElementById('importPreview');if(box){box.classList.remove('show');box.innerHTML='';}}
 async function _naReadProductImportFile(file){if(!file)throw new Error('Selecciona un archivo');if(file.size>_NA_IMPORT_MAX_BYTES)throw new Error('El archivo supera el límite de 8 MB');const ext=file.name.split('.').pop().toLowerCase();if(!['csv','txt','xlsx','xls'].includes(ext))throw new Error('Formato no compatible. Usa CSV, XLSX o XLS');if(ext==='csv'||ext==='txt')return _naParseCSV(await file.text());const buffer=await file.arrayBuffer();if(typeof XLSX!=='undefined'){const data=new Uint8Array(buffer),book=XLSX.read(data,{type:'array',cellDates:true}),sheet=book.Sheets[book.SheetNames[0]];return XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:''});}return await _naParseXlsxBasic(buffer);}
 importProducts=async function(){try{const file=document.getElementById('importFile')?.files?.[0];if(!file)throw new Error('Selecciona un archivo');clearProductImportPreview();const rows=await _naReadProductImportFile(file),plan=_naBuildProductImportPlan(rows);_naPendingProductImport={rows,fileName:file.name,analyzedAt:Date.now()};_naLastImportReport=plan;_naRenderProductImportPreview(plan,file.name);toast(`Análisis listo: ${plan.added} nuevos, ${plan.updated} actualizaciones y ${plan.skipped} omitidos`,'success');}catch(error){console.error('[Importación] Análisis rechazado:',error?.message||error);clearProductImportPreview();toast(error?.message||'No se pudo analizar el archivo','error');}};
-async function confirmProductImport(){if(isModuleLocked('productos')||isModuleLocked('importacion')){toast('La importación está bloqueada','error');return;}if(!_naPendingProductImport){toast('Primero analiza un archivo','error');return;}const backup={productos:_naClone(productos),inventoryMovements:_naClone(inventoryMovements)};try{const plan=_naBuildProductImportPlan(_naPendingProductImport.rows);if(!plan.actions.length){toast('No hay productos válidos para importar','error');return;}for(const action of plan.actions){if(action.type==='update'){const index=productos.findIndex(p=>String(p.id)===String(action.id));if(index<0)throw new Error(`El producto de la fila ${action.row} cambió después del análisis`);const previous=productos[index],next={...previous,...action.data},beforeStock=_naInt(previous.stock),targetStock=_naTracksStock(next)?_naInt(next.stock):0,{stock:_ignoredTargetStock,...persistedData}=next,staged={...persistedData,stock:beforeStock},delta=targetStock-beforeStock;
+async function confirmProductImport(){if(isModuleLocked('productos')||isModuleLocked('importacion')){toast('La importación está bloqueada','error');return;}if(!_naPendingProductImport){toast('Primero analiza un archivo','error');return;}const backup={productos:_naClone(productos),inventoryMovements:_naClone(inventoryMovements)};try{const plan=_naBuildProductImportPlan(_naPendingProductImport.rows);if(!plan.actions.length){toast('No hay productos válidos para importar','error');return;}for(const action of plan.actions){if(action.type==='update'){const index=productos.findIndex(p=>String(p.id)===String(action.id));if(index<0)throw new Error(`El producto de la fila ${action.row} cambió después del análisis`);const previous=productos[index],next={...previous,...action.data},beforeStock=_naStockQty(previous.unidad,previous.stock),targetStock=_naTracksStock(next)?_naStockQty(next.unidad,next.stock):0,{stock:_ignoredTargetStock,...persistedData}=next,staged={...persistedData,stock:beforeStock},delta=_naIsDecimalUnit(next.unidad)?Math.round((targetStock-beforeStock)*1e6)/1e6:targetStock-beforeStock;
 // FIX04: el producto conserva el stock previo hasta que el ledger aplica exactamente el delta al objetivo.
 if(delta!==0){staged.controlInventario=true;productos[index]=staged;const outcome=applyInventoryMovement({productId:staged.id,type:'IMPORT',delta,reason:`Importación de catálogo: stock fijado en ${targetStock}`,source:'PRODUCT_IMPORT',referenceId:String(staged.id)});if(!outcome.ok)throw new Error(outcome.message||'Movimiento de inventario bloqueado');}staged.controlInventario=next.controlInventario;productos[index]=staged;}
-else{const targetStock=_naTracksStock(action.product)?_naInt(action.product.stock):0,{stock:_ignoredTargetStock,...persistedData}=_naClone(action.product),created={...persistedData,stock:0};productos.push(created);if(targetStock>0){const outcome=applyInventoryMovement({productId:created.id,type:'ALTA',delta:targetStock,reason:`Importación de catálogo: alta con stock inicial ${targetStock}`,source:'PRODUCT_IMPORT',referenceId:String(created.id)});if(!outcome.ok)throw new Error(outcome.message||'Movimiento de inventario bloqueado');}}}_naNormalizeData();const persistResult=await saveAllData();if(!_naWasPersisted(persistResult))throw new Error('No se pudo verificar el guardado permanente');try{if(globalThis.NA_PRICE_HISTORY)globalThis.NA_PRICE_HISTORY.recordCatalogDiff(backup.productos,productos,'importacion');}catch(_){}invRender();posRender();cfgUpdateStats();updateDashboard();_naLastImportReport=plan;clearProductImportPreview();const input=document.getElementById('importFile');if(input)input.value='';toast(`Importación completada: ${plan.added} nuevos, ${plan.updated} actualizados y ${plan.skipped} omitidos`,'success');}catch(error){productos=backup.productos;inventoryMovements=backup.inventoryMovements;await saveAllData();invRender();posRender();cfgUpdateStats();console.error('[Importación] Se restauró el catálogo anterior:',error?.message||error);toast(`Importación cancelada: ${error?.message||'no se pudo guardar'}`,'error');}}
+else{const targetStock=_naTracksStock(action.product)?_naStockQty(action.product.unidad,action.product.stock):0,{stock:_ignoredTargetStock,...persistedData}=_naClone(action.product),created={...persistedData,stock:0};productos.push(created);if(targetStock>0){const outcome=applyInventoryMovement({productId:created.id,type:'ALTA',delta:targetStock,reason:`Importación de catálogo: alta con stock inicial ${targetStock}`,source:'PRODUCT_IMPORT',referenceId:String(created.id)});if(!outcome.ok)throw new Error(outcome.message||'Movimiento de inventario bloqueado');}}}_naNormalizeData();const persistResult=await saveAllData();if(!_naWasPersisted(persistResult))throw new Error('No se pudo verificar el guardado permanente');try{if(globalThis.NA_PRICE_HISTORY)globalThis.NA_PRICE_HISTORY.recordCatalogDiff(backup.productos,productos,'importacion');}catch(_){}invRender();posRender();cfgUpdateStats();updateDashboard();_naLastImportReport=plan;clearProductImportPreview();const input=document.getElementById('importFile');if(input)input.value='';toast(`Importación completada: ${plan.added} nuevos, ${plan.updated} actualizados y ${plan.skipped} omitidos`,'success');}catch(error){productos=backup.productos;inventoryMovements=backup.inventoryMovements;await saveAllData();invRender();posRender();cfgUpdateStats();console.error('[Importación] Se restauró el catálogo anterior:',error?.message||error);toast(`Importación cancelada: ${error?.message||'no se pudo guardar'}`,'error');}}
 function _naDownloadBlob(blob,fileName){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=fileName;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function _naCsvCell(value){const text=isPlaceholderDoc(value)?'':String(value??'');return/[";,\n\r]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;}
 function _naProductsExportRows(){return productos.map(p=>({ID:p.id,Nombre:p.name,SKU:p.sku,'Código de barras':p.barcode||'','Códigos alternativos':_naProductAltCodes(p).join(' | '),Descripción:p.descripcion||'',Marca:p.marca||'','Categoría':_naCategoryLabel(p.cat),'Unidad de venta':p.unidad||'unidad','Unidad de compra':p.unidadCompra||(p.unidCaja?'caja':'unidad'),'Unidades por presentación':p.factorCompra||p.unidCaja||1,Costo:_naNumber(p.costo),Precio:_naNumber(p.precio),'Precio por caja':p.precioCaja||'','Unidades por caja':p.unidCaja||'',Stock:_naNumber(p.stock),'Stock mínimo':_naNumber(p.stockMin),'Fecha de vencimiento':p.venc||'','Control de inventario':p.controlInventario===false?'No':'Sí','Incluye IGV':p.incluyeIGV===false?'No':'Sí',Icono:p.icon||'📦'}));}
@@ -813,6 +813,31 @@ cliRender=function(){
   try{window.dispatchEvent(new CustomEvent('na:clients-rendered'));}catch(_){}
 };
 window.addEventListener('offline',()=>{_naCanonicalTransportConnected=false;if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),badge=document.getElementById('cliAuthorityBadge');_naSetHeaderConnectionState('disconnected','Desconectado');/* Etapa 1.6 (auditoría 2026-10-12, Bot 3 P1-1): una réplica ya validada (remote/revalidated) se trata igual que la caché: la lista de clientes queda visible en solo lectura; solo sin datos se muestra "Canónico no disponible". */if(state.source!=='none'&&_naCanonicalViewApplied){if(badge){badge.hidden=false;badge.textContent='Sin conexión · datos guardados';}_naSchedulePageRender(_naActivePageId());}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());}}});
+// Cabecera #saveStatus coherente con la franja de estado: «Guardado en la nube» solo si NO hay nada esperando
+// envío en las colas canónicas (ventas: canonical-sale-outbox; abonos/diario: canonical-client). Cuenta lo
+// mismo que canonical-status-banner.js (compute) para que cabecera y franja no se contradigan.
+let _naSaveStatusCloud=false;
+function _naCanonicalQueueCounts(){
+  try{const b=window.NuevoAmanecerStatusBanner;if(b&&typeof b.compute==='function'){const st=b.compute();return{retrying:Number(st.retrying)||0,blocked:Number(st.blocked)||0};}}catch(_){}
+  let retrying=0,blocked=0;
+  try{const o=window.NuevoAmanecerCanonicalSaleOutbox;if(o&&typeof o.snapshot==='function')retrying+=(o.snapshot().intents||[]).length;if(o&&typeof o.quarantine==='function')blocked+=(o.quarantine().entries||[]).filter(e=>e&&e.status==='QUARANTINED').length;}catch(_){}
+  try{const p=typeof NuevoAmanecerCanonical!=='undefined'&&typeof NuevoAmanecerCanonical.pendingSnapshot==='function'?NuevoAmanecerCanonical.pendingSnapshot():null;if(p&&p.command&&p.command!=='sale.create')retrying+=1;}catch(_){}
+  return{retrying,blocked};
+}
+// force=true solo tras una lectura canónica correcta (na:canonical-updated); la franja (cada 5 s y en
+// online/offline) lo llama sin force y entonces no pisa un texto que puso otro módulo (p. ej. aviso de guardado).
+function _naRenderCanonicalSaveStatus(force){
+  const el=document.getElementById('saveStatus');if(!el||!_naSaveStatusCloud)return;
+  if(force!==true&&el.textContent.trim()!==(el.dataset.naQueueMsg||''))return;
+  const q=_naCanonicalQueueCounts();
+  // Íconos que existen en NA_ICON_TEXT (na-line-icons.js): 'save' = guardado en este aparato, aún sin enviar.
+  const icon=q.retrying?'save':q.blocked?'alert':'cloud';
+  const msg=q.retrying?(q.retrying===1?'1 pendiente de enviar':q.retrying+' pendientes de enviar'):q.blocked?(q.blocked===1?'1 por revisar':q.blocked+' por revisar'):'Guardado en la nube';
+  if(el.dataset.naQueueMsg===msg&&el.textContent.trim()===msg)return;
+  el.dataset.naQueueMsg=msg;
+  if(window.NA_ICON_TEXT)NA_ICON_TEXT(el,icon,msg);else el.textContent=(q.retrying?'💾 ':q.blocked?'⚠️ ':'☁️ ')+msg;
+}
+window._naRenderCanonicalSaveStatus=_naRenderCanonicalSaveStatus;
 window.addEventListener('na:canonical-updated',()=>{
   if(typeof NuevoAmanecerCanonical==='undefined'||!NuevoAmanecerCanonical.enabled())return;
   const state=NuevoAmanecerCanonical.sourceState(),saveStatus=document.getElementById('saveStatus'),badge=document.getElementById('cliAuthorityBadge');
@@ -822,7 +847,7 @@ window.addEventListener('na:canonical-updated',()=>{
     _naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
     _naSetHeaderConnectionState('disconnected',state.validation==='offline'?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
-    if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+    _naSaveStatusCloud=false;if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
     if(badge){badge.hidden=false;badge.textContent='Canónico no disponible';}
     return;
   }
@@ -835,14 +860,14 @@ window.addEventListener('na:canonical-updated',()=>{
     _naCanonicalLoadError=null;_naSchedulePageRender(_naActivePageId());
     const connectionReady=state.validation==='current',connectionSyncing=state.validation==='validating';
     _naSetHeaderConnectionState(connectionReady?'connected':connectionSyncing?'update':'disconnected',connectionReady?'Conectado':connectionSyncing?'Sincronizando CANON…':'Desconectado');
-    if(saveStatus){if(window.NA_ICON_TEXT)NA_ICON_TEXT(saveStatus,'cloud','Guardado en la nube');else saveStatus.textContent='☁️ Guardado en la nube';}
+    _naSaveStatusCloud=true;_naRenderCanonicalSaveStatus(true);
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(reuse?clientes.length:canonical.customers.length)+' clientes';}
   }catch(error){
     _naCanonicalTransportConnected=false;
     _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
     _naSetHeaderConnectionState('disconnected','Canónico no disponible · reintenta');
-    if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+    _naSaveStatusCloud=false;if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
   }
 });
 window.addEventListener('storage',event=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&(!event.key||event.key==='na_canonical_binding'||event.key==='na_cloud_sync_credentials')){_naCanonicalTransportConnected=false;_naCanonicalLoadError=new Error('STALE_AUTHORITY_BINDING');_naSchedulePageRender(_naActivePageId());_naSetHeaderConnectionState('disconnected','Desconectado');}});
@@ -866,7 +891,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
       renderCategorySelects();_naSchedulePageRender(_naActivePageId());
       _naSetHeaderConnectionState('disconnected',navigator.onLine===false?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
-      if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+      _naSaveStatusCloud=false;if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
       if(cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico no disponible';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800';}
     });
   }

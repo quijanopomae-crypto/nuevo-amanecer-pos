@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 198: #966 permiso de alertas bajo costo, #967 configuración de negocio/ticket vía configurar_app y #978 lado teléfono (RUC escrito en el teléfono), merge 065a8311. Backend Worker 76 run 39975163353 success y salud verificada. Respaldo DB run 39974966971. CI crítico success en cada PR; E2E y visual success en #978. Sin migraciones ni datos comerciales. Rollback web a 172cd9a5 (Web 197, ops #977).",
-  "retry_attempt": 198,
-  "retry_reason": "Owner autorizó 2026-10-22: aprobado publiquen todo lo ya terminaron. Rollback a 172cd9a5.",
-  "requested_at_utc": "2026-10-23T15:06:01Z",
-  "approved_base": "87cc23e7c4b4b47689d62fb74478654ca1777ec5"
+  "note": "Web 203: PR #1021 abre candados edicion-masiva-precios, precio-por-margen, edicion-masiva-productos y stock-negativo-configurable (tarjeta: solo ajuste seguro). Worker 79 ya publicado (run 40032400118). Respaldo run 40031504740. Rollback Web 202 (f75b8e88).",
+  "retry_attempt": 203,
+  "retry_reason": "OK del dueño 2026-10-23: 'Enciéndelas todas, con copia antes'.",
+  "requested_at_utc": "2026-10-23T22:30:00Z",
+  "approved_base": "80314b962b48159c7850e9fc797ea7359244828f"
 }

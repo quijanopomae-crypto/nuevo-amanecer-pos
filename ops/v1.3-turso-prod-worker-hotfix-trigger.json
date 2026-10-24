@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #966 (below-cost alerts permission), #967 (business/ticket settings via configurar_app, server side) and #978 (phone side, RUC typed on phone). CANON Critical CI success on each PR; #978 also E2E Smoke and Visual Regression success. DB backup run 39974966971 first. Backend first then web. No schema, migrations, business data or secret changes.",
-  "rollback_ref": "cc073012fb8ca4e969d2fc18f276b83f12122b85",
+  "authorization_context": "Owner approved 2026-10-23: 'Enciéndelas todas, con copia antes' / 'pueden encender las 21 funciones de proximamente disponible'. PR #1021 opens only built+wired locks: edicion-masiva-precios, precio-por-margen, edicion-masiva-productos, stock-negativo-configurable (shared pos-permissions.js). DB backup run 40031504740 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "2356dc12fc030869a6feab12136bb5ef7377391b",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 76,
-  "optimization": "ASSISTANT_BELOW_COST_PERMISSION_BUSINESS_SETTINGS",
-  "target_commit": "065a8311e9936de8c6551f1c1d5e60a85d64483a"
+  "attempt": 79,
+  "optimization": "FEATURE_LOCKS_WAVE1",
+  "target_commit": "80314b962b48159c7850e9fc797ea7359244828f"
 }

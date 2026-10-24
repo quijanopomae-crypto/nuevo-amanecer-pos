@@ -215,7 +215,7 @@ test('venta bajo costo: «perdiendo plata», «pierdo plata», «estoy perdiendo
   for (const t of ['¿Estoy perdiendo plata?', 'creo que pierdo plata con el arroz', 'ESTOY PERDIENDO', 'estóy perdiendo', 'Perdiendo dinero en ventas', 'pierdo la plata', 'Ventas bajo costo', 'vendimos a pérdida'])
     assert.ok(re.test(t), t);
   for (const t of ['¿Cuánto vendimos hoy?', 'perdí el recibo', 'estoy perdido en la pantalla', 'Productos sin costo', 'perdiendo la señal']) assert.ok(!re.test(t), t);
-  assert.match(UI, /isOwnerAccess\(\) && BELOW_RE\.test\(text\)/, 'sigue solo para el Admin');
+  assert.match(UI, /canBelowCost\(\) && BELOW_RE\.test\(text\)/, 'Admin o nivel 3 con costos (auditoría 500, P-051)');
 });
 
 test('tarjetas: «Mostrando N de M» nunca con plata (no «8 de 650» ni «1 de 36»); cada tarjeta va con SU respuesta', () => {
