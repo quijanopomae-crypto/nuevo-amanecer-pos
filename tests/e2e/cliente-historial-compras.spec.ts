@@ -1,4 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
+import { expectAllFit, expectFits } from './helpers/fits';
 
 // Mismo rolePage/seed de Rotación ABC; solo backend ficticio y datos sintéticos.
 async function rolePage(page: Page, role: 'owner' | 'empleado') {
@@ -59,15 +61,17 @@ async function readState(page: Page) {
     quarantine:localStorage.getItem('na_canonical_sale_outbox_v1_quarantine')})`));
 }
 async function noOverflow(page: Page) {
-  expect(await page.locator('#pageClienteHistorial').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  expect(await page.locator('#pageClienteHistorial').evaluate(node => {
-    const box = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('h1,h2,input,select,button,tbody th,tbody td,.ch-summary-card')].every(child => {
-      const rect = child.getBoundingClientRect();
-      return rect.left >= box.left - 1 && rect.right <= box.right + 1 && child.scrollWidth <= child.clientWidth + 1;
-    });
-  })).toBe(true);
+  await expectAllFit(page.locator('#pageClienteHistorial'), 'h1,h2,input,select,button,tbody th,tbody td,.ch-summary-card');
+}
+async function contrastRatio(locator: Locator) {
+  return locator.evaluate(node => {
+    const rgb = (c: string) => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = (c: number[]) => { const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    let el: Element | null = node, bg = 'rgba(0, 0, 0, 0)';
+    while (el && (bg = getComputedStyle(el).backgroundColor) && (bg === 'transparent' || rgb(bg)[3] === 0)) el = el.parentElement;
+    const a = lum(rgb(getComputedStyle(node).color)), b = lum(rgb(bg));
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
 }
 
 for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
@@ -76,7 +80,7 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     await rolePage(page, 'owner');
     await seed(page);
     const before = await readState(page), writes: string[] = [];
-    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !(request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/settings'))) writes.push(request.method() + ' ' + request.url()); });
+    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !(request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/settings')) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
     await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageProximamente'); }, dark);
     const card = page.locator('#pageProximamente [data-feature-id="cliente-historial-compras"]');
     await expect(card).toHaveClass(/is-enabled/);
@@ -122,29 +126,17 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
       const dates = sales.locator('tbody th .ch-date');
       await expect(dates).toHaveCount(5);
       for (const date of await dates.all()) {
-        const result = await date.evaluate(cell => {
-          // El Range mide solo la fecha, sin la etiqueta ::before de la tarjeta.
-          const range = document.createRange();
-          range.selectNodeContents(cell);
-          const lines = [...range.getClientRects()];
-          const card = cell.closest('tr')!.getBoundingClientRect();
-          return {
-            lineCount: lines.length,
-            fits: lines.every(rect => rect.width > 0 && rect.left >= card.left - 1 && rect.right <= card.right + 1
-              && rect.top >= card.top - 1 && rect.bottom <= card.bottom + 1)
-          };
-        });
-        expect(result.lineCount, await date.textContent() || 'Fecha').toBe(1);
-        expect(result.fits, await date.textContent() || 'Fecha').toBe(true);
+        // text: mide solo la fecha (Range), sin la etiqueta ::before de la tarjeta.
+        await expectFits(date, { within: 'tr', text: true, singleLine: true }, `${await date.textContent() || 'Fecha'} en una línea dentro de su tarjeta`);
       }
     }
     await noOverflow(page);
     const refresh = screen.getByRole('button', { name: 'Actualizar reporte' });
     await refresh.scrollIntoViewIfNeeded();
-    expect(await refresh.evaluate(button => {
+    await expect.poll(() => refresh.evaluate(button => {
       const r = button.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!hit && (hit === button || button.contains(hit));
-    })).toBe(true);
+    }), { message: 'Actualizar reporte no queda tapado' }).toBe(true);
     await refresh.click();
     await expect(summary.nth(0)).toContainText('S/ 42.00');
     await search.fill('00000002');
@@ -199,7 +191,7 @@ test('date and seller filters update tables, summaries and CSV with full filter 
   await seed(page);
   await page.evaluate(() => (window as any).eval(`ventas=[
     {id:'filter-start',clienteId:'hist-c1',fecha:'2026-10-13',cajeroNombre:'Ana',cajeroId:'v1',total:10,items:[{id:'fp1',name:'Producto elegido',qty:1,subtotal:10}]},
-    {id:'filter-end',clienteId:'hist-c1',timestamp:'2026-10-16T04:30:00Z',cajero:'Ana',cajeroId:'v1',total:5,items:[{id:'fp1',name:'Producto elegido',qty:1,subtotal:5}]},
+    {id:'filter-end',clienteId:'hist-c1',timestamp:'2026-10-16T04:30:00Z',cajero:' ana ',total:5,items:[{id:'fp1',name:'Producto elegido',qty:1,subtotal:5}]},
     {id:'filter-old',clienteId:'hist-c1',fecha:'2026-10-12',cajeroNombre:'Ana',cajeroId:'v1',total:7,items:[{id:'fp2',name:'Producto fuera de fecha',qty:1,subtotal:7}]},
     {id:'filter-other',clienteId:'hist-c1',fecha:'2026-10-14',cajero:'Beatriz',total:9,items:[{id:'fp3',name:'Producto otro vendedor',qty:1,subtotal:9}]},
     {id:'filter-missing',clienteId:'hist-c1',fecha:'2026-10-14',total:3,items:[]}
@@ -211,7 +203,7 @@ test('date and seller filters update tables, summaries and CSV with full filter 
   await screen.locator('[data-ch-period]').selectOption('all');
   await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('hist-c1');
   const seller = screen.getByRole('combobox', { name: 'Vendedor', exact: true });
-  await expect(seller.locator('option')).toHaveText(['Todos', 'Ana', 'Beatriz', 'No registrado']);
+  await expect(seller.locator('option')).toHaveText(['Todos', 'Ana', 'Beatriz (sin id)', 'No registrado']);
   await screen.getByLabel('Desde', { exact: true }).fill('2026-10-13');
   await screen.getByLabel('Desde', { exact: true }).blur();
   await screen.getByLabel('Hasta', { exact: true }).fill('2026-10-15');
@@ -277,6 +269,57 @@ test('date and seller filters update tables, summaries and CSV with full filter 
   expect(await readState(page)).toBe(before);
 });
 
+for (const width of [390, 768, 1366]) {
+  test(`seller select folds only a unique id and CSV guards leading spaces at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await rolePage(page, 'owner');
+    await seed(page);
+    await page.evaluate(() => (window as any).goPage('pageClienteHistorial'));
+    const screen = page.locator('#pageClienteHistorial');
+    await screen.locator('[data-ch-period]').selectOption('all');
+    await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('hist-c1');
+    const seller = screen.getByRole('combobox', { name: 'Vendedor', exact: true });
+    for (const count of [0, 1, 2]) {
+      await page.evaluate(count => {
+        (window as any).eval(`ventas=[
+          {id:'seller-legacy',clienteId:'hist-c1',fecha:'2026-10-15',cajero:' Luis ',total:5,items:[]}
+        ];`);
+        for (let index = 1; index <= count; index++) {
+          (window as any).eval(`ventas.push({id:'seller-id-${index}',clienteId:'hist-c1',fecha:'2026-10-15',cajeroNombre:'Luis',cajeroId:'v${index}',total:10,items:[]});`);
+        }
+        (window as any).NA_CLIENTE_HISTORIAL.render();
+      }, count);
+      const before = await readState(page);
+      const expected = count === 1 ? [{ value: '', label: 'Todos' }, { value: 'id:v1', label: 'Luis' }] : [
+        { value: '', label: 'Todos' },
+        // Dos vendedores con el mismo nombre: sufijo con su id (NA_SELLER_LABELS).
+        ...(count === 2 ? [{ value: 'id:v1', label: 'Luis · v1' }, { value: 'id:v2', label: 'Luis · v2' }] : []),
+        { value: 'name:luis', label: 'Luis (sin id)' }
+      ];
+      expect(await seller.locator('option').evaluateAll(nodes => nodes.map(node => ({
+        value: (node as HTMLOptionElement).value, label: node.textContent
+      })))).toEqual(expected);
+      await seller.selectOption(count === 1 ? 'id:v1' : 'name:luis');
+      const sales = screen.locator('[data-ch-table="sales"]');
+      await expect(sales.locator('tbody tr')).toHaveCount(count === 1 ? 2 : 1);
+      await expect(sales).toContainText('seller-legacy');
+      if (count === 2) for (const index of [1, 2]) {
+        await seller.selectOption('id:v' + index);
+        await expect(sales.locator('tbody tr')).toHaveCount(1);
+        await expect(sales).toContainText('seller-id-' + index);
+        await expect(sales).not.toContainText('seller-legacy');
+      }
+      expect(await readState(page)).toBe(before);
+      await noOverflow(page);
+    }
+    // Reporte sintético: conservar los espacios para probar el guard usado por la exportación.
+    const csv = await page.evaluate(() => (window as any).NA_CLIENTE_HISTORIAL.toCsv({
+      sales: [{ day: '2026-10-15', reference: '  =1+1', total: 5, method: 'efectivo' }], products: []
+    }));
+    expect(csv).toContain('"15/10/2026","\'  =1+1","5.00","Efectivo"');
+  });
+}
+
 for (const dark of [false, true]) {
   test(`Período fills Desde/Hasta, manual edits switch to Personalizado, Todo clears and the date error is readable (${dark ? 'Nocturno' : 'claro'})`, async ({ page }) => {
     await page.setViewportSize({ width: 650, height: 900 });
@@ -286,9 +329,12 @@ for (const dark of [false, true]) {
     const screen = page.locator('#pageClienteHistorial');
     const period = screen.locator('[data-ch-period]');
     const from = screen.getByLabel('Desde', { exact: true }), to = screen.getByLabel('Hasta', { exact: true });
+    const hint = screen.locator('[data-ch-date-hint]');
     const range = (days: string) => page.evaluate(days => (window as any).NA_CLIENTE_HISTORIAL.periodDates(days), days);
     await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('hist-c1');
     await expect(period).toHaveValue('30');
+    await expect(hint).toHaveAttribute('hidden', '');
+    await expect(hint).toBeHidden();
     const p30 = await range('30');
     await expect(from).toHaveValue(p30.from); await expect(to).toHaveValue(p30.to);
     await period.selectOption('90');
@@ -302,23 +348,92 @@ for (const dark of [false, true]) {
     await expect(period.locator('option:checked')).toHaveText('Personalizado');
     await period.selectOption('all');
     await expect(from).toHaveValue(''); await expect(to).toHaveValue('');
+    await expect(from).not.toHaveAttribute('placeholder'); await expect(to).not.toHaveAttribute('placeholder');
+    await expect(hint).toHaveText('Sin límite de fechas');
+    await expect(hint).toBeVisible();
+    await expect(hint).not.toHaveAttribute('hidden');
+    expect(await hint.evaluate(node => node.getBoundingClientRect().top >= node.closest('.ch-filter-row')!.querySelector('[data-ch-to]')!.getBoundingClientRect().bottom)).toBe(true);
+    expect(await contrastRatio(hint)).toBeGreaterThanOrEqual(4.5);
     await expect(screen.locator('[data-ch-status]')).toContainText('Todo el historial');
     await expect(screen.locator('[data-ch-table="sales"]')).toContainText('2020');
+    await period.selectOption('custom');
+    await expect(from).toHaveValue(''); await expect(to).toHaveValue('');
+    await expect(hint).toHaveAttribute('hidden', '');
+    await expect(hint).toBeHidden();
+    await period.selectOption('all');
+    await expect(hint).toBeVisible();
+    await period.selectOption('30');
+    await expect(hint).toHaveAttribute('hidden', '');
+    await expect(hint).toBeHidden();
+    await period.selectOption('all');
     await to.fill('2020-01-01'); await to.blur();
     await expect(period).toHaveValue('custom');
+    await expect(hint).toHaveAttribute('hidden', '');
     await from.fill('2026-10-15'); await from.blur();
     const status = screen.locator('[data-ch-status]');
     await expect(status).toContainText('no puede ser posterior');
     await expect(status).toHaveClass(/ch-error/);
-    const ratio = await status.evaluate(node => {
-      const rgb = (c: string) => (c.match(/[\d.]+/g) || []).map(Number);
-      const lum = (c: number[]) => { const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-      let el: Element | null = node, bg = 'rgba(0, 0, 0, 0)';
-      while (el && (bg = getComputedStyle(el).backgroundColor) && (bg === 'transparent' || rgb(bg)[3] === 0)) el = el.parentElement;
-      const a = lum(rgb(getComputedStyle(node).color)), b = lum(rgb(bg));
-      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    expect(await contrastRatio(status)).toBeGreaterThanOrEqual(4.5);
+    await noOverflow(page);
+  });
+}
+
+for (const width of [390, 650, 1280, 1366]) for (const dark of [false, true]) {
+  test(`${width}px ${dark ? 'Nocturno' : 'claro'}: «Sin límite de fechas» va debajo de los filtros y oculto no ocupa espacio`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await rolePage(page, 'owner');
+    await seed(page);
+    await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageClienteHistorial'); }, dark);
+    const screen = page.locator('#pageClienteHistorial');
+    await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('hist-c1');
+    const period = screen.locator('[data-ch-period]');
+    const hint = screen.locator('[data-ch-date-hint]');
+    const layout = () => hint.evaluate(node => {
+      const row = node.closest('.ch-filter-row')!;
+      const box = (selector: string) => row.querySelector(selector)!.closest('label')!.getBoundingClientRect();
+      const from = box('[data-ch-from]'), to = box('[data-ch-to]'), seller = box('[data-ch-seller]');
+      const rect = node.getBoundingClientRect();
+      const rowStyle = getComputedStyle(row);
+      return { fromTop: from.top, toTop: to.top, sellerTop: seller.top, toBottom: to.bottom, hintGridRow: getComputedStyle(node).gridRowStart, rowTracks: rowStyle.gridTemplateRows, rowGap: parseFloat(rowStyle.rowGap),
+        fieldsBottom: Math.max(from.bottom, to.bottom, seller.bottom), hintTop: rect.top, hintHeight: rect.height,
+        hintRects: node.getClientRects().length, display: getComputedStyle(node).display, rowBottom: row.getBoundingClientRect().bottom };
     });
-    expect(ratio).toBeGreaterThanOrEqual(4.5);
+    await period.selectOption('all');
+    await expect(hint).toBeVisible();
+    const all = await layout();
+    expect(all.hintHeight).toBeGreaterThan(0);
+    if (width >= 1280) {
+      // .ch-filter-row: Cliente, luego Desde, Hasta y Vendedor en una fila, luego la nota a un solo gap (12 px), sin fila vacía.
+      expect(all.hintGridRow).toBe('3');
+      expect(all.rowTracks.split(' ')).toHaveLength(3);
+      expect(Math.abs(all.toTop - all.fromTop)).toBeLessThanOrEqual(1);
+      expect(Math.abs(all.sellerTop - all.fromTop)).toBeLessThanOrEqual(1);
+      expect(all.hintTop).toBeGreaterThan(all.fieldsBottom);
+      expect(Math.abs(all.hintTop - all.fieldsBottom - all.rowGap)).toBeLessThanOrEqual(2);
+      expect(all.rowGap).toBe(12);
+    } else {
+      // Orden visual vigente en web 171 a 390 y 650 px (una columna): Desde, Hasta, nota y Vendedor, de arriba abajo.
+      expect(all.hintGridRow).toBe('auto');
+      expect(all.fromTop).toBeLessThan(all.toTop);
+      expect(all.toTop).toBeLessThan(all.hintTop);
+      expect(all.hintTop).toBeLessThan(all.sellerTop);
+      expect(all.hintTop).toBeGreaterThanOrEqual(all.toBottom - 1);
+    }
+    expect(await contrastRatio(hint)).toBeGreaterThanOrEqual(4.5);
+    await noOverflow(page);
+    await period.selectOption('30');
+    await expect(hint).toHaveAttribute('hidden', '');
+    await expect(hint).toBeHidden();
+    const other = await layout();
+    expect(other.display).toBe('none');
+    expect(other.hintRects).toBe(0);
+    expect(other.hintHeight).toBe(0);
+    // Oculta no deja fila vacía: la fila de filtros termina en los campos.
+    expect(Math.abs(other.rowBottom - other.fieldsBottom)).toBeLessThanOrEqual(1);
+    if (width >= 1280) {
+      expect(Math.abs(other.toTop - other.fromTop)).toBeLessThanOrEqual(1);
+      expect(Math.abs(other.sellerTop - other.fromTop)).toBeLessThanOrEqual(1);
+    }
     await noOverflow(page);
   });
 }
@@ -328,7 +443,7 @@ test('employee cannot open customer history and direct rendering clears customer
   await rolePage(page, 'empleado');
   await seed(page);
   const before = await readState(page), writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !(request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/settings'))) writes.push(request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !(request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/settings')) && !isAssistantPing(request)) writes.push(request.url()); });
   await page.locator('#naMobileMenuToggle').click();
   await expect(page.locator('#naMobileDrawer [data-page="pageClienteHistorial"]')).toHaveCount(0);
   await page.evaluate(() => { (window as any).NA_MENU_NAVIGATION.closeMobileDrawer(); (window as any).goPage('pageClienteHistorial'); });
@@ -345,6 +460,50 @@ test('employee cannot open customer history and direct rendering clears customer
 });
 
 for (const dark of [false, true]) {
+  test(`650px ${dark ? 'dark' : 'light'}: third summary card spans the full row and every summary word stays on one line`, async ({ page }) => {
+    await page.setViewportSize({ width: 650, height: 900 });
+    await rolePage(page, 'owner');
+    await seed(page);
+    await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageClienteHistorial'); }, dark);
+    const screen = page.locator('#pageClienteHistorial');
+    await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('hist-c1');
+    const summary = screen.locator('.ch-summary');
+    await expect(summary.locator('.ch-summary-card')).toHaveCount(3);
+    await expect(summary).toHaveCSS('grid-template-columns', /^\S+ \S+$/);
+    const boxes = await summary.evaluate(grid => {
+      const box = grid.getBoundingClientRect();
+      const cards = [...grid.querySelectorAll('.ch-summary-card')].map(card => card.getBoundingClientRect());
+      return { gridWidth: box.width, gridLeft: box.left, widths: cards.map(card => card.width), tops: cards.map(card => card.top), thirdLeft: cards[2].left, firstBottom: cards[0].bottom };
+    });
+    expect(Math.abs(boxes.widths[2] - boxes.gridWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.thirdLeft - boxes.gridLeft)).toBeLessThanOrEqual(1);
+    expect(boxes.tops[0]).toBe(boxes.tops[1]);
+    expect(boxes.tops[2]).toBeGreaterThan(boxes.firstBottom);
+    for (const value of await summary.locator('.ch-summary-card :is(span, strong)').evaluateAll(nodes => nodes.map(node => {
+      const words: { text: string; lines: number; fits: boolean }[] = [];
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      const box = node.getBoundingClientRect();
+      let textNode: Node | null;
+      while ((textNode = walker.nextNode())) {
+        for (const match of textNode.textContent!.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(textNode, match.index!); range.setEnd(textNode, match.index! + match[0].length);
+          const rects = [...range.getClientRects()];
+          words.push({ text: match[0], lines: rects.length, fits: rects.every(rect => rect.width > 0 && rect.left >= box.left - 1 && rect.right <= box.right + 1) });
+        }
+      }
+      return { text: node.textContent, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, overflowWrap: getComputedStyle(node).overflowWrap, words };
+    }))) {
+      expect(value.scrollWidth, value.text!).toBeLessThanOrEqual(value.clientWidth);
+      expect(value.overflowWrap, value.text!).toBe('normal');
+      expect(value.words.length, value.text!).toBeGreaterThan(0);
+      for (const word of value.words) {
+        expect(word.lines, word.text).toBe(1);
+        expect(word.fits, word.text).toBe(true);
+      }
+    }
+  });
+
   test(`650px ${dark ? 'dark' : 'light'}: headers on one line, numbers right-aligned, readable row cells and full customer label`, async ({ page }) => {
     await page.setViewportSize({ width: 650, height: 900 });
     await rolePage(page, 'owner');

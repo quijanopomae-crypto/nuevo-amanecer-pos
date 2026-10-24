@@ -39,9 +39,11 @@
   function get(id) { return list().find(function (feature) { return feature.id === id; }); }
   function isUnlocked(feature) { return !!(feature && feature.enabled && feature.page); }
   function isEnabled(id) { return isUnlocked(get(id)); }
-  function ownerAllowed() {
-    return !!(root.NA_ROLES && typeof root.NA_ROLES.canConfigure === 'function' && root.NA_ROLES.canConfigure());
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  function ownerAllowed() { return isOwner(); }
   function element(tag, className, text) {
     var node = root.document.createElement(tag);
     if (className) node.className = className;

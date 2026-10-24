@@ -59,7 +59,7 @@ test('seller options use recorded identity, distinct ids, legacy names and No re
     sale({ anulada: true, cajeroId: 'void', cajeroNombre: 'Anulada' }), sale({ status: 'void', cajeroId: 'void2' }), null];
   assert.deepEqual(plain(api.sellerOptions(sales, 'c1')), [
     { value: 'id:7', label: '7' }, { value: 'id:v1', label: 'Ana' }, { value: 'id:v2', label: 'Ana' },
-    { value: 'name:beatriz', label: 'Beatriz' }, { value: 'missing:', label: 'No registrado' }
+    { value: 'name:beatriz', label: 'Beatriz (sin id)' }, { value: 'missing:', label: 'No registrado' }
   ]);
   assert.deepEqual(plain(api.sellerOptions(sales, '')), []);
   assert.deepEqual(plain(api.sellerOptions(null, 'c1')), []);
@@ -175,7 +175,7 @@ test('empty date inputs default once to the last 30 Lima days', () => {
 });
 
 function screen({ role = 'owner', ventas = [], clientes = [{ id: 'c1', nombre: 'Cliente de prueba' }] } = {}) {
-  const keys = ['content', 'status', 'controls', 'search', 'customer', 'period', 'from', 'to', 'seller', 'export'];
+  const keys = ['content', 'status', 'controls', 'search', 'customer', 'period', 'from', 'to', 'date-hint', 'seller', 'export'];
   const nodes = Object.fromEntries(keys.map(key => {
     const node = new Node(); node.selector = '[data-ch-' + key + ']'; node.matches = s => s.split(/,\s*/).includes(node.selector);
     return [node.selector, node];
@@ -194,6 +194,30 @@ function screen({ role = 'owner', ventas = [], clientes = [{ id: 'c1', nombre: '
   return { ctx, nodes, page, change, csv: () => csv, clicks: () => clicks };
 }
 const daysAgo = n => new Date(Date.now() - 5 * 3600000 - n * 86400000).toISOString().slice(0, 10);
+
+test('Sin límite de fechas is rendered below the dates and visible only for Todo, including when Personalizado has empty dates', () => {
+  const markup = readFileSync('POS/index.html', 'utf8');
+  assert.match(markup, /data-ch-to[^>]*>\s*<\/label>\s*<p class="ch-date-hint" data-ch-date-hint hidden>Sin límite de fechas<\/p>/);
+  const s = screen();
+  const hint = s.nodes['[data-ch-date-hint]'];
+  assert.equal(hint.hidden, true);
+  s.nodes['[data-ch-period]'].value = 'all'; s.change('period');
+  assert.equal(s.nodes['[data-ch-from]'].value, '');
+  assert.equal(s.nodes['[data-ch-to]'].value, '');
+  assert.equal(hint.hidden, false);
+  s.ctx.NA_CLIENTE_HISTORIAL.render();
+  assert.equal(hint.hidden, false);
+  s.nodes['[data-ch-period]'].value = 'custom'; s.change('period');
+  assert.equal(s.nodes['[data-ch-from]'].value, '');
+  assert.equal(s.nodes['[data-ch-to]'].value, '');
+  assert.equal(hint.hidden, true);
+  for (const value of ['30', '90', '365']) {
+    s.nodes['[data-ch-period]'].value = 'all'; s.change('period');
+    assert.equal(hint.hidden, false);
+    s.nodes['[data-ch-period]'].value = value; s.change('period');
+    assert.equal(hint.hidden, true);
+  }
+});
 
 test('Período is only a shortcut: it fills Desde/Hasta, a manual edit switches to Personalizado and Todo clears both', () => {
   const s = screen();
@@ -241,8 +265,8 @@ test('sellers with id and name-only sales are grouped under the id, matching nam
     sale({ id: 'b1', cajeroId: undefined, cajeroNombre: 'Beatriz' }), sale({ id: 'b2', cajeroId: undefined, cajeroNombre: ' BEATRIZ' }),
     sale({ id: 'x1', cajeroId: 'x1', cajeroNombre: 'Dup' }), sale({ id: 'x2', cajeroId: 'x2', cajeroNombre: 'dup' }), sale({ id: 'x3', cajeroId: undefined, cajeroNombre: 'Dup' })];
   assert.deepEqual(plain(api.sellerOptions(ventas, 'c1')), [
-    { value: 'id:v1', label: 'Ana Pérez' }, { value: 'name:beatriz', label: 'Beatriz' },
-    { value: 'id:x2', label: 'dup' }, { value: 'id:x1', label: 'Dup' }, { value: 'name:dup', label: 'Dup' }
+    { value: 'id:v1', label: 'Ana Pérez' }, { value: 'name:beatriz', label: 'Beatriz (sin id)' },
+    { value: 'id:x2', label: 'dup' }, { value: 'id:x1', label: 'Dup' }, { value: 'name:dup', label: 'Dup (sin id)' }
   ]);
   assert.deepEqual(ids(api.filterSales(ventas, 'c1', { seller: 'id:v1' })), ['a1', 'a2', 'a3']);
   assert.deepEqual(ids(api.filterSales(ventas, 'c1', { seller: 'name:beatriz' })), ['b1', 'b2']);
@@ -303,4 +327,63 @@ test('choosing Personalizado keeps the dates, focuses Desde and stays until a da
   s.nodes['[data-ch-period]'].value = '30'; s.change('period'); // Un atajo también lo libera.
   assert.equal(s.nodes['[data-ch-period]'].value, '30');
   assert.equal(s.nodes['[data-ch-from]'].value, p30.from);
+});
+
+// Texto visible del filtro «Vendedor» (select angosto): acorta el NOMBRE de un nombre repetido y largo, nunca el sufijo.
+const labelsSource = readFileSync('POS/js/core/seller-labels.js', 'utf8');
+function sellerTexts(sales, setup) {
+  const ctx = vm.createContext({ ventas: sales });
+  if (setup) vm.runInContext(setup, ctx);
+  vm.runInContext(labelsSource, ctx);
+  vm.runInContext(source, ctx);
+  const opts = ctx.NA_CLIENTE_HISTORIAL.sellerOptions(sales, 'c1');
+  return plain(opts.map((item, i) => [item.value, ctx.NA_CLIENTE_HISTORIAL.sellerOptionTexts(opts)[i]]));
+}
+const ID_C = 'a1b2c3d4-0000-4000-8000-000000000001', ID_D = 'a1b2d5e6-0000-4000-8000-000000000002';
+
+test('Vendedor: nombre en NFD se acorta por grafema y en NFC; igual sin Intl.Segmenter o si falla', () => {
+  const nfd = 'María Fernanda Quispe'.normalize('NFD');
+  assert.notEqual(nfd, 'María Fernanda Quispe');
+  const sales = [sale({ id: 's1', cajeroId: ID_C, cajeroNombre: nfd }), sale({ id: 's2', cajeroId: ID_D, cajeroNombre: nfd }), sale({ id: 's3', cajeroId: 'v9', cajeroNombre: 'Luis' })];
+  const expected = { ['id:' + ID_C]: 'María Fer… · a1b2c', ['id:' + ID_D]: 'María Fer… · a1b2d', 'id:v9': 'Luis' };
+  assert.deepEqual(Object.fromEntries(sellerTexts(sales)), expected);
+  assert.deepEqual(Object.fromEntries(sellerTexts(sales, 'delete Intl.Segmenter;')), expected);
+  assert.deepEqual(Object.fromEntries(sellerTexts(sales, 'Intl.Segmenter = function () { throw new Error("roto"); };')), expected);
+});
+
+test('Vendedor: si dos opciones distintas quedarían iguales al acortar, se muestran completas', () => {
+  const ID_C2 = 'a1b2c999-0000-4000-8000-000000000003', ID_D2 = 'a1b2d999-0000-4000-8000-000000000004';
+  const sales = [
+    sale({ id: 's1', cajeroId: ID_C, cajeroNombre: 'María Fernanda Quispe' }), sale({ id: 's2', cajeroId: ID_D, cajeroNombre: 'María Fernanda Quispe' }),
+    sale({ id: 's3', cajeroId: ID_C2, cajeroNombre: 'María Ferreyra López' }), sale({ id: 's4', cajeroId: ID_D2, cajeroNombre: 'María Ferreyra López' }),
+    sale({ id: 's5', cajeroId: 'v7', cajeroNombre: 'Rosario Elena Paredes' }), sale({ id: 's6', cajeroId: 'v8', cajeroNombre: 'Rosario Elena Paredes' })
+  ];
+  const texts = Object.fromEntries(sellerTexts(sales));
+  assert.equal(texts['id:' + ID_C], 'María Fernanda Quispe · a1b2c');
+  assert.equal(texts['id:' + ID_D], 'María Fernanda Quispe · a1b2d');
+  assert.equal(texts['id:' + ID_C2], 'María Ferreyra López · a1b2c');
+  assert.equal(texts['id:' + ID_D2], 'María Ferreyra López · a1b2d');
+  // Las que no chocan se siguen acortando.
+  assert.equal(texts['id:v7'], 'Rosario E… · v7');
+  assert.equal(texts['id:v8'], 'Rosario E… · v8');
+  assert.equal(new Set(Object.values(texts)).size, Object.keys(texts).length);
+});
+
+test('Vendedor: con medidor, quita grafemas hasta que entra; sufijo entero y mínimo 1 grafema; sin choque', () => {
+  const ctx = vm.createContext({ ventas: [sale({ id: 's1', cajeroId: ID_C, cajeroNombre: 'María Fernanda Quispe' }), sale({ id: 's2', cajeroId: ID_D, cajeroNombre: 'María Fernanda Quispe' })] });
+  vm.runInContext(labelsSource, ctx); vm.runInContext(source, ctx);
+  const opts = ctx.NA_CLIENTE_HISTORIAL.sellerOptions(ctx.ventas, 'c1'), width = value => Array.from(value).length * 7;
+  for (const room of [500, 140, 100, 20]) {
+    const texts = plain(ctx.NA_CLIENTE_HISTORIAL.sellerOptionTexts(opts, { room, width }));
+    texts.forEach((text, i) => {
+      const suffix = opts[i].label.slice(opts[i].label.lastIndexOf(' · '));
+      if (room === 500) { assert.equal(text, opts[i].label); return; }
+      assert.ok(text.endsWith('…' + suffix), text);
+      const prefix = text.slice(0, -suffix.length - 1);
+      assert.ok(prefix.length >= 1 && 'María Fernanda Quispe'.startsWith(prefix), text);
+      if (room >= 100) assert.ok(width(text) <= room, text + ' cabe en ' + room);
+      else assert.equal(prefix, 'M', 'mínimo 1 grafema');
+    });
+    assert.equal(new Set(texts).size, texts.length);
+  }
 });

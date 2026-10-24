@@ -214,9 +214,142 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
 #pagePOS .cart-head-title{font-size:21px}
 }
 
+/* Resumen de Venta actual: 44 px, sin duplicar subtotal cuando se oculta IGV.
+   El cuerpo de la barra cambia de tres a dos columnas solo en PC/tablet.
+   El contador y los IDs comerciales siguen siendo los existentes. */
+@media(min-width:701px){
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals{
+    --na-pos-summary-height:44px;
+    position:relative;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr);
+    column-gap:0;
+    row-gap:0;
+    align-items:stretch;
+    height:var(--na-pos-summary-height);
+    min-height:var(--na-pos-summary-height);
+    margin:16px 10px 5px;
+    padding:0;
+    border-radius:7px;
+    background:var(--pos-ref-teal);
+  }
+  body:not(.na-pos-phone-device) #pagePOS .cart-count-line{
+    position:absolute;
+    top:-16px;
+    left:0;
+    display:block;
+    grid-column:auto;
+    grid-row:auto;
+    padding:0;
+    margin:0;
+    height:14px;
+    line-height:14px;
+    font-size:11px;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row{
+    grid-row:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:1px;
+    min-width:0;
+    margin:0;
+    padding:0 2px;
+    color:#fff;
+    font-size:10px;
+    font-weight:600;
+    line-height:1.15;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row:nth-child(2){grid-column:1}
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row:nth-child(3){grid-column:2}
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row>span:last-child{font-size:clamp(11px,1.3vw,13px);font-weight:900;white-space:nowrap}
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row[hidden]{display:none!important}
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main{
+    grid-column:3;
+    grid-row:1;
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    height:100%;
+    min-height:0;
+    margin:0;
+    padding:0 2px;
+    border-left:1px solid rgba(255,255,255,.65);
+    border-radius:0;
+    background:transparent;
+    color:#fff;
+    font-size:13px;
+    line-height:1.1;
+  }
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main>span:first-child{
+    font-size:clamp(7px,.94vw,11.5px);
+    font-weight:900;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main>span:last-child{font-size:clamp(9px,1.3vw,19px);font-weight:900;white-space:nowrap;letter-spacing:-.02em}
+  /* Dueño 2026-10-21 14:45: con IGV visible, TOTAL e importe (reglas de arriba) un poco más chicos para que entre S/ 111,110.00; sin IGV se conserva el tamaño anterior. Solo font-size. */
+  body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals>.total-main>span:first-child,
+  body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals>.total-main>span:last-child{font-size:clamp(11px,1.4vw,19px)}
+  body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    margin-top:0;
+  }
+  body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-count-line{
+    position:static;
+    grid-column:1;
+    grid-row:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    height:100%;
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+  }
+  body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals>.total-row{display:none!important}
+  body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals>.total-main{grid-column:2}
+  /* Cabecera compacta de Venta actual: solo PC/tablet; teléfonos intactos.
+     60px -> 32px sin cambiar el ancho de la columna ni los IDs/handlers. */
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head{
+    height:32px;
+    min-height:32px;
+    max-height:32px;
+    flex:0 0 32px;
+    padding:1px 9px;
+    gap:6px;
+  }
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-title{
+    font-size:16px;
+    line-height:1;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-actions{gap:4px}
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-clear{
+    height:28px;
+    min-height:28px;
+    padding:2px 7px;
+    gap:4px;
+    font-size:11px;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-clear svg{width:14px;height:14px}
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer #btnCartMenu{width:28px;height:28px;border-radius:6px;font-size:15px}
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-menu-dropdown{top:32px}
+  body.dark:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row>span,
+  body.dark:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main>span,
+  body.dark:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-count-line>span{color:#fff!important}
+}
+
 /* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */
 @media(min-width:1100px) and (max-height:700px){
 #pagePOS .cart-totals{padding:0 8px 3px;column-gap:10px}
+body:not(.na-pos-phone-device) #pagePOS .cart-totals{--na-pos-summary-height:36px}
 #pagePOS .cart-count-line{font-size:11px;padding:1px 0}
 #pagePOS .total-row{font-size:12px;line-height:1.1}
 #pagePOS .total-main{min-height:36px;padding:4px 10px;font-size:22px;line-height:1}
@@ -232,3 +365,4 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
 #pagePOS #cartDrawer .qty-btn{width:32px;height:32px}
 #pagePOS #cartDrawer .btn-rm{width:28px;height:32px}
 }
+

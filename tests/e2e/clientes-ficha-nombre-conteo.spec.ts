@@ -64,10 +64,13 @@ for (const width of [320, 360, 390, 430, 768, 1024]) {
       const h2 = page.locator('.na-v2-client-head h2');
       await expect(h2).toBeVisible();
       await waitFichaStable(page);
-      expect(await wordsSplit(page)).toEqual([]);
-      const css = await h2.evaluate(el => { const s = getComputedStyle(el); return [el.isConnected, el.textContent, s.overflowWrap, s.wordBreak, s.textOverflow]; });
-      expect(css).toEqual([true, name, 'normal', 'normal', 'ellipsis']);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      // La ventana de 300 ms sin mutaciones no garantiza que no llegue otro redibujo (con CPU cargada el
+      // refresco de la lista puede caer justo después): se mide todo junto y con reintentos sobre el <h2> vivo.
+      await expect.poll(async () => ({
+        split: await wordsSplit(page),
+        css: await h2.evaluate(el => { const s = getComputedStyle(el); return [el.isConnected, el.textContent, s.overflowWrap, s.wordBreak, s.textOverflow]; }),
+        noScroll: await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+      }), { message: `ficha «${name}» a ${width}px` }).toEqual({ split: [], css: [true, name, 'normal', 'normal', 'ellipsis'], noScroll: true });
     });
   }
 }
@@ -112,23 +115,23 @@ for (const width of [1366, 1024, 390]) {
     await openFichaConDeuda(page, width, 'MISAEL');
     const h2 = page.locator('.na-v2-client-head h2');
     await expect(h2).toHaveText('MISAEL');
-    const fit = await h2.evaluate(el => ({ scroll: el.scrollWidth, client: el.clientWidth }));
-    expect(fit.scroll).toBeLessThanOrEqual(fit.client);
-    // El monto tampoco se recorta ni se desborda.
-    const money = await page.locator('.na-v2-head-money strong').evaluate(el => el.scrollWidth <= el.clientWidth + 1);
-    expect(money).toBe(true);
-    expect(await wordsSplit(page)).toEqual([]);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    // Nombre completo y monto sin recorte ni desborde (el monto tampoco se recorta), medidos con reintentos.
+    await expect.poll(async () => ({
+      name: await h2.evaluate(el => el.isConnected && el.scrollWidth <= el.clientWidth),
+      money: await page.locator('.na-v2-head-money strong').evaluate(el => el.isConnected && el.scrollWidth <= el.clientWidth + 1),
+      split: await wordsSplit(page),
+      noScroll: await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    })).toEqual({ name: true, money: true, split: [], noScroll: true });
   });
 
   test(`ficha ${width}px: nombre muy largo puede llevar elipsis pero nunca parte una palabra`, async ({ page }) => {
     await openFichaConDeuda(page, width, 'MISAELMONTENEGROQUISPEHUAMANCHUMODELASFLORESYCASTILLO PEREZ');
     const h2 = page.locator('.na-v2-client-head h2');
-    expect(await wordsSplit(page)).toEqual([]);
-    const css = await h2.evaluate(el => { const s = getComputedStyle(el); return [s.textOverflow, s.overflowX]; });
-    expect(css).toEqual(['ellipsis', 'hidden']);
-    const money = await page.locator('.na-v2-head-money strong').evaluate(el => el.scrollWidth <= el.clientWidth + 1);
-    expect(money).toBe(true);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    await expect.poll(async () => ({
+      split: await wordsSplit(page),
+      css: await h2.evaluate(el => { const s = getComputedStyle(el); return [el.isConnected, s.textOverflow, s.overflowX]; }),
+      money: await page.locator('.na-v2-head-money strong').evaluate(el => el.isConnected && el.scrollWidth <= el.clientWidth + 1),
+      noScroll: await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    })).toEqual({ split: [], css: [true, 'ellipsis', 'hidden'], money: true, noScroll: true });
   });
 }

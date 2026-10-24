@@ -34,7 +34,7 @@
     return Number.isFinite(date.getTime()) ? new Date(date.getTime() - 5 * 3600000).toISOString().slice(0, 10) : '';
   }
   function periodRange(days, now) {
-    var count = Number(days) === 90 ? 90 : 30;
+    var count = [30, 60, 90].indexOf(Number(days)) >= 0 ? Number(days) : 30; // 60: Productos sin movimiento (ABC sigue ofreciendo 30/90)
     var to = limaDay(now === undefined ? Date.now() : now);
     if (!to) throw new RangeError('Fecha de referencia inválida');
     var from = new Date(new Date(to + 'T00:00:00Z').getTime() - (count - 1) * DAY_MS);
@@ -144,11 +144,15 @@
       revenue: result.reduce(function (sum, group) { return sum + group.revenueCents; }, 0) / 100 };
   }
 
-  function ownerAllowed() {
-    var roles = root.NA_ROLES, permissions = root.NA_PERMISSIONS;
-    return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() &&
-      permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID));
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  // No es una regla de rol: confirma que la tabla de permisos cargó (falla cerrada sin ella).
+  function policyReady() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
+  }
+  function ownerAllowed() { return isOwner() && policyReady(); }
   function element(tag, className, value) {
     var node = root.document.createElement(tag);
     if (className) node.className = className;

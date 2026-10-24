@@ -385,6 +385,22 @@
     return out;
   }
 
+  function recordFichaPrice(productId, legacy, centsInput) {
+    try {
+      if (!root.NA_PRICE_HISTORY || !legacy || !centsInput || centsInput.price_cents == null) return;
+      root.NA_PRICE_HISTORY.recordDiff({
+        productId: productId,
+        origin: 'ficha',
+        before: { venta: legacy.precio, mayorista: legacy.precioCaja, costo: legacy.costo },
+        after: {
+          venta: centsInput.price_cents / 100,
+          mayorista: centsInput.box_price_cents == null ? null : centsInput.box_price_cents / 100,
+          costo: centsInput.cost_cents / 100
+        }
+      });
+    } catch (_) {}
+  }
+
   async function saveEdit(id) {
     var client = api();
     if (!client || typeof client.updateProduct !== 'function') {
@@ -442,6 +458,7 @@
       if (pending) {
         try { receipt = await client.retryPending(); }
         catch (error) { notify(pendingMessage(error), 'error'); return false; }
+        recordFichaPrice(id, legacy, pending.payload);
         return await afterUpdate(receipt, true);
       }
       try { await refreshCanonical(); }
@@ -472,6 +489,7 @@
         notify('No se modificó el producto: ' + clean(error && error.message), 'error');
         return false;
       }
+      recordFichaPrice(id, legacy, input);
       return await afterUpdate(receipt, false);
     } finally {
       busy = false;

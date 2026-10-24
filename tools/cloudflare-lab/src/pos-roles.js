@@ -1,4 +1,5 @@
 import { canDo, PERMISSIONS } from './pos-permissions.js';
+import { readEmployeeAllow } from './pos-employee-perms.js';
 // Etapa 2 (G): roles por aparato y PIN del dueño validado solo en el servidor.
 // - Un aparato sin fila en pos_device_roles es del dueño (compatibilidad con el teléfono actual).
 // - El PIN nunca se registra ni se devuelve; solo se guarda PBKDF2-SHA256 con sal por fila.
@@ -12,8 +13,13 @@ const WINDOW_MS = 15 * 60 * 1000;
 const APPROVAL_MS = 5 * 60 * 1000;
 const PAIRING_MS = 15 * 60 * 1000;
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-export const OWNER_COMMANDS = new Set(['inventory.adjust', 'adjustment.create', 'compensation.create', 'product.update', 'customer.credit-policy.set']);
-const APPROVAL_ACTIONS = new Set([...OWNER_COMMANDS, 'settings.set', 'reset', 'discount', 'sale.annul', 'expired_lot_sale']);
+export const OWNER_COMMANDS = new Set(['inventory.adjust', 'adjustment.create', 'compensation.create', 'product.update', 'customer.credit-policy.set',
+  // Rama feature/asistente-aislado (Bot 5): su aprobación también exige operation_id (no hay aprobación suelta). product.create necesita el OK del jefe.
+  'product.create', 'assistant.employee_access', 'assistant.owner_device']);
+// 'product.create': CAMBIO DE SERVIDOR DEL POS (rama feature/asistente-aislado), necesita el visto bueno del jefe antes de desplegar.
+// 'assistant.employee_access': asistente (rama feature/asistente-aislado), solo para aprobar el nivel del asistente de un aparato empleado. Aditivo.
+// 'assistant.owner_device': asistente, aprobar/rechazar/quitar un aparato dueño (detrás de ASSISTANT_OWNER_BOOTSTRAP). Aditivo.
+const APPROVAL_ACTIONS = new Set([...OWNER_COMMANDS, 'product.create', 'settings.set', 'reset', 'discount', 'sale.annul', 'expired_lot_sale', 'assistant.employee_access', 'assistant.owner_device', 'employee.permissions']);
 const SETTING_KEY = /^[a-z][a-z0-9_.-]{0,59}$/;
 export { ROLE_PATHS } from './pos-permissions.js';
 
@@ -196,6 +202,12 @@ export async function ownerGate(request, env, auth, action, json, db, always = f
   return json({ error: 'owner_approval_required', action, pos_role: role === 'owner' ? 'owner' : 'empleado' }, 403);
 }
 
+// Permisos por empleado: solo el empleado recibe employee_allow ({ id: true }, normalizado, sin caché, {} ante error).
+async function employeeAllowField(db, role) {
+  if (role !== 'empleado') return {};
+  try { return { employee_allow: await readEmployeeAllow(db) }; } catch { return { employee_allow: {} }; }
+}
+
 export async function handleRoles(request, url, env, { json, authorizeSession, getDatabase }) {
   const db = getDatabase(env);
   const path = url.pathname;
@@ -212,8 +224,8 @@ export async function handleRoles(request, url, env, { json, authorizeSession, g
       try {
         pinSet = !!(await pinRow(db));
         label = (await db.prepare('SELECT label FROM pos_device_roles WHERE device_id=?1').bind(auth.principalId).first())?.label ?? null;
-      } catch (e) { if (!missingTable(e)) throw e; return json({ pos_role: role, owner_pin_set: false, roles_ready: false, device_id: auth.principalId }); }
-      return json({ pos_role: role, owner_pin_set: pinSet, roles_ready: true, device_id: auth.principalId, label });
+      } catch (e) { if (!missingTable(e)) throw e; return json({ pos_role: role, owner_pin_set: false, roles_ready: false, device_id: auth.principalId, ...(await employeeAllowField(db, role)) }); }
+      return json({ pos_role: role, owner_pin_set: pinSet, roles_ready: true, device_id: auth.principalId, label, ...(await employeeAllowField(db, role)) });
     }
     if (path === '/settings' && request.method === 'GET') {
       const rows = (await db.prepare('SELECT key,value_json,revision,updated_at FROM pos_settings WHERE key NOT LIKE \'internal:%\' ORDER BY key').all()).results || [];
@@ -311,7 +323,11 @@ export async function handleRoles(request, url, env, { json, authorizeSession, g
           ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,revision=pos_settings.revision+1,
           updated_at=excluded.updated_at,updated_by=excluded.updated_by WHERE pos_settings.revision=?5`)
         .bind(key, value, now(), auth.principalId, rev).run();
-      if (res?.meta && res.meta.changes === 0) return json({ error: 'revision_conflict' }, 409);
+      if (res?.meta && res.meta.changes === 0) {
+        // Otro aparato guardó entre la lectura y la escritura: se devuelve la revisión actual para que el cliente se resincronice.
+        const latest = await db.prepare('SELECT revision FROM pos_settings WHERE key=?1').bind(key).first();
+        return json({ error: 'revision_conflict', revision: Number(latest?.revision || 0) }, 409);
+      }
       return json({ status: 'saved', key, revision: rev + 1 });
     }
     return json({ error: 'not_found' }, 404);

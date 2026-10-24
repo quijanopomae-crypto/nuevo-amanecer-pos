@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectAllFit } from './helpers/fits';
+import { settlePersistence } from './helpers/persistence';
 
 // No DOM/permission injection: these cases exercise the integrated page.
 async function rolePage(page: Page, role: 'owner' | 'empleado') {
@@ -36,21 +38,16 @@ async function readState(page: Page) {
   return page.evaluate(() => (window as any).eval('JSON.stringify({productos,ventas})'));
 }
 async function noOverflow(page: Page) {
-  expect(await page.locator('#pageVentasStock').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  expect(await page.locator('#pageVentasStock').evaluate(node => {
-    const box = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('h1,h2,input,select,button,tbody th,tbody td,.vs-summary-card')].every(child => {
-      const rect = child.getBoundingClientRect();
-      return rect.left >= box.left - 1 && rect.right <= box.right + 1 && child.scrollWidth <= child.clientWidth + 1;
-    });
-  })).toBe(true);
+  await expectAllFit(page.locator('#pageVentasStock'), 'h1,h2,input,select,button,tbody th,tbody td,.vs-summary-card');
 }
 
 for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
   test(`owner ventas con stock ${width}px ${dark ? 'dark' : 'light'}: no overflow or writes`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner'); await seed(page);
+    // El arranque guarda na_snapshot_v9 varias veces (_naPersistChain); si un commit llega después de
+    // fotografiar localStorage o de instalar el espía de setItem, solo cambia updatedAt y la prueba falla.
+    await settlePersistence(page);
     const before = await readState(page);
     const storageBefore = await page.evaluate(() => JSON.stringify({ ...localStorage }));
     await page.evaluate(() => {
@@ -94,6 +91,8 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     expect(csv).toContain('Producto,Código,Categoría,Unidades vendidas,Stock,Promedio diario,Días de cobertura,Estado\r\n');
     expect(csv.startsWith('\uFEFF')).toBe(true); expect(csv).not.toMatch(/costo|precioCompra|margin|Importe/i);
     await noOverflow(page);
+    // Cualquier guardado encolado durante la prueba termina antes de comparar (así se detecta, no se pierde).
+    await settlePersistence(page);
     expect(await readState(page)).toBe(before);
     expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).toBe(storageBefore);
     expect(await page.evaluate(() => (window as any).__vsStorageWrites)).toEqual([]);

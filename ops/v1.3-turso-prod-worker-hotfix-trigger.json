@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner authorized (standing permission to merge+deploy after team OKs; 2026-10-16 Lima; asistente 2 code OK 9cc5dddd, asistente 3 spec OK, asistente 4 LOCAL OK, e2e 472/472 single pass, proximamente.spec 27/27 x3, Node full, registry 136/84 prioritized, 8 new owner-only locked, Venta/Inicio identical) deploy of base 57f3054c62d15278bfd79600e27d7876fba80698: #803 proximamente-7-casamarket (touches pos-permissions.js). No schema changes. Rollback to 511f95a7 (worker 56, Cloudflare version b602afde, currently live). Web NOT deployed (pending asistente 5 live check).",
-  "target_commit": "57f3054c62d15278bfd79600e27d7876fba80698",
-  "rollback_ref": "511f95a7c4b9785d53c150a69e6f67e7773c68c9",
+  "authorization_context": "Owner approved 2026-10-23: 'Enciéndelas todas, con copia antes' / 'pueden encender las 21 funciones de proximamente disponible'. PR #1021 opens only built+wired locks: edicion-masiva-precios, precio-por-margen, edicion-masiva-productos, stock-negativo-configurable (shared pos-permissions.js). DB backup run 40031504740 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "2356dc12fc030869a6feab12136bb5ef7377391b",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 57,
-  "optimization": "PROXIMAMENTE_7_CASAMARKET_803"
+  "attempt": 79,
+  "optimization": "FEATURE_LOCKS_WAVE1",
+  "target_commit": "80314b962b48159c7850e9fc797ea7359244828f"
 }

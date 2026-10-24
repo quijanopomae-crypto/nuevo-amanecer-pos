@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 async function rolePage(page, role) {
   await page.route('**/*', route => {
@@ -15,7 +16,7 @@ async function rolePage(page, role) {
   await page.waitForFunction(role => window.NA_ROLES?.role === role && window.NA_ROLES.confirmed, role);
 }
 
-const unlockedPages = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial' };
+const unlockedPages = { 'precio-por-margen': 'pageEdicionPrecios', 'edicion-masiva-precios': 'pageEdicionPrecios', 'edicion-masiva-productos': 'pageInventario', 'stock-negativo-configurable': 'pageAjustesInventario', 'permisos-por-empleado': 'pageConfig', 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'clientes-deudores-caja': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra', 'ajustes-inventario': 'pageAjustesInventario' };
 
 async function registry(page) {
   return page.evaluate(async () => { const api = (window as any).NA_PROXIMAMENTE; await api.load(); return api.list().map(f => ({ id: f.id, module: f.module, unlocked: api.isUnlocked(f), locked: (window as any).NA_PERMISSIONS.featureLocked(f.id), uncertain: !!f.uncertain })); });
@@ -47,7 +48,7 @@ test('every registry entry: server lock exists; locked ones show the lock and pr
   test.setTimeout(180000);
   await rolePage(page, 'owner');
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
   await page.evaluate(() => window.goPage('pageConfig'));
   const configButton = page.locator('#na9Nav [data-go="pageProximamente"]');
   await expect(configButton).toContainText('Funciones en preparación');
@@ -110,7 +111,7 @@ test('Asistente virtual is visible for owner and locked; clicking only opens a d
   await page.setViewportSize({ width: 390, height: 844 });
   await rolePage(page, 'owner');
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
   await page.evaluate(() => window.goPage('pageProximamente'));
   const card = page.locator('.na-prox-section[data-module="Extras"] [data-feature-id="asistente-virtual"]');
   await expect(card).toBeVisible();
@@ -157,10 +158,16 @@ for (const [width, columns] of [[1366, 3], [768, 2], [390, 1]]) {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner');
     await page.evaluate(() => window.goPage('pageProximamente'));
-    await expect(page.locator('.na-prox-section-grid').first()).toBeVisible();
-    const count = await page.locator('.na-prox-section-grid').first().evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length);
-    expect(count).toBe(columns);
-    expect(await page.locator('#pageProximamente').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    const grid = page.locator('.na-prox-section-grid').first();
+    await expect(grid).toBeVisible();
+    // Al activar la página, cada cambio de clase (p. ej. na-enter-fade) vuelve a
+    // renderizar y reemplaza la grilla: una lectura única puede caer sobre un nodo
+    // ya desconectado, cuyo estilo computado es '' (= "1 columna"). Se reintenta
+    // sobre el nodo vivo hasta que el layout se estabiliza.
+    await expect.poll(() => grid.evaluate(node => node.isConnected
+      ? getComputedStyle(node).gridTemplateColumns.split(' ').filter(Boolean).length
+      : 0), { message: `.na-prox-section-grid debe tener ${columns} columnas a ${width}px` }).toBe(columns);
+    await expect.poll(() => page.locator('#pageProximamente').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await page.locator('.na-prox-section[data-module="Caja"] > .na-prox-summary').click();
     await expect(page.locator('.na-prox-section[data-module="Caja"] .na-prox-card').first()).toBeHidden();
   });
@@ -183,4 +190,18 @@ test('local owner opens Próximamente from the drawer and configuration', async 
   await expect(button).toBeVisible();
   await button.click();
   await expect(page.locator('#pageProximamente')).toHaveClass(/\bactive\b/);
+});
+
+test('Historial de precios: la tarjeta dice Disponible y abre Inventario (ficha); el empleado no entra', async ({ page, browser }) => {
+  await rolePage(page, 'owner');
+  await page.evaluate(() => window.goPage('pageProximamente'));
+  const card = page.locator('[data-feature-id="historial-precios-producto"]');
+  await expect(card.locator('.na-prox-available')).toHaveText('Disponible');
+  await expect(card.locator('.na-prox-badge')).toHaveCount(0);
+  await card.click();
+  await expect(page.locator('#pageInventario')).toHaveClass(/\bactive\b/);
+  const employee = await browser.newPage();
+  await rolePage(employee, 'empleado');
+  expect(await employee.evaluate(() => (window as any).NA_PERMISSIONS.canAccessScreen('empleado', 'pageProximamente'))).toBe(false);
+  await employee.close();
 });

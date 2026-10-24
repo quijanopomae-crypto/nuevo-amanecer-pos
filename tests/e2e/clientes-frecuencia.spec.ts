@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectAllFit, expectFits, expectStylesheetApplied } from './helpers/fits';
+import { settlePersistence } from './helpers/persistence';
 
 test.use({ timezoneId: 'UTC' });
 
@@ -17,8 +19,8 @@ async function rolePage(page: Page, role: 'owner' | 'empleado') {
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed, role);
 }
-async function seed(page: Page) {
-  await page.evaluate(() => {
+async function seed(page: Page, firstSalePrice = 10) {
+  await page.evaluate(firstSalePrice => {
     (window as any).eval(`
       productos=[{id:'cf-product',name:'Producto de prueba',stock:10}];
       clientes=[
@@ -43,35 +45,35 @@ async function seed(page: Page) {
       creditos=[{id:'cf-credit',cliId:'cf-current',monto:10,pagado:0,pagos:[{id:'cf-pending-payment',monto:2,pending:true}]}];
       cajMovs=[{id:'cf-cash',tipo:'ing',monto:10}];
     `);
-  });
+    (window as any).eval('ventas')[0].items[0].precio = firstSalePrice;
+  }, firstSalePrice);
 }
 async function readState(page: Page) {
+  // El guardado de arranque (saveAllData) puede seguir en _naPersistChain y
+  // reescribir na_snapshot_v9.updatedAt después de leer "antes".
+  await settlePersistence(page);
   return page.evaluate(() => {
     const state = (window as any).eval('JSON.stringify({productos,ventas,clientes,creditos,cajMovs})');
     const storage = Object.fromEntries(Object.keys(localStorage).sort().map(key => [key, localStorage.getItem(key)]));
     return { state, storage };
   });
 }
+// Guard: no medir layout hasta que clientes-frecuencia.css esté cargada y aplicada.
+async function frequencyStyles(page: Page) {
+  await expectStylesheetApplied(page, 'css/clientes-frecuencia.css', page.locator('#pageClientesFrecuencia'), '--cf-bg');
+}
 async function noOverflow(page: Page) {
-  expect(await page.locator('#pageClientesFrecuencia').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  expect(await page.locator('#pageClientesFrecuencia').evaluate(node => {
-    const box = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('h1,select,input,button,tbody th,tbody td,.cf-badge,.cf-summary-card')].every(child => {
-      const rect = child.getBoundingClientRect();
-      return rect.left >= box.left - 1 && rect.right <= box.right + 1 && child.scrollWidth <= child.clientWidth + 1;
-    });
-  })).toBe(true);
+  await frequencyStyles(page);
+  await expectAllFit(page.locator('#pageClientesFrecuencia'), 'h1,select,input,button,tbody th,tbody td,.cf-badge,.cf-summary-card');
   const select = page.locator('#pageClientesFrecuencia [data-cf-period]');
-  const [needed, actual] = await select.evaluate(node => {
+  await expect.poll(() => select.evaluate(node => {
     const clone = node.cloneNode(true) as HTMLSelectElement;
     clone.style.width = 'max-content'; clone.style.position = 'absolute'; clone.style.visibility = 'hidden';
     node.parentElement!.appendChild(clone);
-    const result = [clone.getBoundingClientRect().width, node.getBoundingClientRect().width];
+    const needed = clone.getBoundingClientRect().width, actual = node.getBoundingClientRect().width;
     clone.remove();
-    return result;
-  });
-  expect(actual + 0.5).toBeGreaterThanOrEqual(needed);
+    return actual + 0.5 >= needed;
+  }), { message: 'el select de período muestra su opción completa' }).toBe(true);
 }
 
 for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
@@ -133,10 +135,10 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     await noOverflow(page);
     const refresh = screen.getByRole('button', { name: 'Actualizar reporte' });
     await refresh.scrollIntoViewIfNeeded();
-    expect(await refresh.evaluate(button => {
+    await expect.poll(() => refresh.evaluate(button => {
       const r = button.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!hit && (hit === button || button.contains(hit));
-    })).toBe(true);
+    }), { message: 'Actualizar reporte no queda tapado' }).toBe(true);
     await refresh.click();
     expect(await readState(page)).toEqual(before);
     expect(writes).toEqual([]);
@@ -163,6 +165,7 @@ for (const width of [650, 1000]) {
     await page.locator('#pageProximamente [data-feature-id="clientes-frecuencia"]').click();
     const screen = page.locator('#pageClientesFrecuencia');
     await expect(screen).toBeVisible();
+    await frequencyStyles(page);
     const tables = screen.locator('table');
     expect(await tables.count()).toBeGreaterThan(0);
     for (const table of await tables.all()) {
@@ -179,6 +182,109 @@ for (const width of [650, 1000]) {
     }
   });
 }
+
+async function openFrequency(page: Page, width: number, dark = false, firstSalePrice = 10) {
+  await page.setViewportSize({ width, height: 900 });
+  await rolePage(page, 'owner');
+  await seed(page, firstSalePrice);
+  if (dark) await page.evaluate(() => document.body.classList.add('dark'));
+  await page.evaluate(() => (window as any).goPage('pageProximamente'));
+  await page.locator('#pageProximamente [data-feature-id="clientes-frecuencia"]').click();
+  const screen = page.locator('#pageClientesFrecuencia');
+  await expect(screen.locator('.cf-table')).toBeVisible();
+  await frequencyStyles(page);
+  return screen;
+}
+// The other six purchases add S/ 60.00 to the first sale within the 90-day period.
+const kpiCases = [
+  { width: 650, price: 2_166.10, total: 'S/ 2,226.10' },
+  { width: 650, price: 1_234_507.89, total: 'S/ 1,234,567.89' },
+  { width: 390, price: 1_234_507.89, total: 'S/ 1,234,567.89' },
+  ...[390, 768, 800, 900, 1366].map(width => ({ width, price: 2_226_040.10, total: 'S/ 2,226,100.10' })),
+];
+for (const { width, price, total } of kpiCases) for (const dark of [false, true]) {
+  test(`${width}px ${dark ? 'dark' : 'light'}: customer frequency KPIs with ${total} fit on one line`, async ({ page }) => {
+    const screen = await openFrequency(page, width, dark, price);
+    await expect(screen).toHaveCSS('background-color', dark ? 'rgb(15, 23, 42)' : 'rgb(248, 250, 252)');
+    await expect(screen.locator('.cf-summary-card', { hasText: 'Importe comprado' }).locator('strong')).toHaveText(total);
+    const values = screen.locator('.cf-summary-card strong');
+    await expect(values).toHaveCount(4);
+    for (const value of await values.all()) {
+      await expect(value).toBeVisible();
+      const message = `KPI ${await value.textContent()} at ${width}px must fit its card on one line`;
+      await expectFits(value, { within: '.cf-summary-card' }, message);
+      await expectFits(value, { within: '.cf-summary-card', text: true, singleLine: true }, message);
+    }
+  });
+}
+test('1366px dark: customer name in the table uses --cf-text, not the global th gray', async ({ page }) => {
+  const screen = await openFrequency(page, 1366, true);
+  await expect(screen.locator('.cf-table')).toHaveCSS('display', 'table');
+  const name = screen.locator('.cf-table tbody th').first();
+  await expect(name).toBeVisible();
+  const expected = await screen.evaluate(node => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--cf-text)';
+    node.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  expect(expected).toBe('rgb(248, 250, 252)');
+  await expect(name).toHaveCSS('color', expected);
+});
+for (const width of [650, 700, 1000]) {
+  test(`${width}px: Última compra and Días sin comprar remain visible in customer frequency`, async ({ page }) => {
+    const screen = await openFrequency(page, width);
+    await expect(screen.locator('.cf-table')).toHaveCSS('display', width < 900 ? 'block' : 'table');
+    await expect(screen.locator('tbody tr')).toHaveCount(4);
+    for (const label of ['Última compra', 'Días sin comprar']) {
+      const cells = screen.locator(`.cf-table tbody td[data-label="${label}"]`);
+      await expect(cells).toHaveCount(4);
+      for (const cell of await cells.all()) {
+        await expect(cell).toBeVisible();
+        await expect(cell).toHaveCSS('display', width < 900 ? 'block' : 'table-cell');
+        await expect.poll(() => cell.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(0);
+      }
+    }
+    if (width === 1000) {
+      const cells = screen.locator('.cf-table :is(th, td):is(:nth-child(4), :nth-child(5))');
+      await expect(cells).toHaveCount(10);
+      for (const cell of await cells.all()) {
+        await expect(cell).toBeVisible();
+        await expect(cell).toHaveCSS('display', 'table-cell');
+        await expect.poll(() => cell.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(0);
+      }
+    }
+  });
+}
+test('1366px: numeric headers Compras, Días sin comprar e Importe align right like their numbers', async ({ page }) => {
+  const screen = await openFrequency(page, 1366);
+  for (const label of ['Compras', 'Días sin comprar', 'Importe']) {
+    await expect(screen.locator('.cf-table thead th', { hasText: new RegExp('^' + label + '$') })).toHaveCSS('text-align', 'right');
+  }
+  await expect(screen.locator('.cf-table thead th', { hasText: /^Cliente$/ })).toHaveCSS('text-align', 'left');
+});
+test('650px card: «S/» stays joined to the amount with a non-breaking space', async ({ page }) => {
+  const screen = await openFrequency(page, 650);
+  const texts = await screen.locator('.cf-table td[data-label="Importe"], .cf-summary-card strong').allTextContents();
+  const money = texts.filter(t => t.startsWith('S/'));
+  expect(money.length).toBeGreaterThan(0);
+  for (const t of money) expect(t).toMatch(/^S\/\u00a0\d/);
+});
+test('650px Nocturno card: customer name meets WCAG AA contrast', async ({ page }) => {
+  const screen = await openFrequency(page, 650, true);
+  const ratios = await screen.locator('.cf-table tbody th').evaluateAll(nodes => nodes.map(node => {
+    const rgb = (c: string) => (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    const lum = (c: number[]) => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    let el: HTMLElement | null = node as HTMLElement, bg = 'rgba(0, 0, 0, 0)';
+    while (el && /rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { bg = getComputedStyle(el).backgroundColor; el = el.parentElement; }
+    const a = lum(rgb(getComputedStyle(node).color)), b = lum(rgb(bg));
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  }));
+  expect(ratios.length).toBeGreaterThan(0);
+  for (const r of ratios) expect(r).toBeGreaterThanOrEqual(4.5);
+});
 
 test('employee cannot see the card or open frequency; direct rendering exposes no customer data', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1,0 +1,63 @@
+/* Ajustes de inventario con motivo: estilos limitados a #pageAjustesInventario. */
+#pageAjustesInventario { --aj-bg: #f8fafc; --aj-surface: #fff; --aj-text: #0f172a; --aj-muted: #475569; --aj-border: #cbd5e1; --aj-ok: #166534; --aj-err: #991b1b; --aj-warn: #92400e; --aj-warn-bg: #fffbeb; --aj-warn-edge: #b45309;
+  min-width: 0; overflow-y: auto; padding: 16px; color: var(--aj-text); background: var(--aj-bg); font-size: 14px; line-height: 1.5; }
+body.dark #pageAjustesInventario { --aj-bg: #0f172a; --aj-surface: #1e293b; --aj-text: #f8fafc; --aj-muted: #cbd5e1; --aj-border: #64748b; --aj-ok: #86efac; --aj-err: #fca5a5; --aj-warn: #fcd34d; --aj-warn-bg: #422006; --aj-warn-edge: #f59e0b; color-scheme: dark; }
+#pageAjustesInventario *, #pageAjustesInventario *::before, #pageAjustesInventario *::after { box-sizing: border-box; }
+#pageAjustesInventario [hidden] { display: none !important; }
+#pageAjustesInventario .aj-shell { width: 100%; max-width: 1200px; margin: 0 auto; }
+#pageAjustesInventario h1 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 30px); line-height: 1.2; overflow-wrap: anywhere; }
+#pageAjustesInventario h2 { margin: 20px 0 8px; font-size: 18px; }
+#pageAjustesInventario p { margin: 0 0 12px; }
+#pageAjustesInventario :is(.aj-description, .aj-status) { color: var(--aj-muted); overflow-wrap: anywhere; }
+#pageAjustesInventario .aj-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px; border: 1px solid var(--aj-border); border-radius: 12px; background: var(--aj-surface); }
+#pageAjustesInventario label { display: grid; gap: 4px; min-width: 0; font-weight: 700; }
+/* El mensaje de error de la cantidad no estira los demás campos de la misma fila. */
+#pageAjustesInventario .aj-form > label { align-content: start; }
+#pageAjustesInventario :is(input, select, textarea, button) { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--aj-border); border-radius: 10px; font: inherit; color: var(--aj-text); background: var(--aj-surface); }
+#pageAjustesInventario textarea { min-height: 64px; resize: vertical; }
+#pageAjustesInventario button { cursor: pointer; font-weight: 700; }
+#pageAjustesInventario .aj-submit { background: #0f766e; border-color: #0f766e; color: #fff; }
+#pageAjustesInventario :is(input, select, textarea, button):focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+#pageAjustesInventario .aj-message { font-weight: 700; overflow-wrap: anywhere; }
+/* Motivos desactivados (Rotura/Vencido en productos con lotes): gris en claro y en oscuro. */
+#pageAjustesInventario [data-aj-type] option:disabled { color: #64748b; }
+body.dark #pageAjustesInventario [data-aj-type] option:disabled { color: #94a3b8; }
+#pageAjustesInventario .aj-qty-error { color: var(--aj-err); font-weight: 700; font-size: 13px; overflow-wrap: anywhere; }
+#pageAjustesInventario .aj-lot-note { margin: 0; padding: 8px 12px; border: 1px solid var(--aj-border); border-left: 4px solid #b45309; border-radius: 10px; background: var(--aj-surface); color: var(--aj-text); font-weight: 600; overflow-wrap: anywhere; }
+#pageAjustesInventario .aj-message[data-aj-ok="true"] { color: var(--aj-ok); }
+#pageAjustesInventario .aj-message[data-aj-ok="false"] { color: var(--aj-err); }
+/* Ajuste pendiente en CANON (se reintentará solo): aviso ámbar, no rojo de error. */
+#pageAjustesInventario .aj-message[data-aj-ok="pending"] { padding: 8px 12px; border: 1px solid var(--aj-border); border-left: 4px solid var(--aj-warn-edge); border-radius: 10px; color: var(--aj-warn); background: var(--aj-warn-bg); }
+#pageAjustesInventario .aj-submit:disabled { cursor: not-allowed; opacity: .6; }
+#pageAjustesInventario .aj-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+#pageAjustesInventario .aj-card, #pageAjustesInventario .aj-empty { padding: 10px 12px; border: 1px solid var(--aj-border); border-radius: 12px; background: var(--aj-surface); }
+#pageAjustesInventario .aj-card span { display: block; font-size: 12px; color: var(--aj-muted); }
+#pageAjustesInventario .aj-card strong { font-size: 20px; }
+#pageAjustesInventario .aj-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--aj-surface); }
+#pageAjustesInventario .aj-table :is(th, td) { display: table-cell; padding: 8px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--aj-border); overflow-wrap: anywhere; color: var(--aj-text); }
+#pageAjustesInventario .aj-table thead th { font-size: 12px; color: var(--aj-muted); }
+#pageAjustesInventario .aj-table .aj-num { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 599px) {
+  #pageAjustesInventario .aj-table, #pageAjustesInventario .aj-table tbody { display: block; background: transparent; }
+  #pageAjustesInventario .aj-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #pageAjustesInventario .aj-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--aj-border); border-radius: 12px; background: var(--aj-surface); }
+  #pageAjustesInventario .aj-table :is(th, td) { display: block; padding: 0; border: 0; }
+  #pageAjustesInventario .aj-table td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--aj-muted); }
+  #pageAjustesInventario .aj-table .aj-num { text-align: left; }
+  #pageAjustesInventario .aj-table .aj-note, #pageAjustesInventario .aj-table .aj-product { grid-column: 1 / -1; }
+}
+@media (min-width: 600px) {
+  #pageAjustesInventario { padding: 24px; }
+  #pageAjustesInventario .aj-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #pageAjustesInventario .aj-form .aj-wide { grid-column: 1 / -1; }
+}
+@media (min-width: 1000px) { #pageAjustesInventario .aj-form { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* CM-073 · Stock negativo (dentro de Ajustes de inventario). */
+#pageAjustesInventario .sn-shell { margin: 0 0 16px; padding: 14px; border: 1px solid var(--aj-border); border-left: 4px solid var(--aj-warn-edge); border-radius: 12px; background: var(--aj-surface); }
+#pageAjustesInventario .sn-shell h2 { margin-top: 0; }
+#pageAjustesInventario [data-sn-list] { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+#pageAjustesInventario .sn-row { display: grid; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--aj-border); border-radius: 10px; }
+#pageAjustesInventario .sn-name { overflow-wrap: anywhere; }
+#pageAjustesInventario .sn-stock { color: var(--aj-err); font-weight: 700; }
+#pageAjustesInventario .sn-confirm { display: grid; gap: 6px; }
+#pageAjustesInventario .sn-summary { margin: 0; font-weight: 700; overflow-wrap: anywhere; }

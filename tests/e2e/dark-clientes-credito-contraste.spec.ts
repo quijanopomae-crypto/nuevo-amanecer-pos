@@ -29,37 +29,52 @@ type Measure = { minRatio: number; worst: string; box: number[]; colors: string[
 async function measure(page: Page, selector: string): Promise<Measure> {
   const el = page.locator(selector).first();
   await expect(el).toBeVisible();
-  // Espera a que termine la transición de pantalla: misma caja (no nula) en dos lecturas seguidas.
-  let last = '';
+  // La pantalla de Clientes se vuelve a dibujar sola (transición de pantalla, refresco de la lista
+  // na-client-refresh-out/in): una lectura única puede caer sobre un nodo ya reemplazado (estilos "")
+  // o a mitad de animación. Se repite la medición COMPLETA (colores, contraste y caja) hasta obtener
+  // dos resultados idénticos seguidos sobre un nodo conectado, sin refresco ni animaciones finitas en curso.
+  let last = '', stable: Measure | null = null;
   await expect.poll(async () => {
-    const r = await el.evaluate(n => { const b = n.getBoundingClientRect(); return b.width && b.height && document.querySelectorAll('#pageClientes .na-v2-screen').length === 1 ? [b.x, b.y, b.width, b.height].map(Math.round).join(',') : ''; });
-    const stable = !!r && r === last; last = r; return stable;
-  }, { intervals: [100, 100, 150, 250] }).toBe(true);
-  return el.evaluate(root => {
-    const parse = (c: string) => (c.match(/[\d.]+/g) || []).map(Number);
-    const lum = (c: number[]) => { const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-    const ratio = (a: number[], b: number[]) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-    // Fondo efectivo: todos los colores del primer ancestro con fondo (color o paradas del degradado).
-    const backgrounds = (node: Element | null): number[][] => {
-      for (let p = node; p; p = p.parentElement) {
-        const s = getComputedStyle(p), stops = (s.backgroundImage.match(/rgba?\([^)]*\)/g) || []).map(parse).filter(c => c[3] !== 0);
-        if (stops.length) return stops;
-        const bg = parse(s.backgroundColor); if (bg.length && bg[3] !== 0) return [bg];
+    const m = await el.evaluate((root): Measure | null => {
+      const page = document.getElementById('pageClientes');
+      if (!root.isConnected || !page || page.classList.contains('na-client-refresh-out') || page.classList.contains('na-client-refresh-in')) return null;
+      if (document.querySelectorAll('#pageClientes .na-v2-screen').length !== 1) return null;
+      const box = root.getBoundingClientRect(); if (!box.width || !box.height) return null;
+      const running = document.getAnimations().some(a => {
+        const target = (a.effect as KeyframeEffect | null)?.target as Element | null;
+        const timing = a.effect?.getComputedTiming();
+        return a.playState === 'running' && !!target && page.contains(target) && timing?.iterations !== Infinity;
+      });
+      if (running) return null;
+      const parse = (c: string) => (c.match(/[\d.]+/g) || []).map(Number);
+      const lum = (c: number[]) => { const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const ratio = (a: number[], b: number[]) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      // Fondo efectivo: todos los colores del primer ancestro con fondo (color o paradas del degradado).
+      const backgrounds = (node: Element | null): number[][] => {
+        for (let p = node; p; p = p.parentElement) {
+          const s = getComputedStyle(p), stops = (s.backgroundImage.match(/rgba?\([^)]*\)/g) || []).map(parse).filter(c => c[3] !== 0);
+          if (stops.length) return stops;
+          const bg = parse(s.backgroundColor); if (bg.length && bg[3] !== 0) return [bg];
+        }
+        return [[255, 255, 255]];
+      };
+      let minRatio = 99, worst = '';
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+        const host = t.parentElement!; const text = (t.textContent || '').trim();
+        if (!text || !host.getClientRects().length || getComputedStyle(host).visibility === 'hidden') continue;
+        const fg = parse(getComputedStyle(host).color);
+        for (const bg of backgrounds(host)) { const r = ratio(fg, bg); if (r < minRatio) { minRatio = r; worst = text.slice(0, 30) + ' ' + getComputedStyle(host).color + ' / rgb(' + bg.slice(0, 3).join(', ') + ')'; } }
       }
-      return [[255, 255, 255]];
-    };
-    let minRatio = 99, worst = '';
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
-      const host = t.parentElement!; const text = (t.textContent || '').trim();
-      if (!text || !host.getClientRects().length || getComputedStyle(host).visibility === 'hidden') continue;
-      const fg = parse(getComputedStyle(host).color);
-      for (const bg of backgrounds(host)) { const r = ratio(fg, bg); if (r < minRatio) { minRatio = r; worst = text.slice(0, 30) + ' ' + getComputedStyle(host).color + ' / rgb(' + bg.slice(0, 3).join(', ') + ')'; } }
-    }
-    const r = root.getBoundingClientRect();
-    const colors = [root, ...Array.from(root.querySelectorAll('*'))].map(n => { const s = getComputedStyle(n); return [s.color, s.backgroundColor, s.backgroundImage, s.borderTopColor, s.borderLeftColor].join(' '); });
-    return { minRatio: Math.round(minRatio * 100) / 100, worst, box: [r.width, r.height].map(v => Math.round(v)), colors };
-  });
+      const r = root.getBoundingClientRect();
+      const colors = [root, ...Array.from(root.querySelectorAll('*'))].map(n => { const s = getComputedStyle(n); return [s.color, s.backgroundColor, s.backgroundImage, s.borderTopColor, s.borderLeftColor].join(' '); });
+      return { minRatio: Math.round(minRatio * 100) / 100, worst, box: [r.width, r.height].map(v => Math.round(v)), colors };
+    });
+    const key = m ? JSON.stringify(m) : '';
+    const same = !!key && key === last; last = key; if (same) stable = m;
+    return same;
+  }, { message: `medición estable de ${selector}`, intervals: [100, 100, 150, 250], timeout: 15000 }).toBe(true);
+  return stable!;
 }
 
 async function measureAll(page: Page) {

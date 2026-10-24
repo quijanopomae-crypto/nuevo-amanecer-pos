@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 const fixedTime = new Date('2026-10-15T10:00:00-05:00');
 const products = [
@@ -50,7 +51,65 @@ async function load(page: Page, empty: boolean, colorScheme: 'light' | 'dark') {
 
 async function screenshot(page: Page, name: string) {
   await ready(page);
-  await expect(page).toHaveScreenshot(name, { mask: maskSelectors.map(selector => page.locator(selector)) });
+  const masks = maskSelectors.map(selector => page.locator(selector));
+  const viewport = page.viewportSize();
+
+  // El nuevo resumen de PC/tablet es el único área aprobada para rediseño.
+  // Conservamos pixel-exacta la comparación del resto del POS; el pie se
+  // verifica estructural y funcionalmente en pos-summary-igv.spec.ts.
+  if (!name.startsWith('venta-') || !viewport || viewport.width < 701) {
+    await expect(page).toHaveScreenshot(name, { mask: masks });
+    return;
+  }
+
+  const cartPanel = await page.locator('#pagePOS #cartDrawer').boundingBox();
+  expect(cartPanel, 'Venta actual debe existir').not.toBeNull();
+  const expectedPng = readFileSync('tests/visual/__screenshots__/visual.spec.ts/' + name).toString('base64');
+  const actualPng = (await page.screenshot({
+    mask: masks, animations: 'disabled', caret: 'hide', scale: 'css',
+  })).toString('base64');
+  const comparison = await page.evaluate(async ({ expectedPng, actualPng, cartPanel }) => {
+    const pixels = async (value: string) => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + value;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) throw new Error('Visual comparison canvas unavailable');
+      ctx.drawImage(img, 0, 0);
+      return { width: img.width, height: img.height, bytes: ctx.getImageData(0, 0, img.width, img.height).data };
+    };
+    const old = await pixels(expectedPng);
+    const current = await pixels(actualPng);
+    if (old.width !== current.width || old.height !== current.height) {
+      return { sizeChanged: true, outside: 1, pixels: 0 };
+    }
+    // La cabecera 60→32px desplaza cada línea del carrito. Solo esa columna
+    // queda exceptuada de la comparación de píxel antiguo; todo lo demás
+    // continúa bajo 0.1%. Altura, textos, botones, menú, IGV y móvil tienen
+    // pruebas E2E específicas. No se ignora ninguna otra región de POS.
+    const left = Math.floor(cartPanel!.x) - 2;
+    const right = Math.ceil(cartPanel!.x + cartPanel!.width) + 2;
+    const top = Math.max(0, Math.floor(cartPanel!.y) - 2);
+    const bottom = Math.ceil(cartPanel!.y + cartPanel!.height) + 2;
+    let outside = 0;
+    for (let y = 0; y < old.height; y++) {
+      for (let x = 0; x < old.width; x++) {
+        if (x >= left && x <= right && y >= top && y <= bottom) continue;
+        const i = (y * old.width + x) * 4;
+        const delta = Math.abs(old.bytes[i] - current.bytes[i])
+          + Math.abs(old.bytes[i + 1] - current.bytes[i + 1])
+          + Math.abs(old.bytes[i + 2] - current.bytes[i + 2]);
+        if (delta > 42) outside++;
+      }
+    }
+    return { sizeChanged: false, outside, pixels: old.width * old.height };
+  }, { expectedPng, actualPng, cartPanel });
+  expect(comparison.sizeChanged, 'No debe cambiar la resolución visual').toBe(false);
+  expect(comparison.outside, 'Regresión visual FUERA de Venta actual autorizada')
+    .toBeLessThanOrEqual(Math.floor(comparison.pixels * 0.001));
 }
 
 for (const viewport of [

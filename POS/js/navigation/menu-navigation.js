@@ -20,6 +20,7 @@
     'pageValorizacion',
     'pageRotacionAbc',
     'pageClientesFrecuencia',
+    'pageReporteProductosVencer',
     'pageKardex',
     'pageVentasStock',
     'pageReporteArqueo',
@@ -250,6 +251,12 @@
     var toggle = document.getElementById('naMobileMenuToggle');
     var wasOpen = drawer && drawer.classList.contains('is-open');
     if (drawer) {
+      // Sacar el foco antes de aria-hidden: evita el aviso de foco dentro de un nodo oculto.
+      var active = document.activeElement;
+      if (active && active !== document.body && drawer.contains(active)) {
+        if (wasOpen && toggle && isMobile()) toggle.focus();
+        if (drawer.contains(document.activeElement) && typeof active.blur === 'function') active.blur();
+      }
       drawer.classList.remove('is-open');
       drawer.setAttribute('aria-hidden', 'true');
       // Cerrado = fuera de pantalla: sin foco ni clics accidentales.
@@ -326,6 +333,11 @@
     return button;
   }
 
+  // Permisos por empleado (#924): pantallas de la lista cerrada con su casilla prendida. Falla cerrada.
+  function employeeMayScreen(pageId) {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.mayScreen === 'function' && e.mayScreen(pageId) === true); } catch (_) { return false; }
+  }
+
   function canShowDrawerPage(pageId) {
     var roles = root.NA_ROLES;
     // Unknown or unconfirmed identities get the restricted menu; isOwner() already requires a confirmed cloud role.
@@ -333,9 +345,11 @@
     if (pageId === 'pageMenu') return true;
     // The shared table (POS/js/config/pos-permissions.js, PR #668) plugs in here automatically.
     if (root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function') {
-      return root.NA_PERMISSIONS.canAccessScreen(role, pageId);
+      // Sin el ayudante de permisos por empleado manda solo SCREENS/canAccessScreen: el dueño ve su menú normal
+      // y las pantallas de casillas del empleado quedan cerradas (falla cerrado solo para esas).
+      return root.NA_PERMISSIONS.canAccessScreen(role, pageId) || (typeof employeeMayScreen === 'function' && employeeMayScreen(pageId));
     }
-    return (pageId !== 'pageConfig' && pageId !== 'pageGastos' && pageId !== 'pageProximamente' && pageId !== 'pageValorizacion' && pageId !== 'pageRotacionAbc' && pageId !== 'pageClientesFrecuencia' && pageId !== 'pageKardex' && pageId !== 'pageVentasStock' && pageId !== 'pageReporteArqueo' && pageId !== 'pageReporteDeuda' && pageId !== 'pageCodigosDuplicados' && pageId !== 'pageHistorialCompras' && pageId !== 'pageClienteHistorial') || role === 'owner';
+    return (pageId !== 'pageConfig' && pageId !== 'pageGastos' && pageId !== 'pageProximamente' && pageId !== 'pageValorizacion' && pageId !== 'pageRotacionAbc' && pageId !== 'pageClientesFrecuencia' && pageId !== 'pageReporteProductosVencer' && pageId !== 'pageKardex' && pageId !== 'pageVentasStock' && pageId !== 'pageReporteArqueo' && pageId !== 'pageReporteDeuda' && pageId !== 'pageCodigosDuplicados' && pageId !== 'pageHistorialCompras' && pageId !== 'pageClienteHistorial') || role === 'owner';
   }
 
   function renderDrawerItems() {

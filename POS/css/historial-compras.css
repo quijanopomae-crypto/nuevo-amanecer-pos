@@ -63,3 +63,10 @@ body.dark #pageHistorialCompras {
   #pageHistorialCompras .hc-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width: 1000px) { #pageHistorialCompras .hc-products { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* 600–999 px (incl. 900 px): con menos resultados que columnas, la grilla fija de 2 dejaba
+   la columna derecha vacía. auto-fit colapsa la pista vacía; el mínimo de media fila mantiene
+   2 columnas como máximo, igual que antes, cuando hay 2 o más productos.
+   OJO: calc(50% - 5px) depende del gap de .hc-products (8px): con gap > 10px cae a 1 columna. */
+@media (min-width: 600px) and (max-width: 999px) {
+  #pageHistorialCompras .hc-products { grid-template-columns: repeat(auto-fit, minmax(calc(50% - 5px), 1fr)); }
+}
