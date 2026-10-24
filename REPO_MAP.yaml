@@ -28,7 +28,7 @@ zones:
       - tools/pos-local/
   retired_pos_lab:
     path: laboratorio/pos-lab/
-    authority: historical_read_only
+    authority: removed_2026_10_24_recoverable_from_git_history
     runtime: disabled
     promotion_source: false
     new_writes: forbidden

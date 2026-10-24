@@ -60,7 +60,7 @@ test('REPO_MAP records conservative branch hygiene', () => {
 
 test('REPO_MAP declares branch-preview as active development model and POS-LAB as historical', () => {
   assert.match(map, /retired_pos_lab:/);
-  assert.match(map, /authority: historical_read_only/);
+  assert.match(map, /authority: removed_2026_10_24_recoverable_from_git_history/);
   assert.match(map, /branch_preview:/);
   assert.match(map, /source: exact_pr_sha/);
   assert.match(map, /preview_must_match_pr_sha: true/);

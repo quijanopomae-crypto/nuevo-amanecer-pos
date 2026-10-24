@@ -7,7 +7,6 @@ const nav=readFileSync('POS/js/navigation/menu-navigation.js','utf8');
 const index=readFileSync('POS/index.html','utf8');
 const sw=readFileSync('POS/sw.js','utf8');
 const parityMenuCss=readFileSync('POS/css/experience-v2/pages/menu.css','utf8');
-const labMenuCss=readFileSync('laboratorio/pos-lab/styles/pages/menu.css','utf8');
 const menu=index.slice(index.indexOf('<div class="page active" id="pageMenu">'),index.indexOf('<!-- POS -->'));
 const mobileStart=nav.indexOf('function ensureMobileStylesheet');
 const mobileEnd=nav.indexOf('function bind()');
@@ -73,8 +72,7 @@ test('mobile dashboard activity is read-only and uses existing UI/runtime state'
   assert.doesNotMatch(mobileUi,/sale\.create\s*\(|payment\.create\s*\(|cash\.open\s*\(|cash\.close\s*\(|inventory\.adjust\s*\(|credit-account\.create\s*\(/i);
 });
 
-test('CANON phone styles are production-only, offline-ready and LAB promotion source stays untouched',()=>{
-  assert.equal(parityMenuCss,labMenuCss,'promoted menu.css must remain byte-for-byte aligned with LAB');
+test('CANON phone styles are production-only, offline-ready',()=>{
   assert.match(css,/\.na-mobile-drawer/);
   assert.match(css,/\.na-mobile-landscape/);
   assert.match(css,/\.na-mobile-activity/);
