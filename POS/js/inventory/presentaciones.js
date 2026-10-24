@@ -17,9 +17,12 @@
   function tidy(n) { return Math.round(n * 1e6) / 1e6; }
 
   function locked() {
-    var p = root.NA_POS_PERMISSIONS || root.NAPosPermissions;
+    try {
+    // El global real de la tabla única de permisos es NA_PERMISSIONS (antes buscaba otro nombre y siempre quedaba bloqueado).
+    var p = root.NA_PERMISSIONS;
     if (p && typeof p.featureLocked === 'function') return p.featureLocked(LOCK_ID) !== false;
-    return true; // sin política cargada: bloqueado
+    } catch (_) { return true; }
+    return true; // sin política cargada o con error: bloqueado
   }
 
   function presentations(product) {

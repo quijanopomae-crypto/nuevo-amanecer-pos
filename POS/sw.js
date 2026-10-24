@@ -78,6 +78,7 @@ const PRECACHE_URLS = [
   './css/inventario-redesign.css',
   './js/inventory/mobile-inventory.js',
   './js/inventory/stock-lots.js',
+  './js/inventory/presentaciones.js',
   './js/inventory/stock-lots-ui.js',
   './css/stock-lots.css',
   './css/experience-v2/tokens.css',

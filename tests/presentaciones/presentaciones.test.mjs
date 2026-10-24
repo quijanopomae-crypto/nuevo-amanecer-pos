@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const P = require('../../POS/js/inventory/presentaciones.js');
 const prod = { id: 'SYN-1', name: 'Galleta sintética', unidad: 'unidad', precio: 1.5, unidadCompra: 'paquete', factorCompra: 6, unidCaja: 12, precioCaja: 16, stock: 0 };
@@ -61,4 +62,36 @@ test('lista de unidades decimales coincide con inline-02 (si el parche cm066 est
   const m = /const _NA_DECIMAL_UNITS=new Set\((\[[^\]]*\])\)/.exec(src);
   if (!m) { t.skip('cm066-redondeo-kg no aplicado'); return; }
   assert.deepEqual(JSON.parse(m[1].replace(/'/g, '"')), P.DECIMAL_UNITS);
+});
+
+test('locked() lee NA_PERMISSIONS (el global real): cerrado por defecto, abre solo con false, falla cerrado', () => {
+  const g = globalThis;
+  const saved = g.NA_PERMISSIONS;
+  try {
+    g.NA_PERMISSIONS = { featureLocked: id => id !== 'otro-id' }; // cerrado salvo otro id
+    assert.equal(P.locked(), true);
+    g.NA_PERMISSIONS = { featureLocked: id => (id === 'venta-por-presentacion' ? false : true) };
+    assert.equal(P.locked(), false, 'abierto solo si featureLocked(id) === false');
+    g.NA_PERMISSIONS = { featureLocked: () => { throw new Error('x'); } };
+    assert.equal(P.locked(), true, 'si la política falla, queda cerrado');
+    g.NA_PERMISSIONS = {};
+    assert.equal(P.locked(), true);
+  } finally { g.NA_PERMISSIONS = saved; }
+});
+test('con la tabla real de permisos el candado venta-por-presentacion sigue CERRADO', async () => {
+  const vm = await import('node:vm');
+  const ctx = vm.createContext({});
+  vm.runInContext(fs.readFileSync(new URL('../../POS/js/config/pos-permissions.js', import.meta.url), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(new URL('../../POS/js/inventory/presentaciones.js', import.meta.url), 'utf8'), ctx);
+  assert.equal(ctx.NA_PERMISSIONS.featureLocked('venta-por-presentacion'), true);
+  assert.equal(ctx.NA_PRESENTACIONES.locked(), true);
+});
+test('presentaciones.js está cargado en index.html y precacheado en sw.js, sin DOM ni innerHTML', () => {
+  // Otras pruebas reescriben POS/index.html en disco durante una corrida completa: se lee la versión confirmada en git (con respaldo al disco).
+  let idx; try { idx = execFileSync('git', ['show', 'HEAD:POS/index.html'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); } catch (_) { idx = fs.readFileSync(new URL('../../POS/index.html', import.meta.url), 'utf8'); }
+  const sw = fs.readFileSync(new URL('../../POS/sw.js', import.meta.url), 'utf8');
+  const src = fs.readFileSync(new URL('../../POS/js/inventory/presentaciones.js', import.meta.url), 'utf8');
+  assert.equal((idx.match(/js\/inventory\/presentaciones\.js/g) || []).length, 1);
+  assert.equal((sw.match(/js\/inventory\/presentaciones\.js/g) || []).length, 1);
+  assert.doesNotMatch(src, /document\.|innerHTML|localStorage|fetch\(/);
 });
