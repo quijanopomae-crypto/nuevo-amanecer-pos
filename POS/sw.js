@@ -8,6 +8,7 @@ const LAZY_CACHE_PREFIX = 'nuevo-amanecer-pos-lazy-';
 const LAZY_CACHE_NAME = LAZY_CACHE_PREFIX + CACHE_NAME.slice(CACHE_PREFIX.length);
 const PRECACHE_URLS = [
   './index.html',
+  './js/modules/asistente/asistente-loader.js', // cargador del asistente (prototipo): nunca bloquea el arranque instalado
   './manifest.webmanifest',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
@@ -49,6 +50,9 @@ const PRECACHE_URLS = [
   './js/modules/sugerencia-compra.js',
   './css/ajustes-inventario.css',
   './js/modules/ajustes-inventario.js',
+  './css/precios-masivos.css',
+  './js/modules/precios-masivos.js',
+  './js/modules/stock-negativo.js',
   './css/layout.css',
   './css/components.css',
   './css/responsive.css',
@@ -145,6 +149,8 @@ const PRECACHE_URLS = [
   './js/products/zip-reader.js',
   './css/codigos-duplicados.css',
   './js/inventory/codigos-duplicados.js',
+  './css/edicion-masiva-productos.css',
+  './js/modules/edicion-masiva-productos.js',
   './js/products/image-sync.js',
   './js/legacy-inline/inline-13.js',
   './js/modules/ticket/secure-print.js',
@@ -178,6 +184,9 @@ const PRECACHE_URLS = [
   './js/config/pos-annul-client.js',
   './js/modules/discount-sheet.js','./js/config/pos-sale-note-client.js','./js/config/pos-purchases-client.js','./js/config/pos-dni-lookup-client.js','./js/config/config-v9.js','./js/config/config-v9-boot.js','./css/config-v9-screen.css',
   './js/config/pos-roles-client.js',
+  './js/config/pos-employee-toggles.js',
+  './js/config/employee-perms-client.js',
+  './js/config/employee-perms-ui.js',
   './js/core/lazy-assets.js'
 ];
 const LAZY_URLS = [

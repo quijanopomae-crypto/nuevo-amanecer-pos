@@ -15,6 +15,23 @@ async function setup(t, { migrate = true } = {}) {
   f.addDevice('owner-phone', 'writer', 'active', 'owner-token');
   return f;
 }
+// El PIN nunca se guarda en texto plano. La sal, el hash, los ids de aprobación y el id de sesión
+// del aparato (UUID) son hex al azar y pueden traer los 4 dígitos del PIN por casualidad, así que
+// esos valores se validan por su formato (y el hash recalculándolo) y no buscando el PIN dentro de
+// ellos. Así la prueba no depende del azar.
+const RANDOM_HEX = /^(?:apr-|xreq:|session:)?(?:[0-9a-f]{32,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+function assertNoPlainPin(rows, pin) {
+  for (const row of [].concat(rows)) {
+    for (const [k, v] of Object.entries(row)) {
+      assert.ok(!/pin/i.test(k), 'no plaintext pin column: ' + k);
+      if (v === null || v === undefined) continue;
+      const s = String(v);
+      assert.notEqual(s, pin, 'field ' + k + ' equals the PIN');
+      if (RANDOM_HEX.test(s)) continue;
+      assert.ok(!s.includes(pin), 'field ' + k + ' contains the PIN');
+    }
+  }
+}
 const H = token => ({ authorization: 'Bearer ' + token, 'content-type': 'application/json' });
 async function call(f, path, token, body, method = body ? 'POST' : 'GET', extra = {}) {
   const r = await f.fetch('http://localhost' + path, { method, headers: { ...(token ? H(token) : { 'content-type': 'application/json' }), ...extra }, body: body ? JSON.stringify(body) : undefined });
@@ -46,7 +63,10 @@ test('owner sets PIN; stored only as salted PBKDF2; change needs current PIN; lo
   assert.equal((await call(f, '/auth/owner-pin', 'owner-token', { new_pin: '4821' })).status, 200);
   const row = f.sql('SELECT * FROM pos_owner_pin WHERE id=1');
   assert.equal(row.iterations, PIN_ITERATIONS);
-  assert.ok(!JSON.stringify(row).includes('4821'));
+  assert.deepEqual(Object.keys(row).sort(), ['failed_count', 'hash_hex', 'id', 'iterations', 'locked_until', 'salt_hex', 'updated_at', 'updated_by']);
+  assert.match(row.salt_hex, /^[0-9a-f]{32}$/);
+  assert.match(row.hash_hex, /^[0-9a-f]{64}$/);
+  assertNoPlainPin(row, '4821');
   assert.equal(await hashPin('4821', row.salt_hex, row.iterations), row.hash_hex);
   assert.equal((await call(f, '/auth/owner-pin', 'owner-token', { new_pin: '9999' })).status, 403);
   assert.equal((await call(f, '/auth/owner-pin', 'owner-token', { new_pin: '9999', current_pin: '4821' })).status, 200);
@@ -88,7 +108,7 @@ test('employee device: paired by code, cannot use owner endpoints or owner comma
   f.exec("UPDATE pos_owner_approvals SET expires_at='2000-01-01T00:00:00.000Z'");
   const expired = await call(f, '/commands/inventory.adjust', emp, { operation_id: 'op-1' }, 'POST', { 'x-owner-approval': ap.body.approval_id });
   assert.equal(expired.body.error, 'owner_approval_required');
-  assert.ok(!JSON.stringify(f.database.prepare('SELECT * FROM pos_owner_approvals').all()).includes('1234'));
+  assertNoPlainPin(f.database.prepare('SELECT * FROM pos_owner_approvals').all(), '1234');
 });
 
 test('owner lists and revokes devices (PIN when set); settings revisioned; expired codes refused', async t => {
