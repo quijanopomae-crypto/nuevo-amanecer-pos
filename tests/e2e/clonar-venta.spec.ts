@@ -18,8 +18,9 @@ test.beforeEach(async ({ page }) => {
 
 // Datos sintéticos, solo en el navegador de la prueba. No se cobra ni se guarda nada.
 async function openVentas(page: Page, { dark = false } = {}) {
-  await page.goto('/index.html');
+  await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => !!(window as any).NA_CLONAR_VENTA && !!(window as any).NA_MENU_NAVIGATION);
+  await page.waitForTimeout(500); // deja terminar el arranque de la app antes de preparar la venta de prueba
   await page.evaluate(({ dark }) => {
     const w = window as any;
     document.body.classList.toggle('dark', dark);
