@@ -46,6 +46,8 @@ const PRECACHE_URLS = [
   './js/products/price-history-ui.js',
   './css/etiquetas-precios.css',
   './js/modules/etiquetas-precios.js',
+  './css/catalogo-pos.css',
+  './js/modules/catalogo-pos.js',
   './css/productos-sin-movimiento.css',
   './js/modules/productos-sin-movimiento.js',
   './css/sugerencia-compra.css',
