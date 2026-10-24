@@ -518,23 +518,6 @@
     await refreshCanonical();
   }
 
-  async function settlePendingClose(client) {
-    var record = pendingClose(client);
-    if (!record) return null;
-    if (!(record.last_status === 409 && record.last_error === 'stale_session')) {
-      // Lost acknowledgements replay the original amount and operation ID.
-      try { return { receipt: await client.retryPending() }; }
-      catch (error) {
-        record = pendingClose(client);
-        if (!record || record.last_status !== 409 || record.last_error !== 'stale_session') throw error;
-      }
-    }
-    await refreshCanonical();
-    var recovered = await client.releaseRejectedCashClose();
-    if (!recovered) throw new Error('CANONICAL_FINANCIAL_PENDING');
-    return recovered;
-  }
-
   // Cierre con un cierre anterior pendiente: TODO ocurre dentro de la barrera de ventas. Antes de reenviar o
   // descartar se pregunta al servidor cómo está la caja:
   //  - abierta: el cierre anterior no se aplicó; se archiva, se envían las ventas en cola y se cierra con el
