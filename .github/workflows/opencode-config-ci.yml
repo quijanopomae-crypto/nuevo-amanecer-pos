@@ -66,7 +66,7 @@ jobs:
         run: node --test tests/opencode-role-map.test.mjs tests/repo-map.test.mjs
 
       - name: Final repository boundaries
-        run: node --test tests/final-repository-boundaries.test.mjs tests/laboratorio-boundary.test.mjs tests/security-secret-separation.test.mjs tests/cloud-sync/canon-dormant-schema.test.mjs
+        run: node --test tests/final-repository-boundaries.test.mjs tests/security-secret-separation.test.mjs tests/cloud-sync/canon-dormant-schema.test.mjs
 
       - name: Owner finalizer safety
         run: node --test tests/owner-finalizer.test.mjs

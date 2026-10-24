@@ -142,7 +142,6 @@ historical_or_gate_specific_docs:
     - docs/REMEDIATION_PHASE5_CHECKPOINT_CLASSIFICATION.md
 
 do_not_delete_without_phase9_proof:
-  - CVV1.1.html
   - CVV2.4_backup_antes_demo-1.html
   - nuevo-amanecer-pos-engineer.zip
   - POS/js/legacy-inline/
