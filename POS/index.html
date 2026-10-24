@@ -1509,7 +1509,8 @@
 <script src="js/app.js"></script>
 <script src="js/modules/ticket/share-receipt.js"></script>
 <script src="js/modules/ticket/share-receipt-ui.js"></script>
-<script src="js/perf/cash-perf-probe.js"></script>
+<!-- Sonda de rendimiento de caja (#432): solo bajo demanda (?perf=1|true|yes o localStorage.na_cash_perf="1"). Sin la condición no se descarga ni se ejecuta. -->
+<script>(function(){var r=window;try{var q=new URLSearchParams(r.location.search).get('perf');if(q==='1'||q==='true'||q==='yes'||(r.localStorage&&r.localStorage.getItem('na_cash_perf')==='1')){var s=document.createElement('script');s.src='js/perf/cash-perf-probe.js';(document.body||document.documentElement).appendChild(s);return;}}catch(_){}r.NA_CASH_PERF=Object.freeze({active:false,reason:'gate_off'});})();</script>
 <script src="js/canon-pos-reference-ui.js"></script>
 <script src="js/canon-phone-sale.js"></script>
 <script src="js/canon-desktop-dashboard.js"></script>
