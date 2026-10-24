@@ -176,6 +176,7 @@
       return 'El pago se envió pero CANON no confirmó la recepción (' + code + '). NO lo registres de nuevo con otro monto: ' +
         'pulsa Confirmar otra vez para reintentar la MISMA operación.';
     }
+    if (storageFullError(error)) return 'No se registró el abono: el almacenamiento del navegador está lleno. ' + STORAGE_HELP;
     return 'No se registró el pago CANON' + (code ? ': ' + code : '');
   }
 
@@ -203,6 +204,24 @@
   // reintenta la MISMA operación (mismo operation_id: el servidor no crea un segundo abono) y se
   // releen saldos y abonos antes de permitir otro cobro.
   var netState = null, reviewTimer = null;
+  // Abono que el servidor YA aplicó pero cuyo comprobante no cupo en este equipo
+  // (canonical-client: CANONICAL_CONFIRMED_NOT_STORED). No es «no confirmado».
+  var notStored = null;
+  var STORAGE_HELP = 'Qué hacer: con conexión, deja que se sincronicen las ventas pendientes (al confirmarse liberan espacio) y cierra otras pestañas del POS; si sigue lleno, avisa al encargado. No borres los datos del navegador.';
+  function storageFullError(error) { return /CANONICAL_STORAGE_FULL|QuotaExceeded|QUOTA_REACHED|exceeded the quota/i.test(String(error && (error.code || error.name || error.message) || '')); }
+  function notStoredText(cents) {
+    return 'Abono' + (cents ? ' de S/ ' + (cents / 100).toFixed(2) : '') + ' CONFIRMADO por el servidor, pero este equipo no pudo guardar el comprobante: el almacenamiento del navegador está lleno. ' +
+      'No lo registres de nuevo; se terminará de guardar solo cuando haya espacio. ' + STORAGE_HELP;
+  }
+  function rememberNotStored(error, cents) {
+    if (!error || error.code !== 'CANONICAL_CONFIRMED_NOT_STORED' || error.command !== 'payment.create') return false;
+    notStored = { operation_id: String(error.operation_id || ''), amount_cents: Number(cents) || 0 };
+    return true;
+  }
+  function pendingNotStored(pending) {
+    return !!(notStored && pending && pending.payload && String(pending.payload.operation_id || '') === notStored.operation_id);
+  }
+  function checkingText(pending) { return pendingNotStored(pending) ? notStoredText(notStored.amount_cents) : 'No confirmado, revisando…'; }
   function netBox() {
     try { return netBoxUnsafe(); } catch (_) { return null; }
   }
@@ -261,6 +280,7 @@
     try { replay = await client.retryPending(); }
     catch (error) {
       busy = false;
+      if (rememberNotStored(error, amount)) { showNet('checking', notStoredText(amount)); scheduleReview(15000); return; }
       var after = pendingRecord();
       if (after && after.last_error) {
         await releaseDefinitiveRejection(client);
@@ -272,6 +292,7 @@
       scheduleReview(5000); return;
     }
     busy = false;
+    if (pendingNotStored(pending)) notStored = null;
     var same = matchesPending(pending);
     showNet(null);
     try { await refreshCanonical(); } catch (_) {}
@@ -290,7 +311,7 @@
   function onModalOpen() {
     if (!enabled()) return;
     var pending = pendingRecord();
-    if (pending && pending.command === 'payment.create' && !pending.invalid && !pending.last_error) { showNet('checking', 'No confirmado, revisando…'); scheduleReview(500); return; }
+    if (pending && pending.command === 'payment.create' && !pending.invalid && !pending.last_error) { showNet('checking', checkingText(pending)); scheduleReview(500); return; }
     if (root.navigator && root.navigator.onLine === false) showNet('offline', 'Sin conexión: el abono no se registró');
     else if (netState !== 'checking') showNet(null);
   }
@@ -423,7 +444,7 @@
     }
 
     if (!(await online(client))) {
-      if (pending) { showNet('checking', matchesPending(pending) ? 'No confirmado, revisando…' : pendingBlockText(pending)); scheduleReview(5000); }
+      if (pending) { showNet('checking', matchesPending(pending) ? checkingText(pending) : pendingBlockText(pending)); scheduleReview(5000); }
       else showNet('offline', 'Sin conexión: el abono no se registró');
       return false;
     }
@@ -449,10 +470,11 @@
           replay = await client.retryPending();
         } catch (error) {
           var after = pendingRecord();
-          if (after && after.last_error) {
+          if (rememberNotStored(error, pending.payload && pending.payload.amount_cents)) { showNet('checking', notStoredText(notStored.amount_cents)); scheduleReview(15000); }
+          else if (after && after.last_error) {
             await releaseDefinitiveRejection(client);
             var why = describePendingFailure(error); notify(why, 'error'); showNet('rejected', why);
-          } else { showNet('checking', samePayment ? 'No confirmado, revisando…' : pendingBlockText(pending)); scheduleReview(5000); }
+          } else { showNet('checking', samePayment ? checkingText(pending) : pendingBlockText(pending)); scheduleReview(5000); }
           return false;
         }
         if (!samePayment) {
@@ -523,6 +545,12 @@
       try {
         receipt = await client.createPayment(input);
       } catch (error) {
+        if (rememberNotStored(error, amountCents)) {
+          // El servidor ya aplicó el abono: decirlo con exactitud (no «revisando»).
+          busy = false; var stored = notStoredText(amountCents);
+          notify(stored, 'warning'); showNet('checking', stored); scheduleReview(15000);
+          return false;
+        }
         var lost = pendingRecord();
         if (lost && lost.command === 'payment.create' && !lost.invalid && !lost.last_error) {
           // Enviado sin respuesta: no se sabe si quedó. Se revisa con la MISMA operación.
