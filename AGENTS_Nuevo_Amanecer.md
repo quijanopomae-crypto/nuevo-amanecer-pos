@@ -99,7 +99,7 @@ Detente y reporta antes de:
 - Hacer una refactorización extensa.
 - Tomar una decisión cuyo comportamiento esperado no esté definido.
 
-Consulta `docs/05_AUDITORIA_SEGURIDAD_ISHIKAWA.md`.
+Consulta `docs/05_AUDITORIA_SEGURIDAD_ISHIKAWA.md` (no está en `docs/`; vive dentro de `nuevo-amanecer-pos-engineer.zip`, carpeta `Nuevo_Amanecer_Codex_Project/docs/`).
 
 ## Regla Ishikawa
 
