@@ -4,10 +4,12 @@
   var owner = ['owner'], both = ['owner', 'empleado'];
   var SCREENS = {};
   ['pageMenu', 'pagePOS', 'pageInventario', 'pageVentas', 'pageClientes', 'pageCaja'].forEach(function (id) { SCREENS[id] = both; });
-  ['pageGastos', 'pageConfig', 'pageProximamente', 'pageValorizacion', 'pageRotacionAbc', 'pageClientesFrecuencia', 'pageReporteProductosVencer', 'pageKardex', 'pageVentasStock', 'pageReporteArqueo', 'pageHistorialCompras', 'pageClienteHistorial', 'pageEtiquetasPrecios', 'pageProductosSinMovimiento', 'pageSugerenciaCompra', 'pageAjustesInventario', 'ventas:reportes'].forEach(function (id) { SCREENS[id] = owner; });
+  ['pageGastos', 'pageConfig', 'pageProximamente', 'pageValorizacion', 'pageRotacionAbc', 'pageClientesFrecuencia', 'pageReporteProductosVencer', 'pageKardex', 'pageVentasStock', 'pageReporteArqueo', 'pageHistorialCompras', 'pageClienteHistorial', 'pageEtiquetasPrecios', 'pageProductosSinMovimiento', 'pageSugerenciaCompra', 'pageAjustesInventario', 'pageEdicionPrecios', 'ventas:reportes'].forEach(function (id) { SCREENS[id] = owner; });
   var ACTIONS = {};
   ['cash.closes.view', 'purchases.costs.view', 'expense.create', 'expense.update', 'expense.void', 'settings.set', 'product-images.write', 'reports.view', 'devices.manage', 'owner-pin.set', 'pairing-code.create', 'reviews.resolve'].forEach(function (id) { ACTIONS[id] = owner; });
   ['cash.expense', 'sync.write'].forEach(function (id) { ACTIONS[id] = both; });
+  // Asistente (prototipo): SOLO dueño (modo admin). No vende ni llena carritos.
+  ['assistant.chat', 'assistant.query', 'assistant.document', 'assistant.price.propose', 'assistant.purchase.propose', 'assistant.stock.propose', 'assistant.product.propose', 'assistant.levels.set'].forEach(function (id) { ACTIONS[id] = owner; });
   SCREENS['pageReporteDeuda'] = owner;
   SCREENS['pageCodigosDuplicados'] = owner;
   var SYNC_ENTITIES = {};
@@ -36,6 +38,20 @@
   ['sale.create','cash.open','cash.close','payment.create','payment.batch','credit-account.create','product.create','product.update','customer.create','customer.contact.set','customer.credit-policy.set','inventory.adjust','adjustment.create','compensation.create','sale.annul'].forEach(function (name) { API_ROUTES.push({ path: '/commands/' + name, methods: ['POST'], roles: both }); });
   API_ROUTES.push({ path: '/commands/import.stage', methods: ['POST'], roles: owner });
   API_ROUTES.push({ path: '/auth/dni-lookup', methods: ['POST'], roles: both });
+  // Asistente (prototipo): solo dueño; el Worker responde 403 admin_only a cualquier otro rol.
+  // Asistente: el dueño siempre; un aparato empleado solo si el dueño le dio un nivel (el servidor lo revisa en cada pedido).
+  API_ROUTES.push({ path: '/auth/assistant/chat', methods: ['POST'], roles: ['owner', 'empleado'] });
+  API_ROUTES.push({ path: '/auth/assistant/confirm', methods: ['POST'], roles: ['owner', 'empleado'] });
+  API_ROUTES.push({ path: '/auth/assistant/employee-access', methods: ['GET', 'POST'], roles: owner });
+  API_ROUTES.push({ path: '/auth/assistant/audit', methods: ['GET'], roles: owner });
+  // Niveles 0..3 del asistente por persona: solo Admin, sin PIN (el Worker responde 403 admin_only a cualquier otro).
+  API_ROUTES.push({ path: '/auth/assistant/levels', methods: ['GET', 'POST'], roles: owner });
+  // Proveedor del asistente: solo dueño (el Worker responde 403 admin_only a cualquier otro).
+  API_ROUTES.push({ path: '/auth/assistant/provider', methods: ['GET'], roles: owner });
+  ['test', 'select'].forEach(function (k) { API_ROUTES.push({ path: '/auth/assistant/provider/' + k, methods: ['POST'], roles: owner }); });
+  // Registro del aparato dueño (detrás de ASSISTANT_OWNER_BOOTSTRAP=1). register: aparato sin fila (cuenta como dueño); el servidor rechaza empleados (409).
+  API_ROUTES.push({ path: '/auth/assistant/owner-device', methods: ['GET'], roles: owner });
+  ['register', 'approve', 'revoke'].forEach(function (k) { API_ROUTES.push({ path: '/auth/assistant/owner-device/' + k, methods: ['POST'], roles: owner }); });
   API_ROUTES.push({ path: '/commands/sale.annul', methods: ['GET'], roles: both });
   ['/auth/session','/auth/record-meta','/auth/sale-annulments'].forEach(function (path) { API_ROUTES.push({ path: path, methods: ['GET'], roles: both }); });
   ['/auth/sale-notes','/auth/purchases'].forEach(function (path) { API_ROUTES.push({ path: path, methods: ['GET','POST'], roles: both }); });
@@ -61,13 +77,13 @@
   // Bloqueo de funciones Próximamente por id estable (única fuente, cliente y servidor).
   // true = bloqueada (sin rutas de escritura). Desbloquear = cambiar UNA línea a false.
   // Id ausente = bloqueada (default-deny).
-  var FEATURE_ROLES = { 'asistencia-empleados': owner, 'asistente-virtual': owner, 'valorizacion-inventario': owner, 'rotacion-abc': owner, 'clientes-frecuencia': owner, 'kardex': owner, 'reporte-ventas-stock': owner, 'reporte-arqueo': owner, 'historial-compras-producto': owner, 'lotes-multiples-fefo': owner, 'stock-negativo-configurable': owner, 'app-pedidos-marca-propia': owner, 'cambiar-clave-usuarios': owner, 'conversion-masiva-documentos': owner, 'vendedor-en-venta': owner, 'comentarios-venta': owner, 'despacho-productos': owner, 'cliente-historial-compras': owner, 'vendedor-por-cliente': owner, 'consulta-dni-ruc': owner, 'edicion-masiva-productos': owner, 'marcas-productos': owner, 'subcategorias-atributos': owner, 'produccion-recetas': owner, 'registro-sanitario': owner, 'numero-serie-producto': owner, 'tipos-movimiento-inventario': owner, 'conciliacion-bancaria': owner, 'historial-exportaciones': owner, 'catalogo-reportes': owner, 'importar-proveedores': owner, 'periodo-contable-percepcion': owner, 'desbloquear-usuario': owner, 'detraccion-retencion': owner, 'historial-precios-producto': owner, 'canales-venta': owner, 'estado-recepcion-compras': owner, 'adjuntos-proveedor': owner, 'dashboard-compras': owner, 'recargo-servicio': owner, 'producto-activo-venta': owner, 'precio-min-max': owner, 'cajas-multiples': owner, 'reporte-productos-vencer': owner, 'cierre-remoto-cajas': owner, 'dashboard-tesoreria': owner, 'producto-servicio': owner, 'catalogo-desde-pos': owner, 'etiquetas-precios': owner, 'productos-sin-movimiento': owner, 'sugerencia-compra': owner, 'ajustes-inventario': owner };
+  var FEATURE_ROLES = { 'asistencia-empleados': owner, 'asistente-virtual': owner, 'valorizacion-inventario': owner, 'rotacion-abc': owner, 'clientes-frecuencia': owner, 'kardex': owner, 'reporte-ventas-stock': owner, 'reporte-arqueo': owner, 'historial-compras-producto': owner, 'lotes-multiples-fefo': owner, 'stock-negativo-configurable': owner, 'app-pedidos-marca-propia': owner, 'cambiar-clave-usuarios': owner, 'conversion-masiva-documentos': owner, 'vendedor-en-venta': owner, 'comentarios-venta': owner, 'despacho-productos': owner, 'cliente-historial-compras': owner, 'vendedor-por-cliente': owner, 'consulta-dni-ruc': owner, 'edicion-masiva-productos': owner, 'marcas-productos': owner, 'subcategorias-atributos': owner, 'produccion-recetas': owner, 'registro-sanitario': owner, 'numero-serie-producto': owner, 'tipos-movimiento-inventario': owner, 'conciliacion-bancaria': owner, 'historial-exportaciones': owner, 'catalogo-reportes': owner, 'importar-proveedores': owner, 'periodo-contable-percepcion': owner, 'desbloquear-usuario': owner, 'detraccion-retencion': owner, 'historial-precios-producto': owner, 'canales-venta': owner, 'estado-recepcion-compras': owner, 'adjuntos-proveedor': owner, 'dashboard-compras': owner, 'recargo-servicio': owner, 'producto-activo-venta': owner, 'precio-min-max': owner, 'cajas-multiples': owner, 'reporte-productos-vencer': owner, 'cierre-remoto-cajas': owner, 'dashboard-tesoreria': owner, 'producto-servicio': owner, 'catalogo-desde-pos': owner, 'etiquetas-precios': owner, 'productos-sin-movimiento': owner, 'sugerencia-compra': owner, 'ajustes-inventario': owner, 'edicion-masiva-precios': owner, 'precio-por-margen': owner };
   var FEATURE_LOCKS = {
     'venta-exitosa-comprobante': true,
     'credito-cuotas': true,
     'reparto-abono-multiples-deudas': true,
     'lotes-multiples-fefo': true,
-    'stock-negativo-configurable': true,
+    'stock-negativo-configurable': false,
     'app-pedidos-marca-propia': true,
     'cambiar-clave-usuarios': true,
     'conversion-masiva-documentos': true,
@@ -77,7 +93,7 @@
     'cliente-historial-compras': false,
     'vendedor-por-cliente': true,
     'consulta-dni-ruc': true,
-    'edicion-masiva-productos': true,
+    'edicion-masiva-productos': false,
     'marcas-productos': true,
     'subcategorias-atributos': true,
     'produccion-recetas': true,
@@ -161,6 +177,7 @@
     'productos-sin-movimiento': false,
     'sugerencia-compra': false,
     'ajustes-inventario': false,
+    'permisos-por-empleado': false,
     'promociones-combos': true,
     'delivery': true,
     'catalogo-en-linea': true,
@@ -190,8 +207,8 @@
     'sunat-resumen-anulaciones': true,
     'clientes-documentos-listas': true,
     'importar-clientes': true,
-    'precio-por-margen': true,
-    'edicion-masiva-precios': true,
+    'precio-por-margen': false,
+    'edicion-masiva-precios': false,
     'transferencias-almacenes': true,
     'transferencias-cajas': true,
     'bancos-depositos': true,
