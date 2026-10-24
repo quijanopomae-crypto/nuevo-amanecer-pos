@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 // Revisión #854 y #855: un nombre de producto muy largo debe envolverse dentro de su celda y no tapar
 // Stock, Última venta, Valor ni las columnas de la sugerencia. Datos sintéticos; sin clientes reales.
@@ -11,7 +12,7 @@ async function ownerPage(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(String(e)));
   const writes: string[] = [];
-  page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method())) writes.push(r.method() + ' ' + r.url()); });
+  page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method()) && !isAssistantPing(r)) writes.push(r.method() + ' ' + r.url()); });
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
