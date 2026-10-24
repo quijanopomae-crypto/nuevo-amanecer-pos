@@ -47,8 +47,6 @@ const posFiles = [
   'js/legacy-inline/inline-14.js',
   'js/legacy-inline/inline-15.js',
   'js/legacy-inline/inline-16.js',
-  'js/legacy-inline/inline-17.js',
-  'js/legacy-inline/inline-18.js',
   'js/compat/legacy-globals.js',
   'js/app.js',
   'js/ocr/vendor/tesseract-6.0.1/tesseract.min.js',

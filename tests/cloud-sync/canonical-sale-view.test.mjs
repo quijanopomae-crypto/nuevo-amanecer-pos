@@ -165,7 +165,7 @@ test('rebuild never invokes sync, network or financial persistence side effects'
   assert.deepEqual(h.globals.calls, { pos: 2, inv: 2, ventas: 0, cli: 0, sync: 0, fetch: 0, save: 0, storageWrite: 0 });
 });
 
-test('index script order keeps canonical view after dependencies and inline-18', () => {
+test('index script order keeps canonical view after dependencies and the last legacy inline', () => {
   const html = fs.readFileSync(new URL('../../POS/index.html', import.meta.url), 'utf8');
   const srcs = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)].map(x => x[1]);
   const at = value => srcs.indexOf(value);
@@ -173,7 +173,7 @@ test('index script order keeps canonical view after dependencies and inline-18',
   assert.ok(at('js/sync/canonical-sale-intent.js') < at('js/sync/canonical-sale-view.js'));
   assert.ok(at('js/sync/canonical-sale-outbox.js') < at('js/sync/canonical-sale-view.js'));
   assert.ok(at('js/sync/canonical-sale-integration.js') < at('js/sync/canonical-sale-view.js'));
-  assert.ok(at('js/legacy-inline/inline-18.js') < at('js/sync/canonical-sale-view.js'));
+  assert.ok(at('js/legacy-inline/inline-16.js') < at('js/sync/canonical-sale-view.js'));
   assert.ok(at('js/sync/canonical-sale-view.js') < at('js/compat/legacy-globals.js'));
   assert.ok(at('js/compat/legacy-globals.js') < at('js/app.js'));
   assert.ok(at('js/sync/canonical-client.js') < at('js/sync/canonical-sale-view.js'));

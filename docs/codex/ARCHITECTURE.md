@@ -4,7 +4,7 @@
 | Ruta | Contenido |
 |---|---|
 | `POS/` | App web (vanilla JS, sin bundler). Entrada `POS/index.html`, service worker `POS/sw.js`. |
-| `POS/js/legacy-inline/inline-01.js … inline-18.js` | Lógica histórica extraída del HTML: venta (`posRender`), inventario, clientes (`cliRender`), caja (`cajRender`, `abrirCaja`, `cerrarCaja`), ventas (`ventasRender`), respaldo/snapshot. Se sobreescriben funciones por capas: el orden de los `<script>` en `index.html` importa. |
+| `POS/js/legacy-inline/inline-01.js … inline-16.js` (inline-17/18, el núcleo V10 dormante, fueron retirados) | Lógica histórica extraída del HTML: venta (`posRender`), inventario, clientes (`cliRender`), caja (`cajRender`, `abrirCaja`, `cerrarCaja`), ventas (`ventasRender`), respaldo/snapshot. Se sobreescriben funciones por capas: el orden de los `<script>` en `index.html` importa. |
 | `POS/js/core/` | Utilidades (`utils.js`, `state.js`, `lima-time.js`, `theme-state.js`, `lazy-assets.js`). |
 | `POS/js/navigation/menu-navigation.js` | Navegación segura en móvil, drawer del teléfono (filas filtradas por rol, logo, línea de versión). |
 | `POS/js/config/` | Permisos (`pos-permissions.js`), roles (`pos-roles-client.js`), Configuración (`config-v9.js`, `config-v9-boot.js`, `config-e2.js`, `config-g.js`), versión publicada (`build-info.js`), clientes de anulación, DNI, compras, notas y revisiones. |

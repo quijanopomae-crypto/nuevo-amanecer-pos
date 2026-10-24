@@ -7,8 +7,8 @@
 //   3. Riesgo last-writer-wins entre pestañas: cada guardado escribe el snapshot
 //      COMPLETO tomado de la MEMORIA de esa pestaña; el último escritor pisa todo.
 //      → demostrado en runtime con dos contextos reales compartiendo localStorage.
-//   4. V10 contiene la mitigación futura (Web Locks + BroadcastChannel + expectedRevision).
-//   5. V10 permanece dormante (sin referencias activas).
+//   4. El núcleo V10 (mitigación futura: Web Locks + BroadcastChannel + expectedRevision) fue retirado.
+//   5. Ningún archivo del producto referencia V10.
 //   6. Release V9 queda condicionado a UNA SOLA PESTAÑA ACTIVA DE ESCRITURA
 //      (documentado en evidence/release-invariants/SINGLE_TAB_WRITE_RESTRICTION.md).
 //
@@ -29,11 +29,8 @@ function check(id, description, pass, detail = '') {
   assert.ok(pass, `${id}: ${description}${detail ? ` — ${detail}` : ''}`);
 }
 
-const V9_FILES = allProductJsFiles().filter(
-  (f) => !/inline-17\.js$|inline-18\.js$/.test(f)
-);
+const V9_FILES = allProductJsFiles();
 const INLINE_02 = 'js/legacy-inline/inline-02.js';
-const INLINE_17 = 'js/legacy-inline/inline-17.js';
 
 test('G1.1 — V9 serializa escrituras dentro de una pestaña (_naPersistChain FIFO)', () => {
   const queue = readProductText(INLINE_02);
@@ -125,23 +122,20 @@ test('G1.4 — RUNTIME: dos pestañas reales + localStorage compartido → last-
     seq.length === 2 && seq.every((x) => x === 1));
 });
 
-test('G1.5 — V10 contiene la mitigación futura y permanece dormante', () => {
-  const v10 = readProductText(INLINE_17);
-  check('G1.5a', 'V10 usa Web Locks (exclusión cross-tab futura)', /navigator\.locks\?\.\s*request/.test(v10));
-  check('G1.5b', 'V10 usa BroadcastChannel (aviso cross-tab futuro)', /new BroadcastChannel\(/.test(v10));
-  check('G1.5c', 'V10 usa CAS por revisión (expectedRevision + comparación de snapshots)',
-    /expectedRevision/.test(v10) && /_naV10CompareSnapshots/.test(v10));
-  check('G1.5d', 'V10 dormante: ningún archivo fuera de inline-17/18 referencia símbolos _naV10*',
+test('G1.5 — El núcleo V10 (mitigación cross-tab futura) fue retirado: ningún archivo lo referencia', () => {
+  check('G1.5a', 'ningún archivo del producto referencia símbolos _naV10*',
     V9_FILES.every((rel) => !/_naV10/.test(readProductText(rel))));
+  check('G1.5b', 'los archivos del núcleo V10 (inline-17/18) ya no están en el orden de carga',
+    localScriptOrder().every((src) => !/inline-1[78]\.js$/.test(src)));
 });
 
 test('G1.6 — El orden de carga real mantiene el comportamiento caracterizado', () => {
   const order = localScriptOrder();
   const idx = (name) => order.indexOf(name);
-  check('G1.6a', 'inline-02 (persistencia V9) carga antes que los wrappers de permisos y V10',
+  check('G1.6a', 'inline-02 (persistencia V9) carga antes que los wrappers de permisos y los inline posteriores',
     idx('js/legacy-inline/inline-02.js') > -1 &&
     idx('js/legacy-inline/inline-02.js') < idx('js/legacy-inline/inline-07.js') &&
-    idx('js/legacy-inline/inline-07.js') < idx('js/legacy-inline/inline-17.js'));
+    idx('js/legacy-inline/inline-07.js') < idx('js/legacy-inline/inline-16.js'));
 });
 
 test('G1.7 — Evidencia: documentación de la restricción UNA SOLA PESTAÑA ACTIVA DE ESCRITURA', () => {
@@ -163,9 +157,10 @@ test('G1.7 — Evidencia: documentación de la restricción UNA SOLA PESTAÑA AC
     '   localStorage, que el último guardado pisa todo lo hecho por la otra pestaña',
     '   (un producto creado solo en B desapareció del durable cuando A guardó) y que',
     '   V9 NO reporta ningún conflicto (`_naLastPersistOK === true`).',
-    '4. **Mitigación futura**: el núcleo V10 (inline-17) ya contiene Web Locks',
-    '   exclusivos, BroadcastChannel y CAS por `expectedRevision`, pero está DORMANTE',
-    '   (ver gate 8): ningún camino activo del producto lo invoca.',
+    '4. **Mitigación futura**: el antiguo núcleo V10 (inline-17), que contenía Web Locks',
+    '   exclusivos, BroadcastChannel y CAS por `expectedRevision`, estaba DORMANTE y fue',
+    '   retirado del repositorio (ver gate 8). Una mitigación cross-tab futura requiere',
+    '   un diseño nuevo; el historial git conserva el núcleo anterior.',
     '',
     '## Condición de release',
     '',
