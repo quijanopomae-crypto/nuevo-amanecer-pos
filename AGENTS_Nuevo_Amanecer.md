@@ -16,7 +16,7 @@ Aplica este orden:
 2. Capturas y ejemplos entregados para esa solicitud.
 3. `AGENTS.md` de la raíz, que define el modo normal/LAB/shadow y la frontera CANON.
 4. Este archivo `AGENTS_Nuevo_Amanecer.md`, para reglas funcionales y de seguridad.
-5. La especificación o contrato durable aplicable dentro de `docs/` o `laboratorio/pos-lab/tasks/`.
+5. La especificación o contrato durable aplicable dentro de `docs/` (el antiguo `laboratorio/pos-lab/tasks/` fue eliminado).
 6. Último comportamiento estable aprobado.
 7. Código actual del repositorio.
 
@@ -216,12 +216,7 @@ Siempre:
 - `AGENTS.md`
 - este archivo `AGENTS_Nuevo_Amanecer.md`
 
-Para LAB:
-- `laboratorio/README.md`
-- `laboratorio/LAB_POLICY.json`
-- `docs/LABORATORIO_A_CANON.md`
-- `docs/LAB_CANON_MIRROR.md`
-- el contrato de tarea bajo `laboratorio/pos-lab/tasks/`
+Para LAB: el directorio `laboratorio/` fue eliminado (2026-10-24, orden del dueño); ya no hay lecturas obligatorias de LAB. Los documentos históricos `docs/LABORATORIO_A_CANON.md` y `docs/LAB_CANON_MIRROR.md` quedan solo como registro.
 
 Para V1.3 CANON/cloud, lee la especificación V1.3 aplicable existente en `docs/` (A2, A3, A4, A5, A6 o Gate P según el alcance).
 

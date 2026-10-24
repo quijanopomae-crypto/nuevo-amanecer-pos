@@ -12,7 +12,6 @@ description: "Checklist obligatorio antes de push/merge/deploy de cambios del PO
 - [ ] Migraciones: solo aditivas, con aprobación del owner y respaldo.
 - [ ] Unit `node --test` (Node 22): cero fallos nuevos frente a la base (fix02 T6 es flaky conocido).
 - [ ] E2E Playwright en puerto libre: todo verde; revisado a 390/768/1366.
-- [ ] `node tools/pos-experience/promote-lab-visuals.mjs --check` pasa.
 - [ ] Restaurados `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css`, `evidence/**` sobrescritos por la suite; no commiteados.
 - [ ] CI (`canon-critical-ci.yml`, `e2e-smoke-ci.yml`) verde en el PR.
 - [ ] Deploy (si está autorizado): backend primero si cambia el Worker, luego web; anotar rollback ref; nunca los workflows prohibidos.
