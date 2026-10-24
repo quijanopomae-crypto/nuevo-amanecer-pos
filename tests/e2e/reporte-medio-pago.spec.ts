@@ -1,10 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
 import { expectAllFit } from './helpers/fits';
 
+test.use({ serviceWorkers: 'block' });
+
 // #159: sección dentro del reporte de arqueo (solo dueño), réplica sintética y sin backend real.
-async function rolePage(page: Page, role: 'owner' | 'empleado') {
-  await page.route('**/*', route => {
+// El candado va cerrado por defecto; con `abierto` la prueba lo abre solo en su copia del navegador (reescribe la respuesta de pos-permissions.js).
+async function rolePage(page: Page, role: 'owner' | 'empleado', abierto = false) {
+  await page.route('**/*', async route => {
     const url = new URL(route.request().url());
+    if (abierto && url.pathname.endsWith('/js/config/pos-permissions.js')) {
+      const res = await route.fetch();
+      return route.fulfill({ response: res, body: (await res.text()).replace("'reporte-medio-pago': true", "'reporte-medio-pago': false") });
+    }
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
       url.pathname === '/auth/me' ? { pos_role: role, owner_pin_set: true, roles_ready: true, device_id: 'rmp-test-device' } : {}) });
     return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
@@ -16,13 +23,6 @@ async function rolePage(page: Page, role: 'owner' | 'empleado') {
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed, role);
-}
-// Abre el candado solo dentro del navegador de prueba; pos-permissions.js no cambia.
-async function unlock(page: Page) {
-  await page.evaluate(() => {
-    const w = window as any, original = w.NA_PERMISSIONS;
-    w.NA_PERMISSIONS = { ...original, featureLocked: (id: string) => id === 'reporte-medio-pago' ? false : original.featureLocked(id) };
-  });
 }
 async function seed(page: Page) {
   await page.evaluate(() => {
@@ -50,7 +50,7 @@ async function seed(page: Page) {
 for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
   test(`medios de pago ${width}px ${dark ? 'oscuro' : 'claro'}: totales, filtro de cajero, CSV y sin escrituras`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await rolePage(page, 'owner'); await unlock(page); await seed(page);
+    await rolePage(page, 'owner', true); await seed(page);
     const writes: string[] = [];
     page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method())) writes.push(r.method() + ' ' + r.url()); });
     await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageReporteArqueo'); }, dark);

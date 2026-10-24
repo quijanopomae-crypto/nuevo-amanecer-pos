@@ -153,6 +153,7 @@
     'app-android-nativa': true,
     'valorizacion-inventario': false,
     'reporte-arqueo': false,
+    'reporte-medio-pago': true,
     'cpe-sin-internet': true,
     'venta-granel': true,
     'gaveta-dinero': true,

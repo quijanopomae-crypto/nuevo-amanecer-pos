@@ -4,7 +4,7 @@
   'use strict';
 
   var PAGE_ID = 'pageReporteArqueo'; // vive dentro del reporte de arqueo, sin pantalla nueva
-  var FEATURE_ID = 'reporte-medio-pago'; // candado propio; su línea en FEATURE_LOCKS se agrega en el desbloqueo final
+  var FEATURE_ID = 'reporte-medio-pago'; // candado propio, cerrado por defecto (línea en FEATURE_LOCKS)
   var DAY_MS = 86400000;
   var METHODS = [['efectivo', 'Efectivo'], ['yape', 'Yape'], ['plin', 'Plin'], ['transferencia', 'Transferencia'], ['credito', 'Al crédito']];
   var renderedReport = null;
@@ -171,6 +171,8 @@
   function init() {
     var page = root.document.getElementById(PAGE_ID), sec = section(page);
     if (!sec || sec.__naRmpBound) return;
+    // Candado cerrado: no se instala nada (ni observador ni escuchas). Abrirlo exige publicar y recargar la app.
+    if (!featureUnlocked()) return;
     sec.__naRmpBound = true;
     function update() { if (page.classList.contains('active')) render(); }
     sec.addEventListener('change', function (event) { event.stopPropagation(); update(); });
