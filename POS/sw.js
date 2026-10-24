@@ -119,6 +119,7 @@ const PRECACHE_URLS = [
   './js/sync/hosted-canonical-guard.js',
   './js/adapters/canonical-ui-adapter.js',
   './js/sync/canonical-client.js',
+  './js/sync/cache-identity-guard.js',
   './js/sync/canonical-sale-intent.js',
   './js/sync/canonical-sale-outbox.js',
   './js/sync/canonical-sale-projection.js',
