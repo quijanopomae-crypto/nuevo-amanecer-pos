@@ -1561,10 +1561,18 @@
 // CANON-PWA-UPDATE-001: actualización visible, accionable y de recarga única.
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
+    var PWA_UPDATE_FAIL_MS = 120000;
     var hadController = !!navigator.serviceWorker.controller;
     var reloadingForWorkerUpdate = false;
     var updateBusy = false;
     var updateFallbackTimer = 0;
+    var updateInstallTimer = 0;
+    var watchedInstalling = null;
+    var stopInstallWatch = null;
+    var updateFailed = false;
+    var updateRetried = false;
+    var updateDismissed = false;
+    var updateAttempt = 0;
     var pwaRegistration = null;
     var prompt = document.getElementById('pwaUpdatePrompt');
     var status = document.getElementById('pwaUpdateStatus');
@@ -1650,6 +1658,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 
     function markVersionPending(message, downloading) {
       if (!hadController) return;
+      if (updateFailed || updateDismissed) return;
       if (updateBusy) return;
       versionPending = true;
       // Mientras se descarga, el botón no acepta clics: antes el primer clic esperaba la
@@ -1657,6 +1666,86 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       if (downloading) setUpdateUi(message || 'Descargando la versión nueva…', 'working', 'Descargando…', false, true);
       else { setUpdateUi(message || readyText(), 'ready', 'Recargar', true, true); }
       try { window.dispatchEvent(new CustomEvent('na:version-update-pending')); } catch (_) {}
+    }
+
+    function clearInstallWatch() {
+      window.clearTimeout(updateInstallTimer);
+      updateInstallTimer = 0;
+      if (stopInstallWatch) stopInstallWatch();
+      stopInstallWatch = null;
+      watchedInstalling = null;
+    }
+    function failPwaUpdate() {
+      if (!hadController || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
+      clearInstallWatch();
+      window.clearTimeout(updateFallbackTimer);
+      var passive = !updateBusy;
+      updateBusy = false;
+      updateFailed = true;
+      updateAttempt++;
+      if (updateRetried) {
+        // Solo se descarta en esta página: la próxima apertura vuelve a comprobar la versión.
+        updateDismissed = true;
+        versionPending = false;
+        window.clearInterval(quietTimer); quietTimer = 0;
+        if (prompt) prompt.hidden = true;
+        return;
+      }
+      versionPending = true;
+      setUpdateUi('No se pudo actualizar', 'error', 'Reintentar', true, passive);
+    }
+    function watchInstalling(registration) {
+      var installing = registration.installing;
+      if (!installing || !hadController || updateFailed || updateDismissed || watchedInstalling === installing) return;
+      clearInstallWatch();
+      watchedInstalling = installing;
+      markVersionPending('Descargando la versión nueva…', true);
+      function inspect() {
+        if (installing.state === 'installed' || installing.state === 'activated') {
+          clearInstallWatch();
+          if (installing.state === 'installed') markVersionPending();
+        } else if (installing.state === 'redundant') failPwaUpdate();
+      }
+      if (typeof installing.addEventListener === 'function') {
+        installing.addEventListener('statechange', inspect);
+        installing.addEventListener('error', failPwaUpdate);
+        stopInstallWatch = function () {
+          if (typeof installing.removeEventListener !== 'function') return;
+          installing.removeEventListener('statechange', inspect);
+          installing.removeEventListener('error', failPwaUpdate);
+        };
+      }
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
+      inspect();
+    }
+    async function checkPwaUpdate(registration) {
+      var attempt = updateAttempt;
+      try {
+        await registration.update();
+        return attempt === updateAttempt;
+      } catch (error) {
+        if (attempt === updateAttempt && (watchedInstalling || updateBusy || (updateRetried && updateInstallTimer))) failPwaUpdate();
+        return false;
+      }
+    }
+    async function retryPwaUpdate() {
+      updateFailed = false;
+      updateRetried = true;
+      updateAttempt++;
+      clearInstallWatch();
+      setUpdateUi('Descargando la versión nueva…', 'working', 'Descargando…', false);
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
+      if (!await checkPwaUpdate(pwaRegistration) || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
+      if (pwaRegistration.waiting) {
+        clearInstallWatch();
+        markVersionPending();
+      } else if (pwaRegistration.installing && pwaRegistration.installing.state !== 'redundant') {
+        watchInstalling(pwaRegistration);
+      } else {
+        clearInstallWatch();
+        versionPending = false;
+        if (prompt) prompt.hidden = true;
+      }
     }
 
     if (later) {
@@ -1696,6 +1785,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           window.clearTimeout(timer);
           if (typeof worker.removeEventListener === 'function') {
             worker.removeEventListener('statechange', inspect);
+            worker.removeEventListener('error', failed);
           }
           resolve(ok);
         }
@@ -1706,6 +1796,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
             finish(false);
           }
         }
+        function failed() { finish(false); }
 
         inspect();
         if (settled) return;
@@ -1714,7 +1805,8 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           return;
         }
         worker.addEventListener('statechange', inspect);
-        timer = window.setTimeout(function () { finish(false); }, 120000);
+        worker.addEventListener('error', failed);
+        timer = window.setTimeout(function () { finish(false); }, PWA_UPDATE_FAIL_MS);
       });
     }
 
@@ -1733,6 +1825,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       return false;
     }
     function scheduleReload() {
+      clearInstallWatch();
       enableManualUpdateMode();
       if (!hadController || reloadingForWorkerUpdate) return;
       reloadingForWorkerUpdate = true;
@@ -1773,6 +1866,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     var pwaUpdateQueued = false;
     async function runPwaUpdate() {
         if (updateBusy) return;
+        if (updateDismissed) return;
         if (saleInProgress()) {
           setUpdateUi('Termina o vacía la venta en curso: la app se actualizará sola después.', 'working', 'Esperando la venta…', false);
           afterSaleFinishes(runPwaUpdate);
@@ -1784,13 +1878,15 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           setUpdateUi('Preparando la actualización…', 'working', 'Actualizando…', false);
           return;
         }
+        if (updateFailed) { retryPwaUpdate(); return; }
         updateBusy = true;
+        var attempt = updateAttempt;
         window.clearTimeout(updateFallbackTimer);
         setUpdateUi('Buscando la versión nueva…', 'working', 'Actualizando…', false);
 
         try {
           if (!pwaRegistration.waiting && !pwaRegistration.installing && typeof pwaRegistration.update === 'function') {
-            await pwaRegistration.update();
+            if (!await checkPwaUpdate(pwaRegistration)) return;
           }
 
           var worker = pwaRegistration.waiting || pwaRegistration.installing || null;
@@ -1811,12 +1907,9 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
             return;
           }
 
-          updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
+          if (attempt === updateAttempt) updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
         } catch (error) {
-          updateBusy = false;
-          reloadingForWorkerUpdate = false;
-          window.clearTimeout(updateFallbackTimer);
-          setUpdateUi('No se pudo actualizar. Comprueba internet y vuelve a intentar.', 'error', 'Reintentar', true);
+          if (attempt === updateAttempt) failPwaUpdate();
           console.warn('No se pudo aplicar la nueva versión del POS.', error);
         }
     }
@@ -1852,27 +1945,22 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       if (pwaUpdateQueued) { pwaUpdateQueued = false; runPwaUpdate(); }
 
       if (registration.waiting) markVersionPending();
+      if (registration.installing) watchInstalling(registration);
       if (typeof registration.addEventListener === 'function') {
         registration.addEventListener('updatefound', function () {
-          if (!registration.installing || !hadController) return;
-          markVersionPending('Descargando la versión nueva…', true);
-          var installing = registration.installing;
-          if (typeof installing.addEventListener === 'function') {
-            installing.addEventListener('statechange', function () {
-              if (installing.state === 'installed') markVersionPending();
-            });
-          }
+          watchInstalling(registration);
         });
+        registration.addEventListener('error', failPwaUpdate);
       }
 
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') registration.update().catch(function () {});
+        if (document.visibilityState === 'visible') checkPwaUpdate(registration);
       });
       window.addEventListener('online', function () {
-        registration.update().catch(function () {});
+        checkPwaUpdate(registration);
       });
 
-      return registration.update().catch(function () {});
+      return checkPwaUpdate(registration);
     }).catch(function (error) {
       console.warn('No se pudo registrar el shell PWA.', error);
     }); });
