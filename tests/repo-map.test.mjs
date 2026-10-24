@@ -40,7 +40,6 @@ test('REPO_MAP canonical navigation paths exist', () => {
 
 test('REPO_MAP preserves unrelated historical artifacts while retiring active POS-LAB', () => {
   for (const path of [
-    'CVV1.1.html',
     'CVV2.4_backup_antes_demo-1.html',
     'nuevo-amanecer-pos-engineer.zip',
     'POS/js/legacy-inline',

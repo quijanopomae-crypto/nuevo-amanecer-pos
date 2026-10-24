@@ -5,8 +5,7 @@ subtask: false
 
 SHADOW_EXPLICIT_ONLY.
 
-Si el owner no pidió SHADOW explícitamente, DETENTE y usa `/canon-preflight`
-o `/lab-preflight`.
+Si el owner no pidió SHADOW explícitamente, DETENTE y usa `/canon-preflight`.
 
 En SHADOW ejecuta `python -B orchestrator/shadow_cli.py validate-project`.
 Este comando valida la configuración OpenCode viva. El snapshot de
