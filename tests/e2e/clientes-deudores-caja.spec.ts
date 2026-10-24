@@ -92,3 +92,22 @@ test('el módulo usa solo textContent', async ({ page }) => {
   const res = await page.request.get('/js/modules/clientes-deudores-caja.js');
   expect(await res.text()).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
 });
+
+test('el rol llega tarde: el botón aparece con na:role y se oculta si deja de ser cajero', async ({ page }) => {
+  await openClients(page, { role: '' });
+  const entry = page.locator('#naDeudoresCajaBtn');
+  await expect(entry).toBeHidden();
+  await page.evaluate(() => {
+    const w = window as any; let role = 'empleado';
+    const base = Object.getPrototypeOf(w.NA_ROLES) && w.NA_ROLES;
+    w.NA_ROLES = new Proxy(base, { get: (t, k) => k === 'role' ? role : k === 'isOwner' ? () => role === 'owner' : t[k] });
+    w.__setRole = (r: string) => { role = r; };
+    window.dispatchEvent(new Event('na:role'));
+  });
+  await expect(entry).toBeVisible();
+  await entry.click();
+  await expect(page.locator('#naDeudoresCaja')).toBeVisible();
+  await page.evaluate(() => { (window as any).__setRole('owner'); window.dispatchEvent(new Event('na:role')); });
+  await expect(entry).toBeHidden();
+  await expect(page.locator('#naDeudoresCaja')).toBeHidden();
+});
