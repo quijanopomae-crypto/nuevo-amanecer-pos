@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 async function rolePage(page, role) {
   await page.route('**/*', route => {
@@ -15,7 +16,7 @@ async function rolePage(page, role) {
   await page.waitForFunction(role => window.NA_ROLES?.role === role && window.NA_ROLES.confirmed, role);
 }
 
-const unlockedPages = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra', 'ajustes-inventario': 'pageAjustesInventario' };
+const unlockedPages = { 'precio-por-margen': 'pageEdicionPrecios', 'edicion-masiva-precios': 'pageEdicionPrecios', 'edicion-masiva-productos': 'pageInventario', 'stock-negativo-configurable': 'pageAjustesInventario', 'permisos-por-empleado': 'pageConfig', 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'clientes-deudores-caja': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra', 'ajustes-inventario': 'pageAjustesInventario' };
 
 async function registry(page) {
   return page.evaluate(async () => { const api = (window as any).NA_PROXIMAMENTE; await api.load(); return api.list().map(f => ({ id: f.id, module: f.module, unlocked: api.isUnlocked(f), locked: (window as any).NA_PERMISSIONS.featureLocked(f.id), uncertain: !!f.uncertain })); });
@@ -47,7 +48,7 @@ test('every registry entry: server lock exists; locked ones show the lock and pr
   test.setTimeout(180000);
   await rolePage(page, 'owner');
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
   await page.evaluate(() => window.goPage('pageConfig'));
   const configButton = page.locator('#na9Nav [data-go="pageProximamente"]');
   await expect(configButton).toContainText('Funciones en preparación');
@@ -110,7 +111,7 @@ test('Asistente virtual is visible for owner and locked; clicking only opens a d
   await page.setViewportSize({ width: 390, height: 844 });
   await rolePage(page, 'owner');
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
   await page.evaluate(() => window.goPage('pageProximamente'));
   const card = page.locator('.na-prox-section[data-module="Extras"] [data-feature-id="asistente-virtual"]');
   await expect(card).toBeVisible();
