@@ -209,6 +209,12 @@ dar éxito a la UI; en caso contrario revierten a un backup previo
 
 ## Divergencia del árbol de trabajo (documentada, no es fallo)
 
+> **Actualización 2026-10-24:** esta sección describe el estado de HEAD `b7e2e83`. Hoy el
+> archivo de la raíz `CVV2.4_backup_antes_demo-1.html` tiene el blob
+> `2dec6363d8aeef52da64ba60ac8eac8eb14f75f7` y es idéntico al fixture
+> (`cmp` sin diferencias), así que ya no es «otra versión». El texto de abajo se
+> conserva como registro histórico.
+
 El archivo **del árbol de trabajo** `CVV2.4_backup_antes_demo-1.html`
 (blob `505859a2e3957acd653af3e1513a2af7ddc1caba`, HEAD `b7e2e83`) es **OTRA
 versión** distinta del baseline autorizado. Respecto al baseline, el árbol de

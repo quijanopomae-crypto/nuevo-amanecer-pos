@@ -28,7 +28,7 @@ zones:
       - tools/pos-local/
   retired_pos_lab:
     path: laboratorio/pos-lab/
-    authority: historical_read_only
+    authority: removed_2026_10_24_recoverable_from_git_history
     runtime: disabled
     promotion_source: false
     new_writes: forbidden
@@ -142,7 +142,6 @@ historical_or_gate_specific_docs:
     - docs/REMEDIATION_PHASE5_CHECKPOINT_CLASSIFICATION.md
 
 do_not_delete_without_phase9_proof:
-  - CVV1.1.html
   - CVV2.4_backup_antes_demo-1.html
   - nuevo-amanecer-pos-engineer.zip
   - POS/js/legacy-inline/
