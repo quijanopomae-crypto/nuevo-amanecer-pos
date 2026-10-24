@@ -177,6 +177,8 @@ const PRECACHE_URLS = [
   './js/modules/clientes-reporte-deuda.js',
   './css/clientes-deudores-caja.css',
   './js/modules/clientes-deudores-caja.js',
+  './css/clonar-venta.css',
+  './js/modules/clonar-venta.js',
   './css/clientes-importar.css',
   './js/modules/clientes-importar.js',
   './js/compat/legacy-globals.js',
