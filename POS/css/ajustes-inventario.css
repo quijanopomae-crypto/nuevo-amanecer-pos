@@ -52,3 +52,12 @@ body.dark #pageAjustesInventario [data-aj-type] option:disabled { color: #94a3b8
   #pageAjustesInventario .aj-form .aj-wide { grid-column: 1 / -1; }
 }
 @media (min-width: 1000px) { #pageAjustesInventario .aj-form { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* CM-073 · Stock negativo (dentro de Ajustes de inventario). */
+#pageAjustesInventario .sn-shell { margin: 0 0 16px; padding: 14px; border: 1px solid var(--aj-border); border-left: 4px solid var(--aj-warn-edge); border-radius: 12px; background: var(--aj-surface); }
+#pageAjustesInventario .sn-shell h2 { margin-top: 0; }
+#pageAjustesInventario [data-sn-list] { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+#pageAjustesInventario .sn-row { display: grid; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--aj-border); border-radius: 10px; }
+#pageAjustesInventario .sn-name { overflow-wrap: anywhere; }
+#pageAjustesInventario .sn-stock { color: var(--aj-err); font-weight: 700; }
+#pageAjustesInventario .sn-confirm { display: grid; gap: 6px; }
+#pageAjustesInventario .sn-summary { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
