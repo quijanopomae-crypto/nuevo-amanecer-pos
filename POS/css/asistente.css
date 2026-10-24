@@ -1,0 +1,480 @@
+/* Asistente del POS (PROTOTIPO AISLADO). Solo se carga con ?asistente=1.
+   La burbuja es una esfera verde "3D" hecha con degradados y SVG; todas las animaciones usan
+   transform/opacity (van por la GPU). Calidad: data-q="high" | "low" | "off" (movimiento reducido).
+   Se pausa con data-paused="1" (pestaña oculta, ventana de cobro abierta). */
+.na-asst-root{--asst-size:64px;--asst-right:14px;--asst-bottom:16px;position:fixed;right:var(--asst-right);bottom:var(--asst-bottom);z-index:380;font-family:inherit}
+@media (min-width:768px){.na-asst-root{--asst-size:72px}}
+.na-asst-bubble{position:relative;width:var(--asst-size);height:var(--asst-size);border:0;padding:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.na-asst-bubble:focus-visible{outline:3px solid #22c55e;outline-offset:4px;border-radius:50%}
+.na-asst-tag{position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%);white-space:nowrap;background:#052e16;color:#bbf7d0;font-weight:800;font-size:14px;padding:6px 10px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s}
+.na-asst-root[data-state="concentrado"] .na-asst-tag,.na-asst-root[data-state="pensando"] .na-asst-tag,.na-asst-root[data-state="error"] .na-asst-tag,.na-asst-root[data-state="offline"] .na-asst-tag,.na-asst-root[data-state="feliz"] .na-asst-tag,.na-asst-root.na-asst-show-tag .na-asst-tag{opacity:1}
+.na-asst-root[data-state="error"] .na-asst-tag{background:#7f1d1d;color:#fee2e2}
+.na-asst-root[data-state="offline"] .na-asst-tag{background:#374151;color:#f3f4f6}
+
+/* ---- Personaje (se usa en la burbuja y en la cabecera del panel) ---- */
+.na-asst-char{position:relative;width:100%;height:100%;perspective:300px}
+.na-asst-shadow{position:absolute;left:14%;right:14%;bottom:-7%;height:14%;border-radius:50%;background:radial-gradient(closest-side,rgba(5,46,22,.45),rgba(5,46,22,0));transform-origin:50% 50%}
+.na-asst-hop{position:absolute;inset:0;transform-origin:50% 100%}
+.na-asst-squash{position:absolute;inset:0;transform-origin:50% 100%}
+.na-asst-sphere{position:absolute;inset:0;border-radius:50%;overflow:hidden;transform-style:preserve-3d;
+  background:radial-gradient(circle at 34% 28%,#d9ffe6 0 6%,#86efac 16%,#22c55e 44%,#15803d 72%,#052e16 100%);
+  box-shadow:inset -6px -9px 16px rgba(2,44,20,.55),inset 5px 6px 12px rgba(220,255,230,.35),0 0 18px rgba(34,197,94,.55),0 6px 14px rgba(0,0,0,.25)}
+.na-asst-rim{position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(187,247,208,.55);pointer-events:none}
+.na-asst-gloss{position:absolute;left:16%;top:9%;width:42%;height:24%;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,0));transform:rotate(-18deg);pointer-events:none}
+.na-asst-gloss2{position:absolute;right:17%;bottom:14%;width:13%;height:9%;border-radius:50%;background:rgba(255,255,255,.45);filter:blur(1px)}
+.na-asst-bits{position:absolute;inset:0;border-radius:50%;font:700 6px/1.05 ui-monospace,monospace;letter-spacing:1px;text-align:center;color:rgba(220,252,231,.7);opacity:.22;overflow:hidden;pointer-events:none}
+.na-asst-bits span{position:absolute;left:50%;top:50%;transform-origin:0 0}
+.na-asst-face{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.na-asst-face .lid{transform-box:fill-box;transform-origin:50% 0;transform:scaleY(0)}
+.na-asst-face .pupils{transform-box:view-box}
+.na-asst-face .iris-think{opacity:0}
+.na-asst-face .m{opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.na-asst-face .m-smile{opacity:1}
+/* anillo binario en órbita (Concentrado) */
+.na-asst-orbit{position:absolute;inset:-18%;border-radius:50%;pointer-events:none;opacity:0;transform:rotateX(68deg);transform-style:preserve-3d}
+.na-asst-orbit i{position:absolute;left:50%;top:50%;font:800 10px/1 ui-monospace,monospace;font-style:normal;color:#4ade80;text-shadow:0 0 6px #22c55e}
+.na-asst-badge{position:absolute;right:-4px;top:-4px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:900 15px/1 system-ui;color:#fff;opacity:0;transform:scale(.4);transition:opacity .2s,transform .25s cubic-bezier(.3,1.6,.5,1)}
+.na-asst-confetti{position:absolute;inset:0;pointer-events:none}
+.na-asst-confetti b{position:absolute;left:50%;top:40%;width:6px;height:6px;border-radius:2px;opacity:0}
+
+/* ---- Estados ---- */
+[data-state="concentrado"] .na-asst-face .lid{transform:scaleY(.42)}
+[data-state="concentrado"] .na-asst-face .iris-think{opacity:1}
+[data-state="concentrado"] .na-asst-bits{opacity:.75}
+[data-state="concentrado"] .na-asst-orbit{opacity:1}
+[data-state="hablando"] .na-asst-face .m-smile{opacity:0}
+[data-state="hablando"] .na-asst-face .m-talk{opacity:1}
+[data-state="feliz"] .na-asst-face .m-smile,[data-state="feliz"] .na-asst-face .m-smile{opacity:0}
+[data-state="feliz"] .na-asst-face .m-open,[data-state="feliz"] .na-asst-face .m-open{opacity:1}
+[data-state="error"] .na-asst-face .m-smile{opacity:0}
+[data-state="error"] .na-asst-face .m-worry{opacity:1}
+[data-state="error"] .na-asst-face .brow{opacity:1}
+[data-state="error"] .na-asst-sphere{background:radial-gradient(circle at 34% 28%,#ffe4e6 0 6%,#86efac 18%,#16a34a 46%,#14532d 74%,#450a0a 100%);box-shadow:inset -6px -9px 16px rgba(69,10,10,.55),inset 5px 6px 12px rgba(255,228,230,.35),0 0 0 3px #ef4444,0 0 18px rgba(239,68,68,.6)}
+[data-state="error"] .na-asst-badge{background:#dc2626;opacity:1;transform:scale(1)}
+[data-state="feliz"] .na-asst-badge{background:#16a34a;opacity:1;transform:scale(1)}
+.na-asst-face .brow{opacity:0}
+[data-state="concentrado"] .na-asst-face .brow{opacity:1}
+/* Pensando: se balancea, mira arriba y salen tres puntos */
+.na-asst-dots{position:absolute;right:-8%;top:-10%;display:flex;gap:3px;opacity:0;pointer-events:none}
+.na-asst-dots i{width:8px;height:8px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 2px #fff}
+[data-state="pensando"] .na-asst-dots{opacity:1}
+[data-state="pensando"] .na-asst-face .pupils{transform:translate(2px,-4px)}
+[data-state="pensando"] .na-asst-face .m-smile{opacity:0}
+[data-state="pensando"] .na-asst-face .m-o{opacity:1}
+/* Sin internet: gris, con sueño y caído */
+.na-asst-tint{position:absolute;inset:0;border-radius:50%;opacity:0;pointer-events:none;background:radial-gradient(circle at 35% 30%,#d4d9d6,#7d8a83 60%,#4a544f)}
+[data-state="offline"] .na-asst-tint{opacity:.82}
+[data-state="offline"] .na-asst-face .lid{transform:scaleY(.5);fill:#7b8781;animation:none!important}
+[data-state="offline"] .na-asst-face .m-smile{opacity:0}
+[data-state="offline"] .na-asst-face .m-worry{opacity:1}
+[data-state="offline"] .na-asst-bits{opacity:.1}
+[data-state="offline"] .na-asst-face{z-index:1}
+
+/* ---- Animaciones (solo calidad alta/baja; nunca con movimiento reducido) ---- */
+@keyframes asstHop{0%,62%,100%{transform:translateY(0)}72%{transform:translateY(-16%)}80%{transform:translateY(-19%)}90%{transform:translateY(0)}}
+@keyframes asstSquash{0%,60%,100%{transform:scale(1,1)}64%{transform:scale(1.12,.88)}72%{transform:scale(.94,1.07)}88%{transform:scale(1,1)}91%{transform:scale(1.1,.9)}96%{transform:scale(.98,1.02)}}
+@keyframes asstShadow{0%,62%,100%{transform:scale(1);opacity:1}80%{transform:scale(.7);opacity:.55}90%{transform:scale(1.05);opacity:1}}
+@keyframes asstBlink{0%,92%,100%{transform:scaleY(0)}95%{transform:scaleY(1)}}
+@keyframes asstLook{0%,18%{transform:translate(0,0)}24%,40%{transform:translate(-4px,1px)}46%,60%{transform:translate(4px,-1px)}66%,80%{transform:translate(1px,2px)}86%,100%{transform:translate(0,0)}}
+@keyframes asstBits{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+@keyframes asstOrbit{from{transform:rotateX(68deg) rotateZ(0)}to{transform:rotateX(68deg) rotateZ(360deg)}}
+@keyframes asstSway{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(4deg) translateY(-3%)}}
+@keyframes asstTalk{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1.15)}}
+@keyframes asstBob{0%,100%{transform:translateY(0) scale(1,1)}50%{transform:translateY(-5%) scale(.98,1.03)}}
+@keyframes asstShake{0%,100%{transform:translateX(0)}15%{transform:translateX(-9%) rotate(-6deg)}30%{transform:translateX(8%) rotate(5deg)}45%{transform:translateX(-6%) rotate(-3deg)}60%{transform:translateX(4%)}75%{transform:translateX(-2%)}}
+@keyframes asstHappy{0%{transform:translateY(0) scale(1,1)}15%{transform:translateY(0) scale(1.15,.85)}35%{transform:translateY(-28%) scale(.92,1.1)}55%{transform:translateY(0) scale(1.12,.88)}70%{transform:translateY(-10%) scale(.97,1.04)}85%,100%{transform:translateY(0) scale(1,1)}}
+@keyframes asstParty{0%{transform:translateY(0) rotateY(0) scale(1,1)}12%{transform:translateY(0) scale(1.18,.82)}40%{transform:translateY(-55%) rotateY(180deg) scale(.9,1.12)}62%{transform:translateY(0) rotateY(360deg) scale(1.15,.85)}78%{transform:translateY(-12%) rotateY(360deg) scale(.97,1.04)}100%{transform:translateY(0) rotateY(360deg) scale(1,1)}}
+@keyframes asstHopSmall{0%,100%{transform:translateY(0)}45%{transform:translateY(-9%)}}
+@keyframes asstSquashSmall{0%,100%{transform:scale(1.07,.92)}14%{transform:scale(.95,1.06)}45%{transform:scale(1,1)}85%{transform:scale(1.02,.98)}}
+@keyframes asstDot{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}}
+@keyframes asstDroop{0%,100%{transform:translateY(3%) rotate(-3deg) scale(1,.96)}50%{transform:translateY(5%) rotate(-5deg) scale(1,.94)}}
+@keyframes asstConfetti{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(260deg)}}
+
+.na-asst-root:not([data-q="off"]) [data-state="listo"] .na-asst-hop,.na-asst-char[data-q="high"][data-state="listo"] .na-asst-hop{}
+[data-q="high"][data-state="listo"] .na-asst-hop{animation:asstHop 3.4s ease-in-out infinite}
+[data-q="high"][data-state="listo"] .na-asst-squash{animation:asstSquash 3.4s ease-in-out infinite}
+[data-q="high"][data-state="listo"] .na-asst-shadow{animation:asstShadow 3.4s ease-in-out infinite}
+[data-q="high"] .na-asst-face .lid,[data-q="low"] .na-asst-face .lid{animation:asstBlink 4.2s infinite}
+[data-q="high"][data-state="listo"] .na-asst-face .pupils,[data-q="high"][data-state="feliz"] .na-asst-face .pupils{animation:asstLook 7s ease-in-out infinite}
+[data-state="concentrado"] .na-asst-face .lid,[data-state="error"] .na-asst-face .lid{animation:none}
+[data-q="high"][data-state="concentrado"] .na-asst-bits>div,[data-q="low"][data-state="concentrado"] .na-asst-bits>div{animation:asstBits 1.4s linear infinite}
+[data-q="high"][data-state="listo"] .na-asst-bits>div{animation:asstBits 14s linear infinite}
+[data-q="high"][data-state="concentrado"] .na-asst-orbit{animation:asstOrbit 2.2s linear infinite}
+[data-q="low"][data-state="concentrado"] .na-asst-orbit{animation:asstOrbit 3.5s linear infinite}
+[data-q="high"][data-state="concentrado"] .na-asst-hop{animation:asstHopSmall 1.1s cubic-bezier(.3,.6,.4,1) infinite}
+[data-q="high"][data-state="concentrado"] .na-asst-squash{animation:asstSquashSmall 1.1s cubic-bezier(.3,.6,.4,1) infinite}
+[data-q="high"][data-state="hablando"] .na-asst-face .m-talk,[data-q="low"][data-state="hablando"] .na-asst-face .m-talk{animation:asstTalk .22s ease-in-out infinite}
+[data-q="high"][data-state="hablando"] .na-asst-squash{animation:asstBob .44s ease-in-out infinite}
+[data-q="high"][data-state="error"] .na-asst-hop,[data-q="low"][data-state="error"] .na-asst-hop{animation:asstShake .6s ease-in-out 2}
+[data-q="high"][data-state="feliz"] .na-asst-squash,[data-q="low"][data-state="feliz"] .na-asst-squash{animation:asstHappy 1.1s ease-out 1}
+[data-q="high"][data-state="feliz"] .na-asst-squash{animation:asstParty 1.3s ease-out 1}
+[data-q="low"][data-state="feliz"] .na-asst-squash{animation:asstHappy 1.1s ease-out 1}
+[data-q="high"][data-state="feliz"] .na-asst-confetti b{animation:asstConfetti 1.1s ease-out .25s 1 forwards}
+[data-q="high"][data-state="pensando"] .na-asst-squash{animation:asstSway 3.2s ease-in-out infinite}
+[data-q="high"][data-state="pensando"] .na-asst-dots i,[data-q="low"][data-state="pensando"] .na-asst-dots i{animation:asstDot 1.2s ease-in-out infinite}
+[data-state="pensando"] .na-asst-dots i:nth-child(2){animation-delay:.2s!important}[data-state="pensando"] .na-asst-dots i:nth-child(3){animation-delay:.4s!important}
+[data-q="high"][data-state="offline"] .na-asst-squash{animation:asstDroop 5s ease-in-out infinite}
+[data-q="high"][data-state="feliz"] .na-asst-face .lid{animation:none}
+[data-paused="1"] *,[data-paused="1"]{animation-play-state:paused!important}
+/* Reducir movimiento: ninguna animación infinita (tampoco parpadeo ni fundidos de Pensando/Feliz/Error). */
+@media (prefers-reduced-motion:reduce){.na-asst-root *,.na-asst-root,.na-asst-panel *{animation:none!important;transition:none!important}}
+
+/* ---- Panel de chat ---- */
+.na-asst-panel{position:fixed;z-index:400;display:flex;flex-direction:column;background:#f8fafc;color:#0f172a;box-shadow:0 18px 50px rgba(2,6,23,.35);font-size:17px;line-height:1.35}
+.na-asst-panel[hidden]{display:none!important}
+@media (max-width:767px){.na-asst-panel{left:0;right:0;bottom:0;height:min(86vh,720px);border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom)}}
+@media (min-width:768px){.na-asst-panel{right:var(--asst-panel-right,16px);bottom:16px;width:420px;height:min(680px,calc(100vh - 32px));border-radius:18px}}
+.na-asst-head{display:flex;align-items:center;gap:10px;padding:10px 12px;background:linear-gradient(135deg,#052e16,#14532d);color:#ecfdf5;border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.na-asst-head .na-asst-char{width:46px;height:46px;flex:0 0 46px}
+.na-asst-head-t{flex:1;min-width:0}.na-asst-head-t b{display:block;font-size:18px}.na-asst-head-t small{display:block;font-size:13px;color:#bbf7d0}
+.na-asst-x{width:48px;height:48px;border:0;border-radius:12px;background:#166534;color:#fff;font-size:22px;cursor:pointer}
+.na-asst-reset{min-height:48px;max-width:104px;padding:4px 8px;border:1px solid #bbf7d0;border-radius:12px;background:transparent;color:#ecfdf5;font-size:13px;font-weight:700;line-height:1.15;cursor:pointer;white-space:normal}
+.na-asst-reset:focus-visible{outline:3px solid #fde68a;outline-offset:2px}
+.na-asst-memnote,.na-asst-queued{font-style:italic}
+.na-asst-offline{background:#fef3c7;color:#78350f;font-weight:800;padding:10px 14px;font-size:16px;text-align:center}
+.na-asst-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain}
+.na-asst-msg{max-width:88%;min-width:0;padding:10px 12px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere} /* Bot 3: un enlace o código largo sin espacios no desborda a 360 px */
+.na-asst-msg .na-asst-note{margin:8px 0 0;font-size:13px;font-weight:700;color:#475569}body.dark .na-asst-msg .na-asst-note{color:#cbd5e1} /* aviso de corte: solo con final.cut === true */
+.na-asst-msg.u{align-self:flex-end;background:#0f766e;color:#fff;border-bottom-right-radius:4px}
+.na-asst-msg.a{align-self:flex-start;background:#fff;border:1px solid #e2e8f0;border-bottom-left-radius:4px}
+.na-asst-msg.sys{align-self:center;background:#e2e8f0;font-size:14px;color:#334155}
+.na-asst-msg img{display:block;max-width:180px;max-height:180px;border-radius:10px;margin-top:6px}
+.na-asst-mode{font-size:13px;color:#475569;align-self:center}
+.na-asst-card{align-self:stretch;background:#fff;border:2px solid #86efac;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.na-asst-card h4{margin:0;font-size:18px}
+.na-asst-card table{width:100%;border-collapse:collapse;font-size:16px}
+.na-asst-card td{padding:4px 2px;border-bottom:1px solid #f1f5f9}.na-asst-card td.r{text-align:right;white-space:nowrap}
+.na-asst-card .warn{background:#fef2f2;color:#991b1b;border-radius:10px;padding:6px 10px;font-weight:700;font-size:15px}
+/* (Bot 2 sobre 6280deae) dato que el servidor dejó vacío en la tarjeta de compra: se completa a mano */
+.na-asst-need-box{display:flex;flex-direction:column;gap:8px}.na-asst-need-l{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:15px}
+.na-asst-need{font:inherit;font-weight:400;padding:8px 10px;border-radius:10px;border:2px solid #b91c1c;background:#fff;color:#0f172a;min-height:44px}.na-asst-need.ok{border-color:#16a34a}
+.na-asst-need-t{color:#991b1b;font-size:14px;font-weight:700}
+.na-asst-card .note{color:#475569;font-size:14px}
+.na-asst-card ol{margin:0;padding-left:22px}.na-asst-card li{margin:3px 0}
+.na-asst-card .acts{display:flex;gap:8px}
+.na-asst-card .acts button{flex:1;min-height:52px;border-radius:12px;border:0;font-size:18px;font-weight:800;cursor:pointer}
+.na-asst-ok{background:#166534;color:#fff}.na-asst-no{background:#e2e8f0;color:#0f172a}
+.na-asst-card[data-st="done"]{border-color:#cbd5e1;background:#f8fafc;color:#334155}.na-asst-card[data-st="done"] .acts,.na-asst-card[data-st="cancelled"] .acts{display:none}.na-asst-card[data-st="denied"] .na-asst-ok,.na-asst-card[data-st="denied"] .na-asst-no{display:none}
+.na-asst-card .res{font-weight:800;color:#166534}.na-asst-card[data-st="denied"] .res{color:#991b1b}
+.na-asst-chips{display:flex;gap:8px;padding:0 12px 8px;flex-wrap:wrap}
+.na-asst-chips button{min-height:44px;max-width:100%;white-space:normal;border-radius:999px;border:1px solid #86efac;background:#f0fdf4;color:#14532d;font-size:15px;font-weight:700;padding:0 14px;cursor:pointer}
+.na-asst-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;border-radius:0 0 18px 18px;align-items:flex-end}
+.na-asst-input textarea{flex:1;min-height:52px;max-height:110px;resize:none;border:2px solid #cbd5e1;border-radius:14px;padding:12px;font:inherit;font-size:17px}
+.na-asst-input button{width:52px;height:52px;flex:0 0 52px;border-radius:14px;border:0;font-size:22px;cursor:pointer}
+.na-asst-send{background:#166534;color:#fff}.na-asst-photo{background:#ecfdf5;color:#14532d;border:2px solid #86efac!important}
+.na-asst-input button:disabled{opacity:.45;cursor:not-allowed}
+.na-asst-doc{position:fixed;inset:0;z-index:420;background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;padding:12px}
+.na-asst-doc>div{background:#fff;border-radius:16px;width:min(720px,100%);height:min(90vh,900px);display:flex;flex-direction:column;overflow:hidden}
+.na-asst-doc iframe{flex:1;border:0;width:100%}
+.na-asst-doc .acts{display:flex;gap:8px;padding:10px}.na-asst-doc .acts button{flex:1;min-height:52px;border:0;border-radius:12px;font-size:17px;font-weight:800;cursor:pointer}
+/* Tema nocturno del POS (body.dark) */
+body.dark .na-asst-panel{background:#07130c;color:#e5f3ea}
+body.dark .na-asst-msg.a,body.dark .na-asst-input{background:#10241a;border-color:#1f3b2b;color:#e5f3ea}
+body.dark .na-asst-card{background:#10241a;border-color:#22c55e;color:#e5f3ea}
+body.dark .na-asst-card td{border-color:#1f3b2b}
+body.dark .na-asst-card .note,body.dark .na-asst-mode,body.dark .na-asst-card .meta{color:#b6cbbf}
+body.dark .na-asst-card .res{color:#86efac}
+body.dark .na-asst-card .warn{background:#3b1212;color:#fecaca}
+body.dark .na-asst-need{background:#07130c;color:#e5f3ea;border-color:#f87171}body.dark .na-asst-need.ok{border-color:#4ade80}
+/* (Bot 4 sobre 84a49517) theme-dark.css (body.dark input:not(...)×4) ganaba por especificidad y dejaba el borde gris (1.57:1) */
+body.dark input.na-asst-need:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]){background:#07130c;color:#e5f3ea;border-color:#f87171}
+body.dark input.na-asst-need.ok:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]){border-color:#4ade80}body.dark .na-asst-need-t{color:#fecaca}
+body.dark .na-asst-msg.u{background:#15803d}
+body.dark .na-asst-msg.sys{background:#1f3b2b;color:#e5f3ea}
+body.dark .na-asst-chips button{background:#10241a;color:#bbf7d0;border-color:#166534}
+body.dark .na-asst-input textarea{background:#07130c;color:#e5f3ea;border-color:#2f5a42}
+body.dark .na-asst-no{background:#1f3b2b;color:#e5f3ea}
+body.dark .na-asst-photo{background:#10241a;color:#bbf7d0}
+body.dark .na-asst-offline{background:#422006;color:#fde68a}
+
+/* Tarjeta: solo dueño (sesión verificada por el servidor), un toque, cuenta regresiva y un solo uso */
+.na-asst-card .pill{display:inline-block;margin-left:6px;font-size:13px;font-weight:800;padding:2px 8px;border-radius:999px;background:#dcfce7;color:#14532d;vertical-align:middle}
+.na-asst-card .meta{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#334155}
+.na-asst-card .meta b{font-variant-numeric:tabular-nums}
+.na-asst-card[data-st="expired"]{border-color:#cbd5e1}.na-asst-card[data-st="expired"] .na-asst-ok:disabled,.na-asst-card[data-st="expired"] .na-asst-no:disabled{background:#e5e7eb;color:#374151;cursor:not-allowed}
+.na-asst-card .acts .na-asst-again{min-height:44px;padding:8px 16px;border-radius:12px;border:1.5px solid #166534;background:#fff;color:#166534;font-weight:700;cursor:pointer}
+.na-asst-card [data-again][hidden]{display:none!important}
+.na-asst-card[data-fail="wait"] .res{color:#92400e;font-weight:800}.na-asst-card[data-fail="review"] .res{color:#991b1b;font-weight:800}
+body.dark .na-asst-card .acts .na-asst-again{background:transparent;color:#86efac;border-color:#4ade80}body.dark .na-asst-card[data-fail] .res{color:#fecaca}
+.na-asst-card[data-st="expired"] .res{color:#991b1b}
+.na-asst-card.denied{border-color:#fca5a5;background:#fff7f7}
+.na-asst-card.denied h4{color:#991b1b}
+body.dark .na-asst-card.denied{background:#2a0f0f;border-color:#7f1d1d}
+body.dark .na-asst-card.denied h4{color:#fecaca}
+body.dark .na-asst-card .pill{background:#14532d;color:#dcfce7}
+.na-asst-chips[hidden]{display:none}
+
+/* Filas de compra con datos fuera de rango: rojo con texto (sin emoji), contraste >= 4.5:1 */
+.na-asst-card tr.flag td{background:#fef2f2}.na-asst-card tr.flag .flag-t{color:#991b1b;font-weight:800;font-size:15px;margin-top:4px}
+.na-asst-card tr.flag[data-decision] td{background:#f8fafc}.na-asst-card tr.flag[data-decision] .flag-t{color:#334155}
+.na-asst-card tr[data-decision="drop"] td{text-decoration:line-through}
+.na-asst-card .flag-a{display:flex;gap:8px;margin-top:6px}.na-asst-card .flag-a button{min-height:44px;padding:0 12px;border-radius:10px;border:2px solid #991b1b;background:#fff;color:#991b1b;font-weight:800;font-size:15px}
+.na-asst-card tr.flag[data-decision] .flag-a{display:none}
+.na-asst-card .nr{color:#92400e}
+.na-asst-ok:disabled{background:#475569;color:#fff}
+body.dark .na-asst-card tr.flag td{background:#3b1212}body.dark .na-asst-card tr.flag .flag-t{color:#fecaca}
+body.dark .na-asst-card tr.flag[data-decision] td{background:#10261a}body.dark .na-asst-card tr.flag[data-decision] .flag-t{color:#cbd5e1}
+body.dark .na-asst-card .flag-a button{background:#1f0a0a;color:#fecaca;border-color:#fca5a5}body.dark .na-asst-card .nr{color:#fcd34d}
+/* Modo admin: consultas y documentos (solo lectura) */
+.na-asst-card .pill.ro{background:#e0f2fe;color:#075985}
+.na-asst-card table.q th{font-size:13px;text-align:left;color:#334155;border-bottom:2px solid #e2e8f0;padding:4px 2px}.na-asst-card table.q th.r{text-align:right}
+.na-asst-card th{font-size:13px;text-align:left;color:#334155;font-weight:700}.na-asst-card th.r{text-align:right}
+.na-asst-card td.chg{color:#9a3412;font-weight:800}
+.na-asst-card td .lt{font-size:13px;font-weight:400;color:#475569}.na-asst-card tr.tot td{border-bottom:0;padding-top:6px}
+body.dark .na-asst-card td .lt{color:#b6cbbf}
+.na-asst-card .warn.doc{background:#fff7ed;color:#9a3412}
+body.dark .na-asst-card th,body.dark .na-asst-card table.q th{color:#b6cbbf;border-color:#1f3b2b}
+body.dark .na-asst-card td.chg{color:#fdba74}
+body.dark .na-asst-card .warn.doc{background:#3b2410;color:#fed7aa}
+body.dark .na-asst-card .pill.ro{background:#0c4a6e;color:#e0f2fe}
+/* Tema azul del POS (Configuración > Apariencia): mismos contrastes (blanco sobre #1e40af = 8.7:1) */
+html[data-na-theme="azul"] .na-asst-ok,html[data-na-theme="azul"] .na-asst-send,html[data-na-theme="azul"] .na-asst-x,html[data-na-theme="azul"] .na-asst-msg.u{background:#1e40af}
+html[data-na-theme="azul"] .na-asst-head{background:linear-gradient(135deg,#1e3a8a,#1d4ed8)}
+html[data-na-theme="azul"] .na-asst-card{border-color:#93c5fd}
+html[data-na-theme="azul"] .na-asst-chips button{border-color:#93c5fd;background:#eff6ff;color:#1e3a8a}
+html[data-na-theme="azul"] .na-asst-card .res{color:#1e40af}
+html[data-na-theme="azul"] body.dark .na-asst-card{border-color:#3b82f6}
+html[data-na-theme="azul"] body.dark .na-asst-card .res{color:#93c5fd}
+html[data-na-theme="azul"] .na-asst-head-t small{color:#dbeafe}
+
+/* ---- Tarjeta en Inicio (solo con permiso confirmado por el servidor; al final de Inicio, no mueve nada) ---- */
+/* ---------- Inicio: tarjeta del asistente (maquetas v2 de Bot 4). Solo CSS, sin imágenes. Solo se animan transform y opacity. */
+.na-asst-hero{--hbg:linear-gradient(135deg,#fff 0%,#f1f9f4 50%,#ddf1e5 100%);--hbd:#c9e5d4;--hsh:0 10px 28px rgba(21,128,61,.14);--hglow:rgba(34,197,94,.38);--hring:rgba(21,128,61,.55);--hcard:rgba(255,255,255,.85);--hcardtx:#15803d;--hpill:rgba(255,255,255,.8);--hpilltx:#0f5132;--hin:#fff;--htx:#0f2a1b;--hmu:#3f5a4a;--hpr:#15803d;--hprtx:#fff;--hwbg:#fff4e0;--hwtx:#7a3d00;
+  position:relative;overflow:hidden;flex:none;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 128px;column-gap:6px;align-items:center;margin:14px 12px 18px;padding:16px;border-radius:22px;background:var(--hbg);border:1px solid var(--hbd);box-shadow:var(--hsh);color:var(--htx);contain:layout paint}
+body.dark .na-asst-hero{--hbg:linear-gradient(135deg,#17301f 0%,#112219 55%,#0c1913 100%);--hbd:#2c4a37;--hsh:0 10px 30px rgba(0,0,0,.45);--hglow:rgba(34,197,94,.3);--hring:rgba(134,239,172,.6);--hcard:rgba(26,43,34,.85);--hcardtx:#86efac;--hpill:rgba(10,18,14,.55);--hpilltx:#a7f3c0;--hin:#0f1b15;--htx:#ecfdf3;--hmu:#b7d3c2;--hpr:#22c55e;--hprtx:#052e16;--hwbg:#3a2a10;--hwtx:#fde2b0}
+html[data-na-theme="azul"] body:not(.dark) .na-asst-hero{--hbg:linear-gradient(135deg,#fff 0%,#f1f5fd 50%,#dfe8fb 100%);--hbd:#cdd7ee;--hsh:0 10px 28px rgba(29,78,216,.12);--hring:rgba(29,78,216,.5);--hcardtx:#1d4ed8;--hpilltx:#1e3a8a;--htx:#0f1e3d;--hmu:#3b4a6b;--hpr:#1d4ed8}
+.na-asst-hero-t,.na-asst-hero .h-in,.na-asst-hero .h-chips,.na-asst-hero .h-off{position:relative;z-index:1;min-width:0}
+.na-asst-hero .h-in,.na-asst-hero .h-chips,.na-asst-hero .h-off{grid-column:1/-1}
+.na-asst-hero .h-pill{display:inline-flex;align-items:center;gap:6px;background:var(--hpill);color:var(--hpilltx);border:1px solid var(--hbd);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.na-asst-hero h2{margin:10px 0 6px;font-size:22px;line-height:1.15;font-weight:800;letter-spacing:-.01em;color:var(--htx)}
+.na-asst-hero-t p{margin:0;font-size:14px;line-height:1.4;color:var(--hmu)}
+.na-asst-hero-v{position:relative;width:128px;height:136px;justify-self:end}
+.na-asst-hero-v>*{position:absolute;pointer-events:none}
+.na-asst-hero .h-glow{left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;border-radius:50%;background:radial-gradient(circle,var(--hglow) 0%,transparent 66%);animation:na-h-glow 4s ease-in-out infinite}
+.na-asst-hero .h-bb{--asst-size:80px;left:50%;top:50%;width:80px;height:80px;margin:-44px 0 0 -40px}
+.na-asst-hero .h-ring{left:50%;top:58%;width:150px;height:150px;margin:-75px 0 0 -75px;border-radius:50%;border:2px solid var(--hring);transform:rotate(-10deg) scaleY(.26)}
+.na-asst-hero .h-ring.back{opacity:.45}.na-asst-hero .h-ring.front{clip-path:inset(50% 0 0 0)}
+.na-asst-hero .h-card{width:30px;height:34px;border-radius:8px;background:var(--hcard);border:1px solid var(--hbd);color:var(--hcardtx);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.08);animation:na-h-card 6s ease-in-out infinite}
+.na-asst-hero .h-card svg{width:20px;height:20px}.na-asst-hero .c1{left:-2px;top:30px}.na-asst-hero .c2{right:-4px;top:84px;animation-delay:-3s}
+.na-asst-hero .h-in{display:flex;align-items:center;gap:6px;margin-top:12px;background:var(--hin);border:1px solid var(--hbd);border-radius:999px;padding:4px 4px 4px 14px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+.na-asst-hero .h-wave{display:flex;flex:none;color:var(--hpr)}
+.na-asst-hero .h-in input{flex:1;min-width:0;height:44px;border:0;background:none;color:var(--htx);font-size:16px;outline:none}
+.na-asst-hero .h-in input::placeholder{color:var(--hmu);opacity:1}
+.na-asst-hero .h-send{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--hpr);color:var(--hprtx);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.na-asst-hero .h-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.na-asst-hero .h-chip{min-height:44px;padding:8px 14px;border-radius:999px;border:1px solid var(--hbd);background:var(--hpill);color:var(--htx);font-weight:600;font-size:14px;cursor:pointer}
+.na-asst-hero .h-in:focus-within,.na-asst-hero .h-chip:focus-visible{outline:3px solid var(--hpr);outline-offset:2px}
+.na-asst-hero .h-off{display:flex;gap:10px;align-items:center;margin:12px 0 0;background:var(--hwbg);color:var(--hwtx);border-radius:14px;padding:12px;font-weight:700;font-size:15px;line-height:1.35}
+.na-asst-hero.off .na-asst-char{filter:grayscale(1)}.na-asst-hero.off .h-glow{animation:none;opacity:.35}
+.na-asst-hero.emp{grid-template-columns:minmax(0,1fr);box-shadow:none}
+.na-asst-hero[data-paused="1"] *{animation-play-state:paused!important}
+@keyframes na-h-glow{0%,100%{transform:scale(.92);opacity:.8}50%{transform:scale(1.06);opacity:1}}
+@keyframes na-h-card{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (min-width:700px){.na-asst-hero{padding:24px;grid-template-columns:minmax(0,1fr) 210px}.na-asst-hero h2{font-size:28px}.na-asst-hero-t p{font-size:16px}
+  .na-asst-hero-v{width:210px;height:180px}.na-asst-hero .h-glow,.na-asst-hero .h-ring{width:200px;height:200px;margin:-100px 0 0 -100px}
+  .na-asst-hero .h-bb{--asst-size:110px;width:110px;height:110px;margin:-60px 0 0 -55px}.na-asst-hero .c1{left:8px;top:36px}.na-asst-hero .c2{right:4px;top:108px}.na-asst-hero .h-in{max-width:560px}}
+@media (min-width:1100px){.na-asst-hero{max-width:980px;margin-left:auto;margin-right:auto;padding:28px 32px;grid-template-columns:minmax(0,1fr) 300px}
+  .na-asst-hero-t{grid-column:1;grid-row:1}.na-asst-hero-v{grid-column:2;grid-row:1/span 3;width:290px;height:220px}.na-asst-hero .h-in,.na-asst-hero .h-chips,.na-asst-hero .h-off{grid-column:1}.na-asst-hero h2{font-size:34px}
+  .na-asst-hero .h-glow,.na-asst-hero .h-ring{width:250px;height:250px;margin:-125px 0 0 -125px}.na-asst-hero .h-bb{--asst-size:136px;width:136px;height:136px;margin:-76px 0 0 -68px}.na-asst-hero .c1{left:30px;top:40px}.na-asst-hero .c2{right:20px;top:126px}}
+@media (prefers-reduced-motion:reduce){.na-asst-hero *{animation:none!important}}
+
+/* ---- Configuración > Aparatos: nivel del asistente por aparato de empleado ---- */
+.na-asst-acc{margin-top:16px}.na-asst-acc h4{margin:0 0 4px;font-size:15px}.na-asst-acc-n{margin:0 0 10px;font-size:13px;color:#475569}
+.na-asst-acc-r{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #e2e8f0}
+.na-asst-acc-r strong{display:block;font-size:14px}.na-asst-acc-r small{display:block;font-size:12px;color:#166534;min-height:15px}
+.na-asst-seg{display:inline-flex;border:1px solid #cbd5e1;border-radius:12px;overflow:hidden;max-width:100%}
+.na-asst-seg label{position:relative;cursor:pointer}.na-asst-seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.na-asst-seg span{display:block;padding:9px 12px;font-size:13px;font-weight:600;color:#334155;background:#fff;min-height:44px;box-sizing:border-box;line-height:26px}
+.na-asst-seg label+label span{border-left:1px solid #cbd5e1}
+.na-asst-seg input:checked+span{background:#166534;color:#fff}.na-asst-seg input:focus-visible+span{outline:3px solid #86efac;outline-offset:-3px}
+body.dark .na-asst-acc-n{color:#94a3b8}body.dark .na-asst-acc-r{border-color:#334155}body.dark .na-asst-seg span{background:#0f172a;color:#e2e8f0}body.dark .na-asst-seg{border-color:#334155}
+html[data-na-theme="azul"] .na-asst-seg input:checked+span{background:#1e40af}
+@media (max-width:480px){.na-asst-seg span{padding:9px 8px;font-size:12px}}
+/* ---------- Configuración: aparatos de dueño, pendiente de aprobar y registro (maquetas v2) */
+.na-asst-own,.na-asst-reg{margin:14px 0;padding:14px;border:1px solid #d7e5dc;border-radius:16px;background:#fff;color:#0f2a1b}
+.na-asst-own h4,.na-asst-reg h4{margin:0 0 8px;font-size:16px}
+.na-asst-own h4+h4{margin-top:14px}
+.na-asst-own-r{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e6efe9}
+.na-asst-own-r>div{flex:1;min-width:0}.na-asst-own-r strong{display:block;font-size:15px}.na-asst-own-r small{display:block;color:#4b6355;font-size:13px}
+.na-asst-own-r em{display:inline-block;white-space:nowrap;font-style:normal;font-size:11px;font-weight:700;background:#dcfce7;color:#14532d;border-radius:999px;padding:2px 8px;margin-left:4px}
+.na-asst-own-r .ic{flex:none;width:36px;height:36px;border-radius:10px;background:#f0fdf4;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:18px}
+.na-asst-quitar,.na-asst-own .na-asst-no{min-height:44px;padding:8px 16px;border-radius:12px;border:1.5px solid #dc2626;background:#fff;color:#b91c1c;font-weight:700;cursor:pointer}
+.na-asst-own-a{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 0}
+.na-asst-own-a .na-asst-ok,.na-asst-reg .na-asst-ok{min-height:44px;border-radius:12px;border:0;background:#15803d;color:#fff;font-weight:700;cursor:pointer}
+.na-asst-own-w{margin:10px 0 0;padding:10px 12px;border-radius:12px;background:#fff4e0;color:#7a3d00;font-size:13px;font-weight:600;line-height:1.35}
+.na-asst-reg p{margin:0 0 10px;color:#4b6355;font-size:14px;line-height:1.4}
+.na-asst-reg label{display:block;font-weight:700;font-size:14px;margin-bottom:10px}
+.na-asst-reg input{display:block;width:100%;box-sizing:border-box;margin-top:6px;height:48px;border:1px solid #c9d8ce;border-radius:12px;padding:0 12px;font-size:18px;letter-spacing:.3em;background:#f7fbf8;color:inherit}
+.na-asst-reg input:disabled{letter-spacing:normal;background:#eef1ef}
+.na-asst-reg .na-asst-ok{width:100%}.na-asst-reg .na-asst-ok:disabled{background:#e5e7eb;color:#374151;border:1px solid #9ca3af}
+.na-asst-reg .st:empty{display:none}
+.na-asst-reg[data-state="lock"] .st,.na-asst-reg[data-state="emp"] .st{padding:10px 12px;border-radius:12px;background:#fee2e2;color:#991b1b;font-weight:700}
+.na-asst-reg[data-state="pend"] .st,.na-asst-reg[data-state="ok"] .st{padding:10px 12px;border-radius:12px;background:#dcfce7;color:#14532d;font-weight:700}
+body.dark .na-asst-own,body.dark .na-asst-reg{background:#112219;border-color:#2c4a37;color:#ecfdf3}
+body.dark .na-asst-own-r{border-color:#22392b}body.dark .na-asst-own-r small,body.dark .na-asst-reg p{color:#b7d3c2}
+body.dark .na-asst-own-r .ic{background:#17301f;color:#86efac}
+body.dark .na-asst-quitar,body.dark .na-asst-own .na-asst-no{background:transparent;color:#fca5a5;border-color:#f87171}
+body.dark .na-asst-own-a .na-asst-ok,body.dark .na-asst-reg .na-asst-ok{background:#22c55e;color:#052e16}
+body.dark .na-asst-own-w{background:#3a2a10;color:#fde2b0}
+body.dark .na-asst-reg input{background:#0f1b15;border-color:#2c4a37}
+
+/* Inicio arriba con alto fijo (el alto y el margen los pone el cargador en #naAsstHero): el contenido se acomoda para caber siempre. */
+#naAsstHero.na-asst-hero{margin-left:0;margin-right:0;max-width:none;align-content:start}
+#naAsstHero .na-asst-hero-t p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+#naAsstHero .h-chips{flex-wrap:wrap;align-content:flex-start;overflow:visible}
+#naAsstHero .h-chip{flex:none;white-space:nowrap}
+@media (max-width:699px){#naAsstHero.na-asst-hero{padding:14px 14px 12px;grid-template-columns:minmax(0,1fr) 112px}#naAsstHero h2{font-size:21px;margin:8px 0 4px}#naAsstHero .na-asst-hero-v{width:112px;height:124px}
+  #naAsstHero .h-glow,#naAsstHero .h-ring{width:130px;height:130px;margin:-65px 0 0 -65px}#naAsstHero .h-bb{--asst-size:72px;width:72px;height:72px;margin:-40px 0 0 -36px}#naAsstHero .c1{left:-4px;top:22px}#naAsstHero .c2{right:-6px;top:76px}
+  #naAsstHero .h-in{margin-top:10px}#naAsstHero .h-chips{margin-top:8px}}
+@media (min-width:700px) and (max-width:1099px){#naAsstHero.na-asst-hero{padding:20px 24px;grid-template-columns:minmax(0,1fr) 190px}#naAsstHero h2{font-size:26px}#naAsstHero .na-asst-hero-v{width:190px;height:150px}
+  #naAsstHero .h-glow,#naAsstHero .h-ring{width:170px;height:170px;margin:-85px 0 0 -85px}#naAsstHero .h-bb{--asst-size:96px;width:96px;height:96px;margin:-52px 0 0 -48px}#naAsstHero .c2{top:96px}}
+@media (min-width:1100px){#naAsstHero.na-asst-hero{padding:24px 32px}#naAsstHero .na-asst-hero-v{height:230px}}
+
+/* ---- Revisión visual Bot 4 ---- */
+/* Cancelar del chat: botón secundario neutro (el rojo queda solo para Quitar/Rechazar en Configuración). */
+.na-asst-card .acts .na-asst-no{background:#e2e8f0;color:#0f172a;border:1px solid #94a3b8}
+body.dark .na-asst-card .acts .na-asst-no{background:#1f3b2b;color:#e5f3ea;border-color:#3f6b52}
+/* Tarjeta hecha: colores sólidos (contraste >= 4.5:1), sin opacidad. */
+body.dark .na-asst-card[data-st="done"]{background:#0f1f16;color:#cbd5e1;border-color:#334155}
+body.dark .na-asst-card[data-st="expired"] .na-asst-ok:disabled,body.dark .na-asst-card[data-st="expired"] .na-asst-no:disabled{background:#334155;color:#e2e8f0}
+/* Puntos de «Pensando». */
+.na-asst-dots{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
+.na-asst-dots i{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.35;animation:na-asst-dot 1.2s ease-in-out infinite}
+.na-asst-dots i:nth-child(2){animation-delay:.2s}.na-asst-dots i:nth-child(3){animation-delay:.4s}
+/* (Bot 3 sobre f773911f) «escribiendo» en la burbuja: la regla de la mascota (arriba: absoluta, opacidad 0 salvo [data-state="pensando"] en la
+   mascota) también tocaba estos puntos y nunca se veían. En la burbuja se ven siempre que estén puestos: «Pensando», mientras llega el texto,
+   mientras el servidor retiene o suprime; al terminar se quitan del DOM (doneBubble). */
+/* (Bot 4 sobre f773911f) contraste ≥ 3 en los 3 temas: puntos sólidos del color del texto de la burbuja (sin opacidad; la animación solo los
+   mueve). Sin saltos (CLS 0): los puntos van en su propia línea de 10 px que ocupa el lugar del relleno de abajo de la burbuja; al terminar se
+   quitan y el relleno vuelve (misma altura). Con movimiento reducido quedan quietos. */
+.na-asst-msg .na-asst-dots{display:flex;position:static;right:auto;top:auto;opacity:1;height:10px;margin:0;align-items:flex-end;gap:4px;pointer-events:none}
+.na-asst-msg .na-asst-dots i{width:7px;height:7px;opacity:1!important;background:currentColor;box-shadow:none;animation:na-asst-dot-b 1.2s ease-in-out infinite!important} /* !important: la regla de la mascota [data-q][data-state="pensando"] (más específica) no les cambia la animación ni la opacidad */
+.na-asst-msg.na-asst-thinking,.na-asst-msg[aria-busy="true"]{padding-bottom:0}
+@keyframes na-asst-dot-b{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-3px)}}
+@keyframes na-asst-dot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+/* Último aparato dueño: Quitar se ve apagado. */
+.na-asst-quitar:disabled{border-color:#9ca3af;color:#4b5563;background:#f3f4f6;cursor:not-allowed}
+body.dark .na-asst-quitar:disabled{border-color:#475569;color:#cbd5e1;background:#1e293b}
+.na-asst-own-only{margin:-4px 0 6px 46px;font-size:13px;color:#4b5563}body.dark .na-asst-own-only{color:#cbd5e1}
+/* Tarjeta de Inicio: brillo e iconos descansan con la burbuja; sin movimiento si el sistema lo pide. */
+.na-asst-hero[data-paused="1"] .h-glow,.na-asst-hero[data-paused="1"] .h-card{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.na-asst-hero .h-glow,.na-asst-hero .h-card,.na-asst-dots i{animation:none!important}.na-asst-dots i{opacity:.7}}
+@media (prefers-reduced-motion:reduce){.na-asst-msg .na-asst-dots i{animation:none!important;opacity:1;transform:none}}
+/* ---- Inicio: alto reservado = alto real (sin franja vacía) ----
+   El cargador reserva un alto FIJO por tramo antes de pintar. Para que ese alto sea exacto, el contenido tiene el MISMO número
+   de líneas en todo el tramo: título y texto con ancho tope (siempre 2 líneas en celular y tableta, 1 en PC) y atajos que se
+   acomodan en 2 filas en celular y tableta y en 1 fila en PC (nunca cortados). Las alturas están en asistente-loader.js e index.html. */
+#naAsstHero h2{max-width:9em}
+#naAsstHero .na-asst-hero-t p{max-width:210px;-webkit-line-clamp:2}
+#naAsstHero .h-chips{max-width:330px}
+@media (max-width:389px){#naAsstHero.na-asst-hero{grid-template-columns:minmax(0,1fr) 88px}#naAsstHero .na-asst-hero-v{width:88px}
+  #naAsstHero .h-glow,#naAsstHero .h-ring{width:110px;height:110px;margin:-55px 0 0 -55px}#naAsstHero .h-bb{--asst-size:60px;width:60px;height:60px;margin:-34px 0 0 -30px}#naAsstHero .c1{left:-6px}#naAsstHero .c2{right:-8px}}
+@media (min-width:700px){#naAsstHero h2{max-width:10em}#naAsstHero .na-asst-hero-t p{max-width:300px}#naAsstHero .h-chips{max-width:440px}}
+@media (min-width:1100px){#naAsstHero.na-asst-hero{grid-template-columns:minmax(0,1fr) 280px}#naAsstHero .na-asst-hero-v{width:280px}
+  #naAsstHero h2{max-width:none;white-space:nowrap}#naAsstHero .na-asst-hero-t p{max-width:none;-webkit-line-clamp:1}#naAsstHero .h-chips{max-width:none;flex-wrap:nowrap}}
+@media (max-width:359px){#naAsstHero .h-chips{gap:6px}#naAsstHero .h-chip{font-size:13px;padding:6px 10px}}
+/* ---- Revisión Bot 4 sobre 1b87710d ---- */
+/* Celular 380-699: alto fijo 272 px (valor probado por Bot 4) con los 3 atajos en UNA fila, textos cortos y sin cortes. */
+#naAsstHero .h-chip .hs{display:none}
+/* (Bot 4 sobre 25ffde10) también a 360: texto corto y una sola fila (tarjeta de 272 px como a 390) */
+@media (max-width:699px){#naAsstHero .h-chips{flex-wrap:nowrap;max-width:none}#naAsstHero .h-chip{padding:8px 12px}
+  #naAsstHero .h-chip .hl{display:none}#naAsstHero .h-chip .hs{display:inline}#naAsstHero.na-asst-hero{padding-bottom:15px}}
+@media (max-width:379px){#naAsstHero .h-chips{gap:6px}#naAsstHero .h-chip{padding:8px 10px}}
+/* Tarjeta hecha: ya no muestra «Vence en». */
+.na-asst-card[data-st="done"] .meta{display:none}
+
+/* «Reintentar» tras un corte o un error: botón grande, nunca un «Pensando» sin fin */
+.na-asst-msg .na-asst-retry{display:block;margin-top:8px;min-height:44px;padding:0 18px;border:0;border-radius:12px;background:#0f766e;color:#fff;font-weight:800;font-size:15px;cursor:pointer}.na-asst-msg .na-asst-retry:disabled{opacity:.6}
+.na-asst-input .na-asst-photo[hidden]{display:none!important}
+.na-asst-msg .na-asst-incomplete{margin-top:6px;font-size:13px;font-weight:800;color:#475569}
+body.dark .na-asst-msg .na-asst-incomplete{color:#cbd5e1} /* Bot 4: contraste 4,5:1 o más sobre el verde oscuro */
+/* Respuesta en partes: «Ver nuevo» (pegado abajo de la lista, solo si la persona subió a leer) y región para el lector de pantalla */
+.na-asst-new{position:sticky;bottom:4px;align-self:center;min-height:44px;padding:8px 16px;border:0;border-radius:22px;background:#14532d;color:#fff;font-size:16px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;z-index:1}
+.na-asst-new[hidden]{display:none}
+.na-asst-live{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* Configuración > Asistente: proveedor de IA (solo dueño) */
+.na-asst-prov{margin-top:16px}.na-asst-prov h4{margin:0 0 4px;font-size:15px}
+.na-asst-prov-r{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #e2e8f0}
+.na-asst-prov-r strong{display:block;font-size:14px}.na-asst-prov-r em{font-style:normal;font-size:12px;color:#1d4ed8;margin-left:4px}
+.na-asst-prov-r small{display:block;font-size:12px;min-height:15px}.na-asst-prov-r small.ok{color:#166534}.na-asst-prov-r small.off{color:#92400e}.na-asst-prov-r small.st{color:#334155}
+.na-asst-prov-a{display:flex;gap:8px;align-items:center}.na-asst-prov-a button,.na-asst-prov-c button{min-height:44px;padding:0 14px;border-radius:10px;font-size:14px}
+.na-asst-prov-a select{min-height:44px;max-width:200px}.na-asst-prov-t{background:#fff;border:1px solid #cbd5e1;color:#0f172a}
+.na-asst-prov-c{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff}.na-asst-prov-c p{flex-basis:100%;margin:0;font-size:14px}
+body.dark .na-asst-prov-r{border-color:#334155}body.dark .na-asst-prov-r small.ok{color:#86efac}body.dark .na-asst-prov-r small.off{color:#fcd34d}body.dark .na-asst-prov-r small.st{color:#cbd5e1}
+body.dark .na-asst-prov-t{background:#0f172a;border-color:#334155;color:#e2e8f0}body.dark .na-asst-prov-c{background:#0f172a;border-color:#1e3a8a}body.dark .na-asst-prov-r em{color:#93c5fd}
+/* Bot 4 sobre 66f1ecb5: proveedor en uso desde el inicio; a 360 la burbuja (64 px + 16) no tapa el último «Usar» */
+.na-asst-prov-cur{margin:6px 0 8px;font-size:15px;font-weight:700;color:#0f172a}body.dark .na-asst-prov-cur{color:#e2e8f0}
+@media (max-width:767px){.na-asst-prov-l{padding-bottom:96px}}
+/* Tablas en la respuesta (texto ya filtrado; solo createElement/textContent). «[dato del dueño]» nunca se parte. */
+.na-asst-tbl{overflow-x:auto;margin:6px 0;white-space:normal;-webkit-overflow-scrolling:touch}
+.na-asst-tbl table{border-collapse:collapse;min-width:100%;font-size:15px;line-height:1.35}
+.na-asst-tbl th,.na-asst-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+.na-asst-tbl th{font-weight:800;background:#f1f5f9;color:#0f172a}
+.na-asst-tl{display:none}.na-asst-mask{white-space:nowrap}
+/* (Bot 2 sobre 58200f60) serie de comprobante («B001-00000123») entera: el guion es el ASCII «-» (copiar/pegar igual) y no se parte dentro
+   de la span (nowrap gana a overflow-wrap:anywhere de la burbuja). Si una serie sola fuera más ancha que la burbuja, se desplaza dentro
+   de su caja (max-width:100%) en vez de desbordar. */
+.na-asst-code{white-space:nowrap;overflow-wrap:normal;word-break:keep-all;display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:bottom}
+/* (Bots 3/4 sobre d72b7601) serie dentro de una celda de la tabla del asistente: solo baja de renglón tras el guion (<wbr>), cada parte nowrap,
+   14 px con selector de la tabla del asistente (.na-asst-tbl), que gana a base.css td{font-size:12px} sin tocar otras tablas */
+.na-asst-tbl .na-asst-code.na-asst-cc{white-space:normal;display:inline;max-width:none;overflow:visible;font-size:14px;vertical-align:baseline}.na-asst-tbl .na-asst-cc .na-asst-cs,.na-asst-tbl .na-asst-cc .na-asst-cn{white-space:nowrap;overflow-wrap:normal;word-break:keep-all}
+/* (Bot 4 sobre 25ffde10) todos los montos de la tabla tapados: máscara corta (el texto sigue en el DOM) y una sola nota bajo la tabla */
+.na-asst-allmask .na-asst-mask{font-size:0;letter-spacing:0}.na-asst-allmask .na-asst-mask::after{content:'•••';font-size:15px;color:#64748b;letter-spacing:1px}
+.na-asst-tnote{font-size:12px;color:#475569;margin:-2px 0 6px}.na-asst-tnote.na-asst-off{display:none}body.dark .na-asst-tnote{color:#a7c4b3}body.dark .na-asst-allmask .na-asst-mask::after{color:#a7c4b3}
+body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.dark .na-asst-tbl th{background:#163023;color:#e5f3ea}
+@media (max-width:480px){
+  .na-asst-tbl{overflow-x:visible}
+  .na-asst-tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .na-asst-tbl table,.na-asst-tbl tbody,.na-asst-tbl tr,.na-asst-tbl td{display:block;min-width:0}
+  .na-asst-tbl tr{border:1px solid #e2e8f0;border-radius:12px;padding:6px 10px;margin:8px 0}
+  .na-asst-tbl td{display:flex;gap:8px;padding:4px 0;border:0;font-size:16px}
+  .na-asst-tl{display:block;flex:0 0 42%;font-weight:800;overflow-wrap:break-word}.na-asst-tl::after{content:":"}
+  .na-asst-tv{flex:1;min-width:0;overflow-wrap:anywhere}
+  /* (Bot 2 sobre 58200f60) celda con serie de comprobante: si no cabe junto a la etiqueta, el valor baja a su propia línea (la serie no se corta) */
+  .na-asst-tbl td{flex-wrap:wrap}.na-asst-tv.na-asst-tvc{flex:1 1 auto}
+  body.dark .na-asst-tbl tr{border-color:#1f3b2b}
+}
+.na-asst-msg.a.na-asst-wide{max-width:100%} /* clase puesta desde JS al pintar la 1.ª tabla (antes :has) */
+/* (Bot 4 sobre 3ee80c18) documento / RUC / proveedor: de izquierda a derecha y aislado (un control de dirección no da vuelta «F001-…») */
+.na-asst-ltr{direction:ltr;unicode-bidi:isolate}
+
+/* ---- Mascota v11 del dueño (asistente-mascota.js) ----
+   Solo dentro de la cabecera del panel, en el lugar de la cara (46 px, mismo hueco: el panel no cambia de alto). Se dibuja a 120 px y se
+   achica (46/96: la mascota ocupa 96 de sus 120). Transparente, sin toques ni foco. La cara de siempre queda debajo hasta que la mascota
+   está lista y vuelve si falla. color-scheme normal: en tema oscuro el marco no pinta fondo. */
+.na-asst-head .na-asst-char{position:relative}
+.na-asst-m11{position:absolute;left:50%;top:50%;width:120px;height:120px;border:0;margin:0;padding:0;background:transparent;color-scheme:normal;pointer-events:none;
+  transform:translate(-50%,-50%) scale(.479);transform-origin:50% 50%;opacity:0;transition:opacity .25s ease-out;contain:strict}
+.na-asst-m11-on>.na-asst-m11{opacity:1}
+.na-asst-m11-on>:not(.na-asst-m11){visibility:hidden}
+@media (prefers-reduced-motion:reduce){.na-asst-m11{transition:none}}
+
+/* «Leer boleta con IA» (solo Admin): revisión editable dentro del panel. Sin cambios fuera del panel. */
+.na-asst-bol-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 6px; }
+.na-asst-bol-fill { height: 100%; width: 0; background: #2563eb; transition: width .9s linear; }
+.na-asst-bol-img { display: block; max-width: 100%; max-height: 220px; margin: 0 auto 6px; border-radius: 6px; object-fit: contain; }
+.na-asst-bol-rot { display: flex; gap: 6px; justify-content: center; margin-bottom: 6px; }
+.na-asst-bol-rot button, .na-asst-bol-actions button { min-height: 40px; padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font: inherit; }
+.na-asst-bol-head { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.na-asst-bol-head label, .na-asst-bol-row label { display: flex; flex-direction: column; font-size: 11px; color: #475569; min-width: 0; }
+.na-asst-bol-head input, .na-asst-bol-row input { width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+.na-asst-bol-items { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; }
+.na-asst-bol-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 4px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.na-asst-bol-row label:nth-child(4) { grid-column: span 3; }
+input.na-asst-bol-null { background: #fef9c3; border-color: #f59e0b; }
+input.na-asst-bol-learned { background: #ecfdf5; border-color: #10b981; }
+.na-asst-bol-row small { color: #047857; font-size: 10px; }
+.na-asst-bol-warn { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 8px; padding: 4px 8px; margin-bottom: 6px; font-size: 12px; }
+.na-asst-bol-warn p { margin: 2px 0; }
+.na-asst-bol-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.na-asst-bol-actions .na-asst-ok { background: #16a34a; color: #fff; border-color: #16a34a; }
+.na-asst-bol-actions .na-asst-bol-dup { background: #fee2e2; color: #991b1b; border: 2px solid #b91c1c; }
+.na-asst-cli { display: inline; padding: 0; border: 0; background: none; color: #1d4ed8; text-decoration: underline; font: inherit; cursor: pointer; min-height: 0; }
+/* «Foto de producto»: revisión editable antes de prellenar «Nuevo producto» */
+.na-asst-pf-row { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 13px; }
+.na-asst-pf-row .fi { width: 100%; box-sizing: border-box; }
+.na-asst-pf-info { margin-top: 4px; font-size: 13px; color: #475569; }
+.na-asst-pf-note { margin-top: 6px; font-size: 12.5px; color: #92400e; }
+.na-asst-below { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 0.92em; }
+.na-asst-below-row { padding: 4px 6px; border-left: 3px solid #b91c1c; background: rgba(185, 28, 28, 0.06); border-radius: 4px; }
+.na-asst-hold{display:block;margin-top:4px;font-style:italic;opacity:.75}

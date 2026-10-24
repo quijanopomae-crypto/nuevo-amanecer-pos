@@ -1,0 +1,23 @@
+/* #159 Medios de pago por turno: sección dentro de #pageReporteArqueo (usa sus variables claro/oscuro). */
+#pageReporteArqueo .rmp-section { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--ra-border); min-width: 0; }
+#pageReporteArqueo .rmp-section h2 { margin: 0 0 8px; font-size: clamp(18px, 2.4vw, 22px); line-height: 1.25; overflow-wrap: anywhere; }
+#pageReporteArqueo .rmp-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 16px 0 12px; }
+#pageReporteArqueo select { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--ra-border); border-radius: 10px; font: inherit; color: var(--ra-text); background: var(--ra-surface); }
+#pageReporteArqueo .rmp-empty { padding: 16px; background: var(--ra-surface); border: 1px solid var(--ra-border); border-radius: 12px; }
+#pageReporteArqueo .rmp-note { margin-top: 8px; font-size: 12px; color: var(--ra-muted); }
+#pageReporteArqueo .rmp-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--ra-border); border-radius: 12px; background: var(--ra-surface); }
+#pageReporteArqueo .rmp-table { width: 100%; min-width: 980px; border-collapse: collapse; table-layout: fixed; color: var(--ra-text); }
+#pageReporteArqueo .rmp-table :is(th, td) { display: table-cell; padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--ra-border); overflow-wrap: anywhere; color: var(--ra-text); }
+#pageReporteArqueo .rmp-table thead th { font-size: 12px; color: var(--ra-muted); }
+#pageReporteArqueo .rmp-table small { display: block; font-size: 12px; color: var(--ra-muted); font-weight: 400; }
+#pageReporteArqueo .rmp-table .rmp-num { text-align: right; font-variant-numeric: tabular-nums; }
+#pageReporteArqueo .rmp-table .rmp-total { font-weight: 700; }
+#pageReporteArqueo .rmp-table tfoot { font-weight: 700; background: var(--ra-bg); }
+#pageReporteArqueo :is(select, .rmp-table-wrap):focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
+@media (min-width: 600px) { #pageReporteArqueo .rmp-controls { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; } }
+#pageReporteArqueo .rmp-details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; }
+#pageReporteArqueo .rmp-details > summary::-webkit-details-marker { display: none; }
+#pageReporteArqueo .rmp-details > summary::before { content: '▸'; color: var(--ra-muted); }
+#pageReporteArqueo .rmp-details[open] > summary::before { content: '▾'; }
+#pageReporteArqueo .rmp-details > summary h2 { margin: 0; }
+#pageReporteArqueo .rmp-details > summary:focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }

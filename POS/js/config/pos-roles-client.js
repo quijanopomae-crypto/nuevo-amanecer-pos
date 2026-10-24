@@ -152,8 +152,11 @@
   };
 
   // Configuración solo para el dueño, por cualquier camino de navegación.
+  function employeeMayScreen(id) {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.mayScreen === 'function' && e.mayScreen(id) === true); } catch (_) { return false; }
+  }
   function forbidden(id) {
-    return !root.NA_PERMISSIONS.canAccessScreen('empleado', id) && !canConfigure();
+    return !root.NA_PERMISSIONS.canAccessScreen('empleado', id) && !canConfigure() && !employeeMayScreen(id);
   }
   function backToSale() {
     try { if (root.NA_MENU_NAVIGATION) root.NA_MENU_NAVIGATION.navigate('pagePOS'); else root.goPage('pagePOS'); } catch (_) {}
