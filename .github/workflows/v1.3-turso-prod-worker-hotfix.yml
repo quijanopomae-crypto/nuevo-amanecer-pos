@@ -88,6 +88,66 @@ jobs:
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc
 
+      # Pre-deploy Turso backup (same script as turso-daily-backup.yml, dedicated key).
+      # Any failure here stops the job before the deploy step; no rollback is needed.
+      - name: Create consistent encrypted logical Turso backup
+        env:
+          TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+          TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+          TURSO_BACKUP_ENCRYPTION_KEY: ${{ secrets.TURSO_BACKUP_ENCRYPTION_KEY }}
+          TURSO_BACKUP_DIR: ${{ runner.temp }}/turso-hotfix-backup
+          # Backup/verify do not need the deploy token inherited from the job env.
+          CLOUDFLARE_API_TOKEN: ""
+          CLOUDFLARE_ACCOUNT_ID: ""
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${TURSO_PROD_DATABASE_URL:=}" "${TURSO_PROD_AUTH_TOKEN:=}" "${TURSO_BACKUP_ENCRYPTION_KEY:=}"
+          test -n "$TURSO_PROD_DATABASE_URL" || { echo "::error::Secret TURSO_PROD_DATABASE_URL is missing"; exit 1; }
+          test "${#TURSO_PROD_AUTH_TOKEN}" -ge 32 || { echo "::error::Secret TURSO_PROD_AUTH_TOKEN is missing"; exit 1; }
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+          if [ "${#TURSO_BACKUP_ENCRYPTION_KEY}" -lt 32 ]; then
+            echo "::error::Secret TURSO_BACKUP_ENCRYPTION_KEY is missing or shorter than 32 characters; the hotfix does not deploy without a verified backup."
+            exit 1
+          fi
+          echo "::add-mask::$TURSO_BACKUP_ENCRYPTION_KEY"
+          node tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs backup
+
+      - name: Restore-verify pre-deploy Turso backup (deploy stops if this fails)
+        env:
+          TURSO_BACKUP_ENCRYPTION_KEY: ${{ secrets.TURSO_BACKUP_ENCRYPTION_KEY }}
+          TURSO_BACKUP_DIR: ${{ runner.temp }}/turso-hotfix-backup
+          CLOUDFLARE_API_TOKEN: ""
+          CLOUDFLARE_ACCOUNT_ID: ""
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs verify \
+            "$TURSO_BACKUP_DIR/turso-backup.enc.json" \
+            --manifest "$TURSO_BACKUP_DIR/turso-backup.manifest.json" \
+            || { echo "::error::Pre-deploy backup restore verification FAILED; hotfix NOT deployed"; exit 1; }
+
+      - name: Store and verify backup in private remote R2
+        working-directory: tools/cloudflare-lab
+        env:
+          R2_BUCKET: nuevo-amanecer-prod-v2-backups
+          TURSO_BACKUP_DIR: ${{ runner.temp }}/turso-hotfix-backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-turso-worker-hotfix/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup.enc.json"
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup-check.json"
+          test "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.enc.json" | awk '{print $1}')" = "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup-check.json" | awk '{print $1}')"
+          MANIFEST_KEY="${KEY%.json}.manifest.json"
+          npx wrangler r2 object put "$R2_BUCKET/$MANIFEST_KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup.manifest.json"
+          npx wrangler r2 object get "$R2_BUCKET/$MANIFEST_KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup-manifest-check.json"
+          test "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.manifest.json" | awk '{print $1}')" = "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup-manifest-check.json" | awk '{print $1}')"
+          echo "PRE_DEPLOY_BACKUP_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "PRE_DEPLOY_BACKUP_SHA256=$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.enc.json" | awk '{print $1}')" >> "$GITHUB_ENV"
+          rm -rf "$TURSO_BACKUP_DIR"
+
       - name: Verify production health before hotfix
         shell: bash
         run: |
@@ -208,4 +268,10 @@ jobs:
             echo "- Schema/data migrations: NONE"
             echo "- Live sale during deploy: NONE"
             echo "- Production health: PASS"
+            echo "- Pre-deploy Turso backup: $PRE_DEPLOY_BACKUP_KEY (sha256 $PRE_DEPLOY_BACKUP_SHA256)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove local pre-deploy backup files
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/turso-hotfix-backup"
