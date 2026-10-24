@@ -138,6 +138,7 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-02.js',
   './js/modules/ticket/overrides.js',
   './js/legacy-inline/inline-03.js',
+  './js/modules/ventas-espera.js',
   './js/core/state.js',
   './js/legacy-inline/inline-04.js',
   './js/legacy-inline/inline-05.js',
