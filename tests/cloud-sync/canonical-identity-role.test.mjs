@@ -153,7 +153,7 @@ test('C2 legado SOLO DEL DUEÑO (expense.void) y al actualizar entra un EMPLEADO
   const tokOwner = await newOwnerSession(f), rolesOwner = await rolesFor(f, tokOwner);
   relogin(ls, tokOwner);
   const A = await device(f, { token: tokOwner, localStorage: ls, scripts, globals: { NA_ROLES: rolesOwner }, onFetch: loseFirst('/commands/expense.void') });
-  await A.api.createExpense({ amount_cents: 1000, concept: 'Gasto sintético', category: 'Otro', payment_method: 'yape', expense_date: new Date().toISOString().slice(0, 10), note: '' });
+  await A.api.createExpense({ amount_cents: 1000, concept: 'Gasto sintético', category: 'Otro', payment_method: 'yape', expense_date: new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10), note: '' });
   await A.api.refresh();
   const row = A.api.legacySnapshot().expenses[0];
   await assert.rejects(A.api.voidExpense({ expense_id: row.expenseId, expected_revision: row.revision }));
