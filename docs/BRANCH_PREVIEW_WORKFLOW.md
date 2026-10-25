@@ -17,7 +17,7 @@ CANON HEAD
   -> Draft PR
   -> CANON Critical CI / E2E Smoke CI
   -> clasificación de riesgo
-  -> Reviewer + Forensic obligatorios para cambios sensibles/integraciones; opcionales en cambios exclusivamente visuales
+  -> revisión proporcional BAJO / MEDIO / ALTO (docs/DEVELOPMENT_RISK_POLICY.md)
   -> preview temporal del mismo SHA, cuando aplique
   -> veredicto READY FOR MERGE
   -> comprobar autorización vigente del owner
@@ -55,7 +55,7 @@ Un PR no puede solicitar merge con:
 - CANON Critical CI rojo;
 - E2E requerido rojo;
 - P0/P1 abierto;
-- falta de revisión independiente en cambios que afecten autenticación, permisos, información sensible, llamadas API autenticadas, stock, caja, crédito, pagos, ventas, outbox, service worker o despliegue;
+- falta de revisión técnica y evidencias exigidas por la categoría de riesgo; se admite revisión independiente automatizada real, sin dependencia de Reviewer/Forensic nominal;
 - divergencia entre SHA revisado y SHA servido;
 - diff fuera de alcance;
 - migración o cambio de secrets no autorizado.
@@ -72,7 +72,7 @@ Crear rama, commit y Draft PR no equivale a:
 - escritura de producción;
 - cambio de secrets.
 
-La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. Borrados, migraciones destructivas, force-push, cambios de secrets y ampliaciones requieren autorización explícita específica. Se conservan respaldo, pruebas, revisión independiente cuando la superficie sea sensible y verificación posterior. Los cambios estrictamente visuales, sin exposición ni escritura de datos, pueden avanzar con aprobación de diseño del owner, pruebas y preview del mismo SHA; la clasificación y las evidencias se anotan en el PR.
+La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. Borrados, migraciones destructivas, force-push, cambios de secrets y ampliaciones requieren autorización explícita específica. Se conservan respaldo, pruebas, revisión proporcional según `docs/DEVELOPMENT_RISK_POLICY.md` y verificación posterior. Los cambios estrictamente visuales, sin exposición ni escritura de datos, pueden avanzar con aprobación de diseño del owner, pruebas y preview del mismo SHA; la clasificación y las evidencias se anotan en el PR.
 
 ## Fuente de verdad
 

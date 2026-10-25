@@ -14,6 +14,6 @@ description: "Checklist obligatorio antes de push/merge/deploy de cambios del PO
 - [ ] E2E Playwright en puerto libre: todo verde; revisado a 390/768/1366.
 - [ ] Restaurados `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css`, `evidence/**` sobrescritos por la suite; no commiteados.
 - [ ] CI (`canon-critical-ci.yml`, `e2e-smoke-ci.yml`) verde en el PR.
-- [ ] Clasificación de riesgo documentada: solo visual sin datos ni API = revisión independiente aconsejada, no obligatoria; integración con API autenticada, datos privados, caja, stock, crédito, venta, roles, offline o infra = mantener revisión Reviewer/Forensic independiente.
+- [ ] Clasificación BAJO / MEDIO / ALTO según `docs/DEVELOPMENT_RISK_POLICY.md`; revisión proporcional documentada, independiente y reforzada en ALTO (puede ser automatizada). Ningún revisor humano externo o agente nominal es obligatorio para todas las tareas.
 - [ ] Preview del SHA candidato en cambios de interfaz, con viewport 390/768/1366; no confundir UI de demostración con datos reales ni ignorar fallos.
 - [ ] Deploy (si está autorizado): backend primero si cambia el Worker, luego web; anotar rollback ref; nunca los workflows prohibidos.
