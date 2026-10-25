@@ -10,7 +10,7 @@ Referencia corta para elegir agente y zona. `AGENTS.md` gobierna el flujo vigent
 
 | Zona / rol | Agente | Escritura | Regla principal |
 |---|---|---|---|
-| CANON branch | `pos-canon-implementer` | Sí, solo rama/alcance autorizado | Nunca merge/deploy remoto implícito |
+| CANON branch | `pos-canon-implementer` | Sí, solo rama/alcance autorizado | Coordinador completa PR/merge/deploy con autorización única del alcance |
 | Preview | mismo candidato | No código distinto | Debe servir el mismo SHA del Draft PR |
 | SHADOW legacy | `pos-implementer` | Solo infraestructura/evidence shadow | `PRODUCT_WRITE = DENIED` |
 | PLANNER | `pos-planner` | No | Diagnóstico/plan |
@@ -41,3 +41,7 @@ Referencia corta para elegir agente y zona. `AGENTS.md` gobierna el flujo vigent
 - skills LAB antiguas quedan retiradas; no son parte del flujo activo.
 
 No existe promoción implícita entre zonas. El cambio probado debe llegar a CANON mediante la misma rama/PR/SHA que fue revisada.
+
+## Revisión proporcional y continuidad
+
+Aplicar `docs/DEVELOPMENT_RISK_POLICY.md` en Codex, OpenCode y Grokbots. Los roles son funciones, no personas obligatorias. Un agente independiente automatizado puede revisar; registrar resultado real y SHA. Si un agente no responde, sustituirlo, sin saltar pruebas ni inventar su aprobación. El coordinador mantiene las acciones remotas fuera del subagente local.

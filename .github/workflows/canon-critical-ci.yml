@@ -34,35 +34,6 @@ on:
   push:
     branches:
       - feature/v1.3-mobile-cloud
-    paths:
-      - "POS/**"
-      - "tests/product-fixes/**"
-      - "tests/backup-*.test.mjs"
-      - "tests/cloud-sync/**"
-      - "tools/cloudflare-lab/src/**"
-      - "tools/cloudflare-backup/**"
-      - "tools/cloudflare-prod/**"
-      - "tools/pos-local/setup.html"
-      - "tools/pos-local/setup.js"
-      - "infra/database/migrations/**"
-      - "tools/cloudflare-lab/scripts/**"
-      - "tools/cloudflare-lab/test/**"
-      - "tools/pos-experience/**"
-      - "AGENTS.md"
-      - "REPO_MAP.yaml"
-      - ".opencode/**"
-      - "docs/BRANCH_PREVIEW_WORKFLOW.md"
-      - "docs/LAB_RETIREMENT.md"
-      - "tests/repo-map.test.mjs"
-      - "tests/opencode-role-map.test.mjs"
-      - "tests/security-secret-separation.test.mjs"
-      - "tools/owner-finalize-v1.3.ps1"
-      - "tests/owner-finalizer.test.mjs"
-      - "docs/V1.3_STATUS.md"
-      - "docs/OWNER_FINALIZATION.md"
-      - ".github/workflows/canon-critical-ci.yml"
-      - ".github/workflows/v1.3-prod-cutover.yml"
-      - ".github/workflows/v1.3-prod-preflight.yml"
 
 permissions:
   contents: read

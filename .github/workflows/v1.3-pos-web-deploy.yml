@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: nuevo-amanecer-production-change
@@ -36,19 +37,25 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Require exact active branch head
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
-          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          git fetch origin feature/v1.3-mobile-cloud
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+
+      - name: Verify scoped release and exact target CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/release/web-release.mjs verify
 
       - name: Verify CANON experience contract
         shell: bash
@@ -96,6 +103,19 @@ jobs:
       - name: Static Worker dry-run
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy --dry-run --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Record current Cloudflare deployment for recovery
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deployments list --config ../cloudflare-pos-web/wrangler.jsonc > /tmp/pos-web-before-deploy.txt
+
+      - name: Preserve release and rollback evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pos-web-release-${{ github.sha }}
+          path: |
+            /tmp/pos-web-before-deploy.txt
+            ops/v1.3-pos-web-deploy-trigger.json
+          retention-days: 30
 
       - name: Deploy hosted POS
         working-directory: tools/cloudflare-lab
