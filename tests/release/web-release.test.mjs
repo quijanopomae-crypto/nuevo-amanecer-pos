@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 const module = await import('../../tools/release/web-release.mjs').catch(() => ({}));
-const { validateRelease, requireGreenRuns, validateReviewReceipt, deployedOnly, REQUIRED_CI } = module;
+const { validateRelease, requireGreenRuns, validateReviewReceipt, deployedOnly, REQUIRED_CI, excludedFromScope, highRiskPaths, requireRiskForDiff, scopeWarning } = module;
 
 test('release validator exists', () => assert.equal(typeof validateRelease, 'function'));
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
@@ -89,4 +89,63 @@ test('changes after the independent review are checked against the full diff, ne
  // la CLI debe pasar el diff completo (paths), no releasePaths, al validar el recibo
  const src=readFileSync(new URL('../../tools/release/web-release.mjs',import.meta.url),'utf8');
  assert.match(src,/validateReviewReceipt\(receipt,m,paths\(receipt\.reviewed_commit,m\.target_commit\)\)/);
+});
+
+test('prepare helpers: excluded files are reported and Worker/SQL changes derive a minimum risk of high',()=>{
+ const diff=['POS/css/x.css','docs/a.md','tests/e2e/a.spec.ts'];
+ assert.deepEqual(excludedFromScope(diff),['docs/a.md','tests/e2e/a.spec.ts']);
+ assert.match(scopeWarning(diff),/^WARNING: 2 file\(s\).*docs 1, tests 1/s);
+ assert.equal(scopeWarning(['POS/css/x.css']),'');
+ assert.match(scopeWarning(Array.from({length:40},(_,i)=>'laboratorio/f'+i+'.html')),/laboratorio 40[\s\S]*and 25 more/);
+ for(const hit of ['tools/cloudflare-lab/src/worker.js','tools/cloudflare-prod/src/worker.js','tools/cloudflare-backup/run.mjs','infra/database/migrations/0099_x.sql','ops/canon-migration-0034.json','ops/canon-migrations-0021-0022.json','db/other.SQL']) {
+  assert.deepEqual(highRiskPaths(['POS/css/x.css',hit]),[hit]);
+  for(const risk of ['low','medium']) assert.throws(()=>requireRiskForDiff(risk,['POS/css/x.css',hit]),/--risk high is required/);
+  assert.deepEqual(requireRiskForDiff('high',['POS/css/x.css',hit]),[hit]);
+ }
+ // cambios solo de POS (o de la web estática, workflow, docs) no exigen riesgo alto
+ assert.deepEqual(requireRiskForDiff('low',['POS/css/x.css','tools/cloudflare-pos-web/src/worker.js','docs/a.md','ops/v1.3-pos-web-deploy-trigger.json','tools/cloudflare-staging/x.mjs']),[]);
+});
+
+test('prepare CLI warns about excluded files without blocking and requires --risk high for Worker or migrations',()=>{
+ const root=mkdtempSync(join(tmpdir(),'web-release-warn-'));
+ const repo=join(root,'repo');
+ const run=(...args)=>execFileSync('git',args,{cwd:repo,encoding:'utf8'}).trim();
+ const script=new URL('../../tools/release/web-release.mjs',import.meta.url).pathname;
+ const prepare=(base,target,scopeList,risk,review)=>{
+  const scope=join(root,'scope.json');writeFileSync(scope,JSON.stringify(scopeList));
+  rmSync(join(repo,'ops/v1.3-pos-web-deploy-trigger.json'),{force:true});
+  return spawnSync(process.execPath,[script,'prepare','--base',base,'--target',target,'--rollback',base,'--scope',scope,'--authorization','owner fixture scope','--risk',risk,'--review-kind',review,'--review','docs/review.json'],{cwd:repo,encoding:'utf8'});
+ };
+ try{
+ execFileSync('mkdir',['-p',join(repo,'ops'),join(repo,'POS'),join(repo,'docs'),join(repo,'tools/cloudflare-lab/src'),join(repo,'infra/database/migrations')]);
+ run('init','-q');run('config','user.name','Fixture');run('config','user.email','fixture@example.test');
+ writeFileSync(join(repo,'POS/ui.css'),'old');writeFileSync(join(repo,'docs/a.md'),'old');writeFileSync(join(repo,'tools/cloudflare-lab/src/worker.js'),'old');
+ run('add','.');run('commit','-qm','baseline');const base=run('rev-parse','HEAD');
+ // 1) una línea de CSS en POS: sin aviso y sin exigir riesgo alto
+ writeFileSync(join(repo,'POS/ui.css'),'new');run('commit','-qam','css');const css=run('rev-parse','HEAD');
+ let r=prepare(base,css,['POS/ui.css'],'low','self');
+ assert.equal(r.status,0,r.stderr);assert.equal(r.stderr,'');
+ // 2) POS + docs: avisa del archivo excluido, no bloquea
+ writeFileSync(join(repo,'docs/a.md'),'new');run('commit','-qam','docs');const docs=run('rev-parse','HEAD');
+ r=prepare(base,docs,['POS/ui.css'],'low','self');
+ assert.equal(r.status,0,r.stderr);assert.match(r.stderr,/WARNING: 1 file\(s\).*\n\s+- docs\/a\.md/);
+ // 3) Worker: falla con riesgo bajo, pasa con alto (avisando del archivo excluido)
+ writeFileSync(join(repo,'tools/cloudflare-lab/src/worker.js'),'new');run('commit','-qam','worker');const worker=run('rev-parse','HEAD');
+ r=prepare(base,worker,['POS/ui.css'],'low','self');
+ assert.notEqual(r.status,0);assert.match(r.stderr,/--risk high is required/);
+ r=prepare(base,worker,['POS/ui.css'],'medium','technical');
+ assert.notEqual(r.status,0);assert.match(r.stderr,/--risk high is required/);
+ r=prepare(base,worker,['POS/ui.css'],'high','independent-automated');
+ assert.equal(r.status,0,r.stderr);assert.match(r.stderr,/tools\/cloudflare-lab\/src\/worker\.js/);
+ // 4) migración SQL nueva: igual
+ writeFileSync(join(repo,'infra/database/migrations/0099_x.sql'),'select 1;');run('add','infra');run('commit','-qm','migration');const mig=run('rev-parse','HEAD');
+ r=prepare(base,mig,['POS/ui.css'],'low','self');
+ assert.notEqual(r.status,0);assert.match(r.stderr,/--risk high is required/);
+ // 5) prod, backup y ops/canon-migration-*: igual
+ for(const f of ['tools/cloudflare-prod/w.js','tools/cloudflare-backup/b.mjs','ops/canon-migration-0099.json']){
+  execFileSync('mkdir',['-p',join(repo,f.replace(/\/[^/]*$/,''))]);writeFileSync(join(repo,f),'x');run('add',f);run('commit','-qm',f);
+  r=prepare(base,run('rev-parse','HEAD'),['POS/ui.css'],'low','self');
+  assert.notEqual(r.status,0,f);assert.match(r.stderr,/--risk high is required/,f);
+ }
+ }finally{rmSync(root,{recursive:true,force:true});}
 });
