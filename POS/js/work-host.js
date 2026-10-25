@@ -9,11 +9,20 @@
     'pageProximamente':true,'pageConfig':true
   });
   function isHome() { var p=doc.getElementById('pageMenu'); return !!(p && p.classList.contains('active')); }
-  // Until the design baseline and E2E are approved, WORK is preview-only (?work=1).
-  var featureEnabled = false;
-  try { featureEnabled = new URLSearchParams(root.location.search).get('work')==='1'; } catch (_) {}
-
-  function syncButton() { if (launcher) launcher.hidden = !featureEnabled || !isHome() || !!overlay; }
+  // WORK is the default Inicio experience; ?work=0 is a reversible legacy fallback.
+  // The fallback does not affect sales, cash, local outbox or canonical storage.
+  var featureEnabled = true, temporarilyLegacy = false;
+  try { featureEnabled = new URLSearchParams(root.location.search).get('work') !== '0'; } catch (_) {}
+  function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || (featureEnabled && !temporarilyLegacy); }
+  function syncView() {
+    if (!isHome()) {
+      temporarilyLegacy = false;
+      if (overlay) close();
+    } else if (featureEnabled && !temporarilyLegacy && !overlay) {
+      open();
+    }
+    syncButton();
+  }
   function realMetrics() {
     var items = Array.from(doc.querySelectorAll('#pageMenu .quick-stats .qs-card'));
     return items.map(function (card) {
@@ -67,13 +76,15 @@
     if (event.origin!==root.location.origin || !frame || event.source!==frame.contentWindow) return;
     var data=event.data;
     if (!data || typeof data!=='object' || typeof data.type!=='string' || !data.type.startsWith('na-work:')) return;
-    if (data.type==='na-work:close') {close();return;}
+    if (data.type==='na-work:close') {temporarilyLegacy = true;close();return;}
     if (data.type==='na-work:metrics') {respond(event.source,{action:'init',metrics:realMetrics()});return;}
     if (data.type==='na-work:navigate') {
       var id=String(data.page||'');
       if (!allowedPages[id] || typeof root.goPage!=='function') return;
-      close();
-      root.goPage(id);
+      if (id === 'pageMenu') { if (!isHome()) root.goPage(id); return; }
+      // The canonical navigation still checks the session/role before entering a page.
+      var changed = root.goPage(id);
+      if (changed !== false && !isHome()) close();
       return;
     }
     if (data.type==='na-work:chat' && typeof data.id==='string' && typeof data.text==='string' && data.text.trim().length>0) {
@@ -91,9 +102,9 @@
     launcher.addEventListener('click',open);
     doc.body.appendChild(launcher);
     var home=doc.getElementById('pageMenu');
-    if (home && root.MutationObserver) new root.MutationObserver(syncButton).observe(home,{attributes:true,attributeFilter:['class']});
-    syncButton();
-    if (featureEnabled) open();
+    if (home && root.MutationObserver) new root.MutationObserver(syncView).observe(home,{attributes:true,attributeFilter:['class']});
+    root.addEventListener('pageshow', syncView);
+    syncView();
   }
   root.NA_WORK_HOST={open:open,close:close};
   if (doc.readyState==='loading') doc.addEventListener('DOMContentLoaded',mount,{once:true}); else mount();
