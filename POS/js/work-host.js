@@ -37,6 +37,20 @@
       return {label:label ? label.textContent.trim() : '',value:value ? value.textContent.trim() : '',detail:detail ? detail.textContent.trim() : ''};
     }).filter(function (x) {return x.label && x.value;});
   }
+  function realActivity() {
+    var list = doc.getElementById('naMobileActivityList');
+    if (!list) return [];
+    return Array.from(list.querySelectorAll('.na-mobile-activity-row')).slice(0,6).map(function (el) {
+      function val(selector) { var n=el.querySelector(selector); return n ? String(n.textContent||'').trim().slice(0,150) : ''; }
+      return {title:val('.na-mobile-activity-copy strong'),client:val('.na-mobile-activity-copy small:not(.na-mobile-activity-time)'),
+        date:val('.na-mobile-activity-time'),amount:val('.na-mobile-activity-value')};
+    }).filter(function (x) {return x.title && x.title !== 'Sin movimientos recientes';});
+  }
+  function initPayload() {
+    var roles=root.NA_ROLES, owner=false;
+    try { owner=!!(roles && typeof roles.isOwner==='function' && roles.isOwner()===true); } catch (_) {}
+    return {action:'init',metrics:realMetrics(),activity:realActivity(),role:owner?'Dueño':'Empleado'};
+  }
   function respond(target, data) {
     if (target && frame && target === frame.contentWindow) {
       target.postMessage(Object.assign({type:'na-work:response'},data),root.location.origin);
@@ -59,7 +73,7 @@
     doc.body.appendChild(overlay);
     doc.body.classList.add('na-work-open');
     frame.addEventListener('load',function () {
-      respond(frame.contentWindow,{action:'init',metrics:realMetrics()});
+      respond(frame.contentWindow,initPayload());
     });
     syncButton();
   }
@@ -84,7 +98,7 @@
     var data=event.data;
     if (!data || typeof data!=='object' || typeof data.type!=='string' || !data.type.startsWith('na-work:')) return;
     if (data.type==='na-work:close') {temporarilyLegacy = true;close();return;}
-    if (data.type==='na-work:metrics') {respond(event.source,{action:'init',metrics:realMetrics()});return;}
+    if (data.type==='na-work:metrics') {respond(event.source,initPayload());return;}
     if (data.type==='na-work:navigate') {
       var id=String(data.page||'');
       if (!allowedPages[id] || typeof root.goPage!=='function') return;
@@ -112,6 +126,8 @@
     if (home && root.MutationObserver) new root.MutationObserver(syncView).observe(home,{attributes:true,attributeFilter:['class']});
     root.addEventListener('pageshow', syncView);
     syncView();
+    // Refresh read-only figures from the POS DOM; does not query the backend or change data.
+    root.setInterval(function(){if(overlay && isHome() && frame)respond(frame.contentWindow,initPayload());},10000);
   }
   root.NA_WORK_HOST={open:open,close:close};
   if (doc.readyState==='loading') doc.addEventListener('DOMContentLoaded',mount,{once:true}); else mount();
