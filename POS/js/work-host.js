@@ -2,24 +2,19 @@
 (function (root) {
   'use strict';
   if (!root.document || root.NA_WORK_HOST) return;
-  var doc = root.document, overlay = null, frame = null, launcher = null;
+  var doc = root.document, overlay = null, frame = null, mounted = false;
   var allowedPages = Object.freeze({
     'pageMenu':true,'pagePOS':true,'pageVentas':true,'pageInventario':true,
     'pageClientes':true,'pageCaja':true,'pageGastos':true,
     'pageProximamente':true,'pageConfig':true
   });
   function isHome() { var p=doc.getElementById('pageMenu'); return !!(p && p.classList.contains('active')); }
-  // WORK is the default Inicio experience; ?work=0 is a reversible legacy fallback.
-  // The fallback does not affect sales, cash, local outbox or canonical storage.
-  // Only the authenticated hosted CANON opens WORK by default.
-  // Local tests retain the current screens; ?work=1 exercises the new interface.
+  // WORK is the only visible Inicio experience in hosted production.
+  // The legacy Inicio DOM stays internal: existing modules and summary data use it.
+  // ?work=1 enables local tests; ?work=0 can no longer expose the old Inicio in CANON.
   var featureEnabled = !!(root.NA_HOSTED_CONFIG &&
-    root.NA_HOSTED_CONFIG.environment === 'production'), temporarilyLegacy = false;
-  try {
-    var mode = new URLSearchParams(root.location.search).get('work');
-    if (mode === '1') featureEnabled = true;
-    if (mode === '0') featureEnabled = false;
-  } catch (_) {}
+    root.NA_HOSTED_CONFIG.environment === 'production');
+  try { if (new URLSearchParams(root.location.search).get('work') === '1') featureEnabled = true; } catch (_) {}
   function sessionReady() {
     return !(root.NA_HOSTED_CONFIG && root.NA_HOSTED_CONFIG.environment === 'production') ||
       !!(root.NA_ROLES && root.NA_ROLES.confirmed === true);
@@ -27,7 +22,6 @@
   function ownerDataAllowed() {
     try { return sessionReady() && !!(root.NA_ROLES && root.NA_ROLES.isOwner() === true); } catch (_) { return false; }
   }
-  function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || !featureEnabled || !temporarilyLegacy; }
   var identity = null;
   function syncView() {
     var roles = root.NA_ROLES;
@@ -35,12 +29,10 @@
     if (identity !== nextIdentity) { identity = nextIdentity; close(); }
 
     if (!sessionReady() || !isHome()) {
-      temporarilyLegacy = false;
       if (overlay) close();
-    } else if (featureEnabled && !temporarilyLegacy && !overlay) {
+    } else if (featureEnabled && !overlay) {
       open();
     }
-    syncButton();
   }
   function realMetrics() {
     if (!ownerDataAllowed()) return [];
@@ -75,7 +67,6 @@
   function close() {
     resetConversation();
     if (overlay) { overlay.remove(); overlay=null; frame=null; doc.body.classList.remove('na-work-open'); }
-    syncButton();
   }
   function open() {
     if (overlay || !doc.body || !sessionReady()) return;
@@ -92,7 +83,6 @@
     frame.addEventListener('load',function () {
       respond(frame.contentWindow,initPayload());
     });
-    syncButton();
   }
   async function ask(target,id,message) {
     if (busy) { respond(target,{action:'chat',id:id,ok:false,text:'Espera a que termine la consulta actual.'}); return; }
@@ -125,7 +115,7 @@
     var data=event.data;
     if (!data || typeof data!=='object' || typeof data.type!=='string' || !data.type.startsWith('na-work:')) return;
     if (data.type==='na-work:reset') {resetConversation();return;}
-    if (data.type==='na-work:close') {temporarilyLegacy = true;close();return;}
+    if (data.type==='na-work:close') return; // Older cached iframe cannot reopen the retired Inicio.
     if (data.type==='na-work:metrics') {respond(event.source,initPayload());return;}
     if (data.type==='na-work:navigate') {
       var id=String(data.page||'');
@@ -141,15 +131,11 @@
     }
   });
   function mount() {
-    if (!doc.body || launcher) return;
+    if (!doc.body || mounted) return;
+    mounted = true;
     var style=doc.createElement('style');
-    style.textContent='#naWorkLauncher{position:fixed;right:17px;bottom:18px;z-index:27;border:0;border-radius:22px;background:linear-gradient(120deg,#073958,#0a90ae);color:white;font:750 14px/1 system-ui;padding:14px 18px;box-shadow:0 8px 24px #06345155;min-height:46px}#naWorkLauncher[hidden]{display:none!important}#naWorkOverlay{position:fixed;inset:0;z-index:10050;background:#f7fbff}#naWorkOverlay iframe{display:block;width:100%;height:100%;border:0;background:#f7fbff}body.na-work-open{overflow:hidden}';
+    style.textContent='#naWorkOverlay{position:fixed;inset:0;z-index:10050;background:#f7fbff}#naWorkOverlay iframe{display:block;width:100%;height:100%;border:0;background:#f7fbff}body.na-work-open{overflow:hidden}';
     doc.head.appendChild(style);
-    launcher=doc.createElement('button');
-    launcher.id='naWorkLauncher';launcher.type='button';launcher.textContent='✦ WORK';
-    launcher.setAttribute('aria-label','Abrir WORK');
-    launcher.addEventListener('click',open);
-    doc.body.appendChild(launcher);
     var home=doc.getElementById('pageMenu');
     if (home && root.MutationObserver) new root.MutationObserver(syncView).observe(home,{attributes:true,attributeFilter:['class']});
     root.addEventListener('pageshow', syncView);
