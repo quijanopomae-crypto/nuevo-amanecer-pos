@@ -28,6 +28,13 @@ test('WORK does not present the sample values as canonical data',()=>{
   assert.match(bridge,/rows\.forEach\(function\(row\)\{row\.remove\(\);\}\)/);
   assert.match(bridge,/no se mostrarán operaciones de ejemplo/i);
 });
+test('WORK no longer offers a link back to the retired Inicio',()=>{
+  assert.doesNotMatch(host,/temporarilyLegacy|naWorkLauncher|mode === '0'/);
+  assert.match(host,/if \(data\.type==='na-work:close'\) return/);
+  assert.doesNotMatch(bridge,/Volver al POS|post\('close'\)/);
+  assert.match(host,/NA_HOSTED_CONFIG\.environment === 'production'/);
+  assert.match(host,/root\.goPage\(id\)/); // Protected business modules remain reachable.
+});
 test('WORK cannot create unapproved operations from the iframe',()=>{
   assert.match(host,/NA_ROLES\.api\('\/auth\/assistant\/chat'/);
   assert.doesNotMatch(host,/\/commands\//);
