@@ -105,7 +105,11 @@
   var CONFLICTS = ['operation_id_conflict', 'sale_id_conflict'];
   // A charged sale whose cash/payment really happened: never offered as
   // "annul as not registered" (the owner reconciles it from the review list).
-  var NEVER_ANNUL = CONFLICTS.concat(['payment_reference_conflict', 'cash_session_closed', 'cash_session_required', 'promotion_changed']);
+  // T-47: venta capturada por OTRA sesión de este aparato (identity_changed) o guardada por una versión
+  // anterior sin identidad cuando no se puede probar que la sesión es la misma (identity_unverified).
+  // Nunca se envía con el token actual ni se borra: va a «Ventas en revisión» y solo el dueño la aprueba.
+  var IDENTITY_REASONS = ['identity_changed', 'identity_unverified'];
+  var NEVER_ANNUL = CONFLICTS.concat(['payment_reference_conflict', 'cash_session_closed', 'cash_session_required', 'promotion_changed'], IDENTITY_REASONS);
   // Rejections about THIS sale move it aside to the durable review list so the
   // rest of the queue keeps flowing. Any other definitive 400/404/409 of
   // sale.create also goes to review (never freeze the drain); system answers
@@ -137,9 +141,25 @@
     promotion_changed: 'CANON cambió de promoción mientras la venta esperaba',
     credit_limit_exceeded: 'supera la línea de crédito del cliente',
     canonical_sale_conflict: 'CANON no pudo registrarla',
-    invalid_sale_request: 'los datos de la venta no son válidos'
+    invalid_sale_request: 'los datos de la venta no son válidos',
+    identity_changed: 'la registró otra sesión de este aparato con otro rol (dueño/empleado). No se envió con la sesión actual: el dueño debe revisarla y pulsar Reintentar para registrarla con esta sesión',
+    identity_unverified: 'se guardó antes de esta actualización y no se puede saber qué sesión la registró. No se envió: el dueño debe revisarla y pulsar Reintentar'
   };
-  function reasonText(reason) { return REASON_TEXT[reason] || ('CANON la rechazó (' + String(reason) + ')'); }
+  // T-03: con qué chocó el operation_id, si el servidor lo dice (entry.ledger / entry.conflict).
+  // Una sola tabla de libros: la del cliente CANON (canonical-client.js, ledgerText).
+  function ledgerText(ledger) {
+    try { var c = root.NuevoAmanecerCanonical; if (c && typeof c.ledgerText === 'function') return c.ledgerText(ledger); } catch (_) {}
+    return 'otro registro (' + String(ledger) + ')';
+  }
+  function reasonText(reason, entry) {
+    var text = REASON_TEXT[reason] || ('CANON la rechazó (' + String(reason) + ')');
+    if (reason === 'operation_id_conflict' && entry && (entry.ledger || entry.conflict)) {
+      var ledger = entry.ledger ? ledgerText(entry.ledger) : null;
+      text += ledger ? ': choca con ' + ledger + ' ya registrado con el mismo identificador' : '';
+      if (entry.conflict === 'cross_ledger' && !ledger) text += ': choca con otro tipo de registro';
+    }
+    return text;
+  }
   function readQuarantine() {
     var raw;
     try { raw = root.localStorage.getItem(QKEY); } catch (_) { fail('QUARANTINE_STORAGE_READ_FAILED'); }
@@ -183,6 +203,7 @@
   var RETRYABLE = DETERMINISTIC.concat(['insufficient_stock', 'stale_stock', 'customer_not_found', 'product_not_found', 'sale_id_conflict',
     'cash_session_closed', 'cash_session_required', 'promotion_changed', 'credit_limit_exceeded']);
   RETRYABLE.push('expired_lots_confirmation_required', 'expired_lots_not_allowed', 'expired_lot_approval_required');
+  RETRYABLE.push.apply(RETRYABLE, IDENTITY_REASONS);
   // Retrying these re-assigns the charged sale explicitly (owner action).
   var REBIND_ON_RETRY = ['cash_session_closed', 'cash_session_required'];
   function retryable(reason) { return RETRYABLE.indexOf(reason) !== -1; }
@@ -199,29 +220,40 @@
     return readQuarantine().entries.some(function (entry) { return entry.status === 'QUARANTINED' && entry.intent.operation_id === operationId; });
   }
   async function quarantineHead(canonical, head, reason, status) {
+    var byIdentity = IDENTITY_REASONS.indexOf(reason) !== -1;
+    var release = byIdentity ? canonical.releaseIdentityHeldSaleJournal : canonical.releaseRejectedSaleJournal;
     // Needs the client release; older runtimes keep the sale blocked in place.
-    if (typeof canonical.releaseRejectedSaleJournal !== 'function') return false;
+    if (typeof release !== 'function') return false;
     var pending = canonical.pendingSnapshot();
     var own = pending && pending.payload && pending.payload.operation_id === head.operation_id ? pending : null;
+    var heldStamp = stampOf(head.operation_id), heldBy = byIdentity ? currentIdentity(canonical) : null;
     await withStore(function () {
       var q = readQuarantine();
       if (!q.entries.some(function (entry) { return entry.intent.operation_id === head.operation_id && entry.status === 'QUARANTINED'; })) {
         q.entries = q.entries.filter(function (entry) { return !(entry.intent.operation_id === head.operation_id && entry.status === 'REQUEUED'); })
           .concat(q.entries.filter(function (entry) { return entry.intent.operation_id === head.operation_id && entry.status === 'REQUEUED'; })
             .map(function (entry) { entry.status = 'RETRY_REJECTED'; return entry; }));
-        q.entries.push({ intent: clone(head), reason: String(reason), last_status: status || (own && own.last_status) || null, journal: own ? clone(own) : null,
-          status: 'QUARANTINED', quarantined_at: new Date().toISOString() });
+        var item = { intent: clone(head), reason: String(reason), last_status: status || (own && own.last_status) || null, journal: own ? clone(own) : null,
+          status: 'QUARANTINED', quarantined_at: new Date().toISOString() };
+        if (heldStamp) item.identity = clone(heldStamp);
+        if (byIdentity) item.held_by_identity = heldBy ? heldBy.key : null;
+        var detail = own && own.last_conflict_detail;
+        if (String(reason) === 'operation_id_conflict' && detail && typeof detail === 'object') {
+          if (detail.conflict) item.conflict = String(detail.conflict);
+          if (detail.ledger) item.ledger = String(detail.ledger);
+        }
+        q.entries.push(item);
         writeQuarantine(q);
       }
     });
     if (own) {
       var released = false;
-      try { released = await canonical.releaseRejectedSaleJournal(head.operation_id); } catch (_) { released = false; }
+      try { released = await release.call(canonical, head.operation_id); } catch (_) { released = false; }
       if (!released) return false;
     }
     await removeHead(head);
     clearHold(head.operation_id);
-    notifyReview(head, reason);
+    notifyReview(head, reason, own && own.last_conflict_detail);
     if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
     return true;
   }
@@ -234,6 +266,7 @@
       if (number) current.last_sale_number = Math.max(current.last_sale_number || 0, Number(number[1]));
       current.intents.shift();
       write(current);
+      dropStamp(expected.operation_id);
     });
   }
   function maxReservedNumber(current, canonical) {
@@ -273,6 +306,62 @@
   function readHolds() { try { var v = JSON.parse(root.localStorage.getItem(HOLD_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (_) { return {}; } }
   function writeHolds(v) { try { if (Object.keys(v).length) root.localStorage.setItem(HOLD_KEY, JSON.stringify(v)); else root.localStorage.removeItem(HOLD_KEY); } catch (_) {} }
   function clearHold(operationId) { var holds = readHolds(); if (holds[operationId]) { delete holds[operationId]; writeHolds(holds); } }
+  // T-47: identidad (huella de la sesión; sesión/rol si estaban confirmados por /auth/me) con la que se guardó cada
+  // venta. Clave aparte para no cambiar el formato de la cola; se escribe ANTES que la venta (una venta
+  // sin identidad se trata como antigua, nunca como «de cualquiera»).
+  var IDENTITY_KEY = KEY + '_identity';
+  function readIdentities() { try { var v = JSON.parse(root.localStorage.getItem(IDENTITY_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (_) { return {}; } }
+  function writeIdentities(v) { var raw = JSON.stringify(v); try { root.localStorage.setItem(IDENTITY_KEY, raw); } catch (_) { fail('OUTBOX_STORAGE_WRITE_FAILED'); } if (root.localStorage.getItem(IDENTITY_KEY) !== raw) fail('OUTBOX_STORAGE_READBACK_MISMATCH'); }
+  function stampOf(operationId) { var v = readIdentities()[operationId]; return v && typeof v.key === 'string' && v.key ? v : null; }
+  function stamp(operationId, who, extra) { var v = readIdentities(); v[operationId] = Object.assign({ key: who.key, user: who.user || null, principal: who.principal || null, role: who.role || null, at: new Date().toISOString() }, extra || {}); writeIdentities(v); }
+  function dropStamp(operationId) { var v = readIdentities(); if (v[operationId]) { delete v[operationId]; try { root.localStorage.setItem(IDENTITY_KEY, JSON.stringify(v)); } catch (_) {} } }
+  function upgradeAt(canonical) { try { return typeof canonical.identityUpgradeAt === 'function' ? canonical.identityUpgradeAt() : null; } catch (_) { return null; } }
+  function currentIdentity(canonical) {
+    if (!canonical || typeof canonical.sessionIdentity !== 'function') return null;
+    try { return canonical.sessionIdentity(); } catch (_) { return null; }
+  }
+  // null = se puede enviar con la sesión actual; si no, el motivo para apartarla.
+  function identityProblem(canonical, head) {
+    var who = currentIdentity(canonical);
+    // Cliente sin soporte de identidad o sin sesión guardada: no hay token con el que enviarla.
+    if (!who) return null;
+    var own = stampOf(head.operation_id), verdict;
+    // Mismo aparato y mismo ROL (validado por /auth/me) => se envía sola con el token nuevo aunque la sesión
+    // sea otra; cambio dueño <-> empleado => revisión del dueño.
+    try { verdict = typeof canonical.identityCheck === 'function' ? canonical.identityCheck(own ? { key: own.key, user: own.user || null } : null, { command: 'sale.create' })
+      : own && own.key === who.key ? 'same' : 'other'; } catch (_) { verdict = 'other'; }
+    if (verdict === 'same') { if (!own) { try { stamp(head.operation_id, who, { legacy: true, adopted_at_upgrade: upgradeAt(canonical) }); } catch (_) {} } return null; }
+    if (verdict === 'wait') return 'IDENTITY_UNCONFIRMED';
+    if (!own && root.console) root.console.warn('[Venta CANON] venta antigua de otro rol: queda en revisión', head.sale_id);
+    return own ? 'identity_changed' : 'identity_unverified';
+  }
+  // Mismo contenido comercial (no solo los mismos ids): sale_id, fecha, medio, total, pago, cliente,
+  // caja e ítems. Sirve para comparar con el cuerpo del recibo local o con la venta de la réplica.
+  function saleContent(x) {
+    if (!x) return null;
+    var p = x.payment || {};
+    return JSON.stringify({ sale_id: x.sale_id || x.id || null, payment_method: x.payment_method || null, total_cents: x.total_cents,
+      payment: [p.cash_cents || 0, p.digital_cents || 0, p.credit_cents || 0, p.digital_method || null, p.reference || ''],
+      customer_id: x.customer_id == null ? null : String(x.customer_id), session_id: x.session_id == null ? null : String(x.session_id),
+      items: (x.items || []).map(function (i) { return [String(i.product_id), Number(i.quantity), Number(i.unit_price_cents)]; }) });
+  }
+  function sameAsReceipt(canonical, head) {
+    if (typeof canonical.receiptPayloadSnapshot !== 'function') return true; // cliente antiguo: solo ids
+    var body = null; try { body = canonical.receiptPayloadSnapshot(); } catch (_) { body = null; }
+    if (!body) return true;
+    return saleContent(body) === saleContent(head) && body.created_at === head.created_at;
+  }
+  // Venta de la réplica que el servidor devuelve: solo se comparan los campos que trae.
+  function sameRemote(sale, intent) {
+    if ((sale.sale_id || sale.id) !== intent.sale_id) return false;
+    return sameRemoteAmount(sale, intent);
+  }
+  // Solo importe y medio (el número puede haber cambiado por una renumeración de la misma venta).
+  function sameRemoteAmount(sale, intent) {
+    if (sale.total_cents !== undefined && sale.total_cents !== null && Number(sale.total_cents) !== Number(intent.total_cents)) return false;
+    if (sale.payment_method && intent.payment_method && String(sale.payment_method) !== String(intent.payment_method)) return false;
+    return true;
+  }
   var sessionNoticeAt = 0;
   function notifySystemHold(reason, remaining) {
     var now = Date.now();
@@ -282,7 +371,7 @@
     if (!runtime || typeof runtime.notify !== 'function') return;
     var auth = ['unauthorized', 'session_revoked', 'HTTP_401', 'HTTP_403', 'read_only_session'].indexOf(reason) !== -1;
     runtime.notify((auth ? 'Sesión vencida: vuelve a iniciar sesión. ' : 'CANON no acepta ventas en este momento (' + reason + '). ') +
-      remaining + (remaining === 1 ? ' venta espera' : ' ventas esperan') + ' guardada' + (remaining === 1 ? '' : 's') + ' en este equipo; se enviarán solas.', 'error');
+      remaining + (remaining === 1 ? ' venta espera' : ' ventas esperan') + ' guardada' + (remaining === 1 ? '' : 's') + ' en este equipo; ' + (auth ? (remaining === 1 ? 'se enviará sola' : 'se enviarán solas') + ' al volver a entrar con el mismo rol (dueño o empleado).' : (remaining === 1 ? 'se enviará sola.' : 'se enviarán solas.')), 'error');
   }
   async function holdForSystem(canonical, head, pending) {
     var reason = String(pending.last_error);
@@ -299,16 +388,58 @@
   // Another command (cash, payment, inventory...) occupies the single journal.
   // Lost ACK or 429/5xx: replay the SAME operation_id. Definitive 4xx: the
   // client archives it (no commit happened) so sales keep flowing.
+  var expiredSession = null;
+  function credentialKey() {
+    try { var c = root.NuevoAmanecerCanonical, who = c && typeof c.sessionIdentity === 'function' ? c.sessionIdentity() : null; return who ? who.key : 'sin-sesion'; } catch (_) { return null; }
+  }
+  function sessionExpired() { return !!expiredSession && expiredSession === credentialKey(); }
+  // Motivo legible de la espera por sesión: el error que quedó en el journal DESPUÉS del intento.
+  function sessionReason(canonical, before) {
+    var now = null; try { now = canonical.pendingSnapshot(); } catch (_) {}
+    var code = (now && now.last_error) || (before && before.last_error) || 'unauthorized';
+    return 'SESSION_' + String(code);
+  }
   async function settleForeignPending(canonical, pending) {
     // A sale journal for another operation is never touched from here.
     if (!pending || pending.command === 'sale.create') return false;
     // Un cierre de caja sin confirmar NUNCA se reenvía solo: el cajero debe volver a confirmarlo en Caja.
     if (pending.command === 'cash.close') return false;
+    // T-10: abono/gasto/caja con la sesión vencida: se conserva (nunca se archiva como rechazado), se
+    // avisa una vez y no se reintenta en bucle; se reenvía igual cuando cambie la credencial guardada.
+    if (pending.last_error && systemRejection(pending) && pending.auth_failed_identity !== undefined) {
+      var auth = await replayAfterLogin(canonical, pending);
+      return auth === 'replayed' || auth === 'moved' ? true : 'SESSION';
+    }
     if (!pending.last_error || pending.last_status === 429 || pending.last_status >= 500) {
-      try { await canonical.retryPending(); return true; } catch (_) { return false; }
+      try { await canonical.retryPending(); return true; } catch (_) {
+        var after = canonical.pendingSnapshot();
+        // El reintento recibió 401/403 de sesión en la verificación previa: avisar y esperar, sin bucle.
+        if (after && after.last_error && systemRejection(after) && after.auth_failed_identity !== undefined) {
+          notifySystemHold(String(after.last_error), (function () { try { return parseStored().intents.length; } catch (_) { return 0; } })());
+          return 'SESSION';
+        }
+        // Apartado por identidad (otra sesión) o ya resuelto: el journal quedó libre.
+        if (!after || !after.payload || !pending.payload || after.payload.operation_id !== pending.payload.operation_id) return true;
+        return false;
+      }
     }
     if (typeof canonical.releaseRejectedFinancial !== 'function') return false;
     try { return !!(await canonical.releaseRejectedFinancial(pending.payload && pending.payload.operation_id)); } catch (_) { return false; }
+  }
+  // 'replayed' = se reenvió el mismo registro; 'moved' = el journal ya no es ese registro (confirmado o
+  // apartado por identidad); 'session' = sigue la misma credencial vencida: aviso y espera.
+  async function replayAfterLogin(canonical, pending) {
+    var who = currentIdentity(canonical), op = pending.payload && pending.payload.operation_id;
+    if (!who || !pending.auth_failed_identity || who.key === pending.auth_failed_identity) {
+      notifySystemHold(String(pending.last_error), (function () { try { return parseStored().intents.length; } catch (_) { return 0; } })());
+      return 'session';
+    }
+    try { await canonical.retryPending(); return 'replayed'; }
+    catch (_) {
+      var after = canonical.pendingSnapshot();
+      if (!after || !after.payload || after.payload.operation_id !== op) return 'moved';
+      return 'session';
+    }
   }
   function result(status, processed, remaining, reason, head) {
     var out = { status: status, processed: processed, remaining: remaining };
@@ -323,13 +454,13 @@
   // locally registered sale was rejected and is held for review. Never advise
   // charging again: the intent and its journal are preserved.
   var REVIEW_KEY = KEY + '_review_notified';
-  function notifyReview(head, reason) {
+  function notifyReview(head, reason, detail) {
     var seen = [];
     try { seen = JSON.parse(root.localStorage.getItem(REVIEW_KEY) || '[]'); if (!Array.isArray(seen)) seen = []; } catch (_) { seen = []; }
     if (seen.indexOf(head.operation_id) !== -1) return;
     try { root.localStorage.setItem(REVIEW_KEY, JSON.stringify(seen.concat([head.operation_id]).slice(-200))); } catch (_) {}
     var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
-    if (runtime && typeof runtime.notify === 'function') runtime.notify('Venta ' + head.sale_id + ' en revisión: ' + reasonText(reason) +
+    if (runtime && typeof runtime.notify === 'function') runtime.notify('Venta ' + head.sale_id + ' en revisión: ' + reasonText(reason, detail) +
       '. No la cobres de nuevo y no entregues el crédito hasta resolverla en Caja › Ventas en revisión. Las demás ventas siguen funcionando.', 'error');
   }
   // Server-side proof only: the refreshed replica already holds this exact
@@ -342,7 +473,8 @@
       if (!state || state.validation !== 'current') return false;
     }
     var sales = (canonical.snapshot() || {}).sales || [];
-    return sales.some(function (sale) { return sale.operation_id === head.operation_id && (sale.sale_id || sale.id) === head.sale_id; });
+    // Mismo operation_id y mismo contenido visible (número, total, medio): otro contenido con el mismo id es un conflicto, no una confirmación.
+    return sales.some(function (sale) { return sale.operation_id === head.operation_id && sameRemote(sale, head); });
   }
   async function syncLocked() {
     var processed = 0, refreshedFor = {}, renumbered = {};
@@ -360,13 +492,30 @@
       var canonical = root.NuevoAmanecerCanonical;
       if (!canonical || typeof canonical.receiptSnapshot !== 'function' || typeof canonical.pendingSnapshot !== 'function' || typeof canonical.refresh !== 'function' || typeof canonical.createSale !== 'function' || typeof canonical.retryPending !== 'function') fail('CANONICAL_API_UNAVAILABLE');
       var receipt = canonical.receiptSnapshot();
-      if (matching(receipt, head)) { await removeHead(head); clearHold(head.operation_id); processed += 1; continue; }
+      if (matching(receipt, head)) {
+        // T-03: mismo operation_id y número pero otro contenido: es un conflicto, nunca «ya confirmada».
+        if (!sameAsReceipt(canonical, head)) {
+          if (await quarantineHead(canonical, head, 'operation_id_conflict', 409)) continue;
+          return result('BLOCKED_PENDING_REJECTED', processed, current.intents.length, 'operation_id_conflict', head);
+        }
+        await removeHead(head); clearHold(head.operation_id); processed += 1; continue;
+      }
+      // T-47: antes de tocar la red, la venta debe ser de la sesión actual.
+      var identityReason = identityProblem(canonical, head);
+      // Otra huella pero la sesión guardada aún no se puede comparar (sin /auth/me): esperar, sin enviar.
+      if (identityReason === 'IDENTITY_UNCONFIRMED') return result('WAITING', processed, current.intents.length, 'SESSION_IDENTITY_UNCONFIRMED', head);
+      if (identityReason) {
+        if (await quarantineHead(canonical, head, identityReason, null)) continue;
+        return result('WAITING', processed, parseStored().intents.length, 'IDENTITY_HELD', head);
+      }
       var pending = canonical.pendingSnapshot();
       if (pending) {
         var payload = pending.payload;
         if (pending.command !== 'sale.create' || !payload || payload.operation_id !== head.operation_id || payload.sale_id !== head.sale_id) {
           // Never let a cash/payment/inventory command freeze the sales queue.
-          if (await settleForeignPending(canonical, pending)) continue;
+          var settled = await settleForeignPending(canonical, pending);
+          if (settled === 'SESSION') return result('WAITING', processed, current.intents.length, sessionReason(canonical, pending));
+          if (settled) continue;
           return result('BLOCKED_FOREIGN_PENDING', processed, current.intents.length, 'FOREIGN_PENDING');
         }
         if (pending.last_error && (pending.last_status === 429 || pending.last_status >= 500)) {
@@ -386,12 +535,24 @@
             return result('WAITING', processed, current.intents.length, 'RECEIPT_NOT_CONFIRMED');
           await removeHead(head); clearHold(head.operation_id); processed += 1; continue;
         }
+        if (pending.last_error && systemRejection(pending) && pending.auth_preflight) {
+          // T-10: 401/403 de sesión en la verificación previa: el POST pudo haber salido antes (ACK
+          // perdido), así que el journal NO se libera. Se avisa «Sesión vencida» y se reenvía el MISMO
+          // registro una sola vez cuando haya otra credencial guardada.
+          var auth = await replayAfterLogin(canonical, pending);
+          if (auth === 'replayed') {
+            if (matching(canonical.receiptSnapshot(), head)) { await removeHead(head); clearHold(head.operation_id); processed += 1; continue; }
+            continue;
+          }
+          if (auth === 'moved') continue;
+          return result('WAITING', processed, current.intents.length, sessionReason(canonical, pending), head);
+        }
         if (pending.last_error && systemRejection(pending)) {
           // 401/403/stale_authority/canonical_not_active: a 4xx before commit.
           // Free the journal, keep the intent queued (same operation_id) and
           // wait for a new session/binding instead of jamming forever.
           var held = await holdForSystem(canonical, head, pending);
-          return result('WAITING', processed, parseStored().intents.length, held ? 'SESSION_' + String(pending.last_error) : String(pending.last_error), head);
+          return result('WAITING', processed, parseStored().intents.length, held ? sessionReason(canonical, pending) : String(pending.last_error), head);
         }
         if (pending.last_error) {
           // Safe sale rejects (409/400) prove no D1 commit.
@@ -410,7 +571,8 @@
             // Only a server-side record of this exact operation_id settles it
             // as done; otherwise it moves to the durable review list (which
             // keeps blocking cash close) and the rest of the queue continues.
-            if (await confirmedRemotely(canonical, head)) {
+            // T-03: un 409 operation_id_conflict nunca se da por confirmado: va a revisión como conflicto.
+            if (rejectReason !== 'operation_id_conflict' && await confirmedRemotely(canonical, head)) {
               var cleared = false;
               try { cleared = await canonical.discardRejectedSale(); } catch (_) { cleared = false; }
               if (!cleared) return result('BLOCKED_PENDING_REJECTED', processed, current.intents.length, rejectReason, head);
@@ -489,10 +651,17 @@
           return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'CREATE_UNACKNOWLEDGED'));
         }
         if (afterFailure && (afterFailure.command !== 'sale.create' || !afterFailure.payload || afterFailure.payload.operation_id !== head.operation_id || afterFailure.payload.sale_id !== head.sale_id)) {
-          if (await settleForeignPending(canonical, afterFailure)) continue;
+          var settledAfter = await settleForeignPending(canonical, afterFailure);
+          if (settledAfter === 'SESSION') return result('WAITING', processed, parseStored().intents.length, sessionReason(canonical, afterFailure));
+          if (settledAfter) continue;
           return result('BLOCKED_FOREIGN_PENDING', processed, parseStored().intents.length, 'FOREIGN_PENDING');
         }
         var failureCode = String(error && (error.code || error.message) || '');
+        if (!afterFailure && /^CANONICAL_READ_40[13]$/.test(failureCode)) {
+          notifySystemHold(failureCode === 'CANONICAL_READ_401' ? 'HTTP_401' : 'HTTP_403', parseStored().intents.length);
+          return result('WAITING', processed, parseStored().intents.length, 'SESSION_' + failureCode, head);
+        }
+        if (!afterFailure && failureCode === 'CANONICAL_IDENTITY_UNCONFIRMED') return result('WAITING', processed, parseStored().intents.length, 'SESSION_IDENTITY_UNCONFIRMED', head);
         if (!afterFailure && DETERMINISTIC.indexOf(failureCode) !== -1 && typeof canonical.sourceState === 'function') {
           // The replica may simply be behind: refresh once and try again. Only a
           // second identical failure on a current replica moves it aside.
@@ -559,7 +728,12 @@
         // is never allowed to hold the sale UI after the durable receipt.
         if (outcome.processed > 0) { confirmedSince++; scheduleReconcile(); }
         if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
-        if ((outcome.status === 'WAITING' && outcome.reason !== 'BUSY') || outcome.status === 'BLOCKED_FOREIGN_PENDING') scheduleResume();
+        // T-10: con la sesión vencida no se reintenta en bucle: se reanuda al cambiar la credencial
+        // guardada, al confirmarse el rol, al volver la red o al volver a la app.
+        var sessionWait = outcome.status === 'WAITING' && /^SESSION_/.test(String(outcome.reason || ''));
+        // La franja dice «sesión vencida» (no «reintentando») mientras siga guardada la misma sesión.
+        expiredSession = sessionWait && outcome.reason !== 'SESSION_IDENTITY_UNCONFIRMED' ? credentialKey() : null;
+        if (!sessionWait && ((outcome.status === 'WAITING' && outcome.reason !== 'BUSY') || outcome.status === 'BLOCKED_FOREIGN_PENDING')) scheduleResume();
         else if (outcome.status === 'DRAINED' || outcome.status === 'EMPTY') retryCount = 0;
         return outcome;
       }
@@ -664,6 +838,11 @@
         // Absence is proven by operation_id alone: a server row with the same
         // operation_id under another sale number is the same sale, never "absent".
         var twin = ((canonical.snapshot() || {}).sales || []).find(function (sale) { return sale.operation_id === operationId; });
+        // T-03: con un conflicto de operation_id, el servidor tiene OTRO contenido con ese id: no se concilia sola.
+        if (twin && entry.reason === 'operation_id_conflict' && !sameRemoteAmount(twin, entry.intent)) {
+          entry.remote_conflict_at = new Date().toISOString(); entry.remote_sale_id = twin.sale_id || twin.id; writeQuarantine(q);
+          return { status: 'CONFLICT', sale_id: entry.intent.sale_id, remote_sale_id: entry.remote_sale_id, operation_id: operationId };
+        }
         if (twin) {
           entry.status = 'CONFIRMED_REMOTE'; entry.remote_sale_id = twin.sale_id || twin.id; entry.resolved_at = new Date().toISOString(); writeQuarantine(q);
           return { status: 'CONFIRMED_REMOTE', sale_id: entry.intent.sale_id, remote_sale_id: entry.remote_sale_id, operation_id: operationId };
@@ -698,8 +877,28 @@
           again = validateIntent(again);
         }
         if (entry.reason === 'promotion_changed') clearHold(operationId);
+        var adopt = null;
+        if (IDENTITY_REASONS.indexOf(entry.reason) !== -1) {
+          // Solo el dueño: confirmado en esta sesión, o con su PIN (aprobación del servidor en meta.ownerApproval).
+          var roles = root.NA_ROLES, owner = false;
+          try { owner = !!(roles && roles.confirmed && typeof roles.isOwner === 'function' && roles.isOwner()); } catch (_) { owner = false; }
+          if (!owner && !(meta && typeof meta.ownerApproval === 'string' && meta.ownerApproval)) fail('QUARANTINE_IDENTITY_NEEDS_OWNER');
+          adopt = currentIdentity(canonical);
+          if (!adopt) fail('SESSION_NOT_AVAILABLE');
+          // La venta vuelve EXACTAMENTE igual (mismo operation_id, mismo contenido); solo cambia la sesión que la envía.
+          again = clone(entry.intent);
+          // Si ya tenía journal (pudo llegar al servidor), se reenvía ESE cuerpo exacto, no uno nuevo.
+          if (entry.journal) {
+            if (typeof canonical.adoptSaleJournal !== 'function') fail('CANONICAL_API_UNAVAILABLE');
+            await canonical.adoptSaleJournal(entry.journal);
+          }
+          entry.approved_identity = adopt.key; entry.approved_from = entry.identity ? entry.identity.key : null;
+          entry.approved_by = meta && meta.by != null ? String(meta.by) : (adopt.principal || null);
+        }
         await withStore(function () {
           var current = parseStored();
+          if (adopt) stamp(operationId, adopt, { approved_from: entry.approved_from, approved_at: new Date().toISOString() });
+          else if (entry.identity && entry.identity.key) { var ids = readIdentities(); ids[operationId] = clone(entry.identity); writeIdentities(ids); }
           if (!current.intents.some(function (item) { return item.operation_id === operationId; })) { current.intents.push(again); write(current); }
           entry.status = 'REQUEUED'; entry.resolved_at = new Date().toISOString(); writeQuarantine(q);
         });
@@ -721,6 +920,37 @@
         entry.status = 'ARCHIVED_NO_CHARGE'; entry.resolved_at = new Date().toISOString(); entry.resolved_by = meta && meta.by != null ? String(meta.by) : null; writeQuarantine(q);
         return { status: 'ARCHIVED_NO_CHARGE', sale_id: entry.intent.sale_id, operation_id: operationId };
       }
+      if (action === 'discard') {
+        // SPEC-885 §6: una venta apartada por 409 operation_id_conflict (su id ya existe en OTRO registro del
+        // servidor, p. ej. un gasto) nunca se aplicó en el servidor y Reintentar volvería a chocar. El dueño la
+        // descarta: queda archivada (no se borra), sin efecto en caja ni stock, y la caja se puede cerrar.
+        // Sin PIN nuevo: basta el dueño confirmado en esta sesión.
+        if (entry.reason !== 'operation_id_conflict') fail('QUARANTINE_DISCARD_NOT_ALLOWED');
+        var rolesD = root.NA_ROLES, ownerD = false;
+        try { ownerD = !!(rolesD && rolesD.confirmed && typeof rolesD.isOwner === 'function' && rolesD.isOwner()); } catch (_) { ownerD = false; }
+        if (!ownerD) fail('QUARANTINE_DISCARD_NEEDS_OWNER');
+        if (!canonical || typeof canonical.snapshot !== 'function') fail('CANONICAL_API_UNAVAILABLE');
+        var stateD = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null;
+        if (!stateD || stateD.validation !== 'current') fail('QUARANTINE_REMOTE_NOT_VERIFIED');
+        // Si el servidor sí tiene ESTA venta (mismo contenido), se concilia en lugar de descartarse.
+        if (await confirmedRemotely(canonical, entry.intent)) {
+          entry.status = 'CONFIRMED_REMOTE'; entry.resolved_at = new Date().toISOString(); writeQuarantine(q);
+          return { status: 'CONFIRMED_REMOTE', sale_id: entry.intent.sale_id, operation_id: operationId };
+        }
+        var twinD = ((canonical.snapshot() || {}).sales || []).find(function (sale) { return sale.operation_id === operationId; });
+        if (twinD && sameRemoteAmount(twinD, entry.intent)) fail('QUARANTINE_OPERATION_EXISTS_ON_SERVER');
+        await withStore(function () {
+          var current = parseStored();
+          if (current.intents.some(function (item) { return item.operation_id === operationId; })) {
+            current.intents = current.intents.filter(function (item) { return item.operation_id !== operationId; }); write(current);
+          }
+        });
+        entry.status = 'DISCARDED_CONFLICT'; entry.resolved_at = new Date().toISOString();
+        entry.resolved_by = meta && meta.by != null ? String(meta.by) : null;
+        if (twinD) entry.remote_sale_id = twinD.sale_id || twinD.id;
+        writeQuarantine(q);
+        return { status: 'DISCARDED_CONFLICT', sale_id: entry.intent.sale_id, operation_id: operationId };
+      }
       fail('QUARANTINE_ACTION_INVALID');
     });
   }
@@ -736,7 +966,11 @@
         if (!state || state.validation !== 'current') {
           if (state && ['stale','unavailable','offline'].includes(state.validation) && typeof canonical.refresh === 'function') {
             try { await canonical.refresh(); state = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null; }
-            catch (_) { scheduleResume(); return; }
+            catch (refreshError) {
+              var code = String(refreshError && (refreshError.code || refreshError.message) || '');
+              if (/^CANONICAL_READ_40[13]$/.test(code)) { var waiting = 0; try { waiting = snapshot().intents.length; } catch (_) {} if (waiting) notifySystemHold(code === 'CANONICAL_READ_401' ? 'HTTP_401' : 'HTTP_403', waiting); return; }
+              scheduleResume(); return;
+            }
           }
           if (!state || state.validation !== 'current') { scheduleResume(); return; }
         }
@@ -764,6 +998,9 @@
         return resume();
       });
       root.addEventListener('na:canonical-updated', resume);
+      // Volver a entrar (otra pestaña guardó otra credencial) o rol confirmado por /auth/me: reanudar.
+      root.addEventListener('storage', function (event) { if (event && (event.key === 'na_cloud_sync_credentials' || event.key === null)) { retryCount = 0; resume(); } });
+      root.addEventListener('na:role', function () { resume(); });
     }
     if (root.document && typeof root.document.addEventListener === 'function') {
       root.document.addEventListener('visibilitychange', function () {
@@ -806,6 +1043,9 @@
         // or another financial command replaces the single receipt journal.
         current.last_sale_number = next;
       } else if (reserved.some(function (sale) { return (sale.sale_id || sale.id) === intent.sale_id; })) fail('DUPLICATE_SALE_ID');
+      // T-47: la identidad se guarda primero; luego la venta.
+      var who = currentIdentity(canonical);
+      if (who) stamp(intent.operation_id, who);
       current.intents.push(intent);
       write(current);
       return clone(intent);
@@ -883,8 +1123,8 @@
       return { status: 'REJECTED_TEST_INTENT', operation_id: operationId };
     });
   }
-  root.NuevoAmanecerCanonicalSaleOutbox = Object.freeze({ busy: function () { return !!syncing; }, VERSION: VERSION, KEY: KEY, enqueue: enqueue, snapshot: snapshot, sync: sync, withCashCloseBarrier: withCashCloseBarrier, quarantine: quarantineSnapshot, sessionOf: sessionOfIntent, blocking: function () { return clone(blockingQuarantine()); }, quarantineRetryable: retryable, quarantineAnnullable: function (entry) { return annullable(entry, root.NuevoAmanecerCanonical); }, resolveQuarantined: resolveQuarantined, start: start, rejectInvalidTestIntent: rejectInvalidTestIntent,
-    reasonText: reasonText, quarantineRebindsOnRetry: function (reason) { return REBIND_ON_RETRY.indexOf(reason) !== -1; },
+  root.NuevoAmanecerCanonicalSaleOutbox = Object.freeze({ busy: function () { return !!syncing; }, sessionExpired: sessionExpired, VERSION: VERSION, KEY: KEY, enqueue: enqueue, snapshot: snapshot, sync: sync, withCashCloseBarrier: withCashCloseBarrier, quarantine: quarantineSnapshot, sessionOf: sessionOfIntent, blocking: function () { return clone(blockingQuarantine()); }, quarantineRetryable: retryable, quarantineDiscardable: function (entry) { return !!entry && entry.status === 'QUARANTINED' && entry.reason === 'operation_id_conflict'; }, quarantineAnnullable: function (entry) { return annullable(entry, root.NuevoAmanecerCanonical); }, resolveQuarantined: resolveQuarantined, start: start, rejectInvalidTestIntent: rejectInvalidTestIntent,
+    reasonText: reasonText, identityHeld: function (reason) { return IDENTITY_REASONS.indexOf(reason) !== -1; }, quarantineRebindsOnRetry: function (reason) { return REBIND_ON_RETRY.indexOf(reason) !== -1; },
     rebindTarget: function () { return openCashSession(root.NuevoAmanecerCanonical); },
     // The drain resolves every sale.create rejection by itself (review list,
     // session hold or replay); capture never has to stop for it.

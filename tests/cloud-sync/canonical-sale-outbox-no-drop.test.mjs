@@ -94,7 +94,7 @@ test('GREEN quarantine survives reload and keeps blocking close with sale_id + 4
   assert.equal(error.remaining, 2);
   assert.equal(g.ids().length, 2);
 });
-for (const reason of ['sale_id_conflict', 'operation_id_conflict']) {
+for (const reason of ['sale_id_conflict']) {
   test(`GREEN ${reason}: remote record of same operation settles once, no charge-again notice`, async () => {
     const f = fixture(reason), notes = [];
     await f.api.enqueue(credit('V-085')); await f.api.enqueue(cash('V-090'));
@@ -116,3 +116,18 @@ for (const reason of ['sale_id_conflict', 'operation_id_conflict']) {
     assert.equal(notes.filter(n => /vuelve a cobrarla/i.test(n)).length, 0);
   });
 }
+
+// T-03: un 409 operation_id_conflict NUNCA se da por confirmado, aunque la réplica tenga el mismo
+// operation_id y número: queda bloqueada/en revisión, sin borrarse (antes se drenaba en silencio).
+test('T-03 operation_id_conflict: remote record with same ids does NOT settle it; nothing removed', async () => {
+  const f = fixture('operation_id_conflict');
+  await f.api.enqueue(credit('V-085')); await f.api.enqueue(cash('V-090'));
+  const [head] = f.api.snapshot().intents;
+  f.ctx.NuevoAmanecerCanonical.snapshot = () => ({ sales: [{ sale_id: head.sale_id, operation_id: head.operation_id }] });
+  f.ctx.NuevoAmanecerCanonical.sourceState = () => ({ validation: 'current' });
+  const first = await f.api.sync();
+  assert.equal(first.status, 'BLOCKED_PENDING_REJECTED');
+  assert.equal(first.reason, 'operation_id_conflict');
+  assert.equal(f.ids().length, 2, 'the conflicting intent is kept');
+  assert.equal(f.state.discards, 0, 'its journal evidence is kept');
+});
