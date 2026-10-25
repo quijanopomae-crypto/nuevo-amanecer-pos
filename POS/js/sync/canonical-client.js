@@ -405,6 +405,10 @@
   };
   var SALE_CREDIT_ROUTES = ['credits', 'customers'];
   var afterCommit = null;
+  // Cambio de identidad o de rol (cache-identity-guard.js): cada lectura en curso compara esta generación antes de
+  // publicar o persistir, así nada leído con la identidad anterior llega a la nueva.
+  var identityGeneration = 0;
+  function identityStillCurrent(generation) { return function () { return generation === identityGeneration; }; }
   // The replica last published from a complete (or targeted) authority read.
   function authorityBase(requireCurrent) {
     var base = publishedReplica;
@@ -524,6 +528,8 @@
     if (loading) return loading;
     if (!data) ready = false;
     var fullRequested = forceFullRead; forceFullRead = false;
+    var identityAtStart = identityGeneration;
+    var sameIdentity = function () { if (identityAtStart !== identityGeneration) fail('CANONICAL_IDENTITY_CHANGED'); };
     // scope 'cash.close' (P1-2): only status + credit-accounts + cash-sessions are needed
     // to send a close; the Worker re-checks the session revision atomically (CAS).
     var scope = !fullRequested && options && options.scope === 'cash.close' && !bulkSnapshotEnabled() ? 'cash.close' : null;
@@ -726,14 +732,14 @@
               JSON.stringify(accountsResult.items) === JSON.stringify(closeBase.credit_accounts || []) && JSON.stringify(sessionsResult.items) === JSON.stringify(closeBase.cash_sessions || [])) {
             // Nothing changed since the last authority read: it is current again.
             if (binding && !changed) assertBinding(expected);
-            publishReplica(closeBase, 'revalidated'); notifyReplicaUpdate(); return snapshot();
+            sameIdentity(); publishReplica(closeBase, 'revalidated'); notifyReplicaUpdate(); return snapshot();
           }
           if (data && data.mode === 'ACTIVE' && data.read_only === false && data.minimum_client_contract === CONTRACT &&
               data.promotion_id === expected.promotion_id && data.authority_epoch === expected.authority_epoch && data.revision === expected.revision) {
             // Fresh session + accounts for this close only. The rest stays as it was
             // (validation unchanged) and is re-read in full after the close.
             if (binding && !changed) assertBinding(expected);
-            data.cashSessions = copy(sessionsResult.items); data.creditAccounts = copy(accountsResult.items);
+            sameIdentity(); data.cashSessions = copy(sessionsResult.items); data.creditAccounts = copy(accountsResult.items);
             ready = false; saleOnlyReady = false; closeOnlyReady = true; notifyReplicaUpdate(); return snapshot();
           }
           applyEntries([accountsResult].concat(partialResults, await Promise.all(otherEntries.map(readEntry))));
@@ -741,7 +747,7 @@
           checkDeferredPages();
           if (cacheMatchesStatus(cache, statusMeta, statusDigest) && JSON.stringify(accountsResult.items) === JSON.stringify(cache.credit_accounts)) {
             if (binding && !changed) assertBinding(expected);
-            promotePublishedReplica(cache); notifyReplicaUpdate();
+            sameIdentity(); promotePublishedReplica(cache); notifyReplicaUpdate();
             if (Date.now() - fullyValidatedAt(cache) > FULL_REVALIDATE_MS) scheduleFullRevalidation(2000);
             else if (cache.remote_validated_build !== await buildRequest) scheduleFullRevalidation(DEPLOY_FULL_REVALIDATE_DELAY_MS);
             return snapshot();
@@ -769,6 +775,7 @@
         next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
         var bootstrapReplica = replicaOf(next);
         if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
+        sameIdentity();
         if (cache && cacheIsNewer(cache, bootstrapReplica)) {
           publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
         }
@@ -784,6 +791,7 @@
       incoming.remote_validated_at = new Date().toISOString();
       incoming.remote_validated_context = await contextRequest;
       incoming.remote_validated_build = await buildRequest;
+      sameIdentity();
       if (targetedBase) {
         // A targeted read keeps the clock (and context/build stamp) of the last COMPLETE
         // read: the periodic full revalidation still happens on schedule.
@@ -801,8 +809,11 @@
       var cacheValidatedAt = cache ? fullyValidatedAt(cache) : null;
       var stampStale = cacheValidatedAt === null || Date.now() - cacheValidatedAt > FULL_REVALIDATE_MS / 2 ||
         cache.remote_validated_context !== incoming.remote_validated_context || cache.remote_validated_build !== incoming.remote_validated_build;
-      publishReplica(incoming, 'remote');
-      if ((!same || stampStale) && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
+      sameIdentity(); publishReplica(incoming, 'remote');
+      // stillCurrent: la escritura en cola (inline-02.js) vuelve a comprobar la identidad al momento de escribir.
+      if ((!same || stampStale) && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming, identityStillCurrent(identityAtStart));
+      // La escritura se esperó: si la identidad cambió entretanto, esta lectura no deja nada «current».
+      sameIdentity();
       replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
     try { return await loading; } catch (error) {
@@ -812,6 +823,41 @@
         try { return await refresh(); } finally { pageLimitRetried = false; }
       }
       ready = false; saleOnlyReady = false; closeOnlyReady = false; replicaState.validation = root.navigator.onLine === false ? 'offline' : (data ? 'stale' : 'unavailable'); notifyReplicaUpdate(); throw error; } finally { loading = null; }
+  }
+  // Cambio de identidad o de rol: nada de la identidad anterior se reutiliza ni se persiste. Se descartan el
+  // estado de lectura parcial (afterCommit), la base y los sellos de la última lectura completa, la réplica de
+  // arranque, la lectura previa en vuelo y, en memoria, gastos, movimientos, eventos financieros, costos y cierres.
+  // De la caja ABIERTA queda solo el aviso expected_withheld (sin monto): el esperado incluye gastos en efectivo.
+  var RESTRICTED_FIELD = /^(costo\w*|cost|cost_cents|unit_cost_cents|avg_cost_cents|supplier\w*|proveedor\w*|document_ref|invoice\w*|factura\w*|ganancia\w*|utilidad\w*|margen|profit\w*)$/i;
+  var CLOSE_FIELD = /^(counted_cents|expected_cents|difference_cents|closed_by\w*|closing_watermark)$/;
+  function dropFields(rows, pattern) { (rows || []).forEach(function (row) { if (row && typeof row === 'object') Object.keys(row).forEach(function (key) { if (pattern.test(key)) delete row[key]; }); }); }
+  function resetForIdentityChange() {
+    identityGeneration += 1;
+    afterCommit = null; forceFullRead = true; bootCache = null;
+    if (bootPrefetch) { discardRead(bootPrefetch.status); discardRead(bootPrefetch.accounts); bootPrefetch = null; }
+    publishedReplica = null; publishedSource = null;
+    ready = false; saleOnlyReady = false; closeOnlyReady = false;
+    if (data) {
+      data.expenses = []; data.inventoryMovements = []; data.cashMovements = []; data.financialEvents = [];
+      dropFields(data.products, RESTRICTED_FIELD); dropFields(data.saleItems, RESTRICTED_FIELD); dropFields(data.sales, RESTRICTED_FIELD);
+      dropFields(data.cashSessions, CLOSE_FIELD);
+      (data.cashSessions || []).forEach(function (session) { if (session && session.status === 'OPEN') session.expected_withheld = true; });
+    }
+    replicaState.validation = data ? 'validating' : 'pending';
+    notifyReplicaUpdate();
+  }
+  // Lectura COMPLETA forzada (nunca la re-confirmación rápida, ni la dirigida tras un commit, ni la de cierre).
+  // options.identityChanged: además descarta todo lo de la identidad anterior (resetForIdentityChange).
+  async function refreshFull(options) {
+    if (options && options.identityChanged) resetForIdentityChange();
+    forceFullRead = true;
+    // Una lectura en curso empezó antes: con identidad nueva falla en sameIdentity(); en todo caso se espera, y si
+    // había una, options.repurge (el guardián) vuelve a depurar lo persistido por si una escritura suya aterrizó tarde.
+    var inflight = loading;
+    if (inflight) { try { await inflight; } catch (_) {} }
+    if (inflight && options && typeof options.repurge === 'function') { try { await options.repurge(); } catch (_) {} }
+    forceFullRead = true; afterCommit = null;
+    try { return await refresh(); } catch (error) { forceFullRead = true; throw error; }
   }
   function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], sales: [], saleItems: [], inventoryMovements: [], cashMovements: [], cashSessions: [], financialEvents: [], expenses: [] }); }
   // Lectura liviana para la franja de estado (cada 5 s): solo las sesiones de caja, no toda la réplica.
@@ -1214,7 +1260,10 @@
   }
   function openSession(requestedId) {
     var sessions = (data && data.cashSessions || []).filter(function (item) { return item && item.status === 'OPEN'; });
-    if (sessions.length !== 1 || !validId(sessions[0].session_id) || !uint(sessions[0].revision) || !uint(sessions[0].expected_cents) ||
+    // expected_withheld: caja abierta de una réplica depurada por cambio de identidad, sin monto esperado (incluye
+    // gastos en efectivo). Se acepta; el servidor vuelve a comprobar el saldo de caja en la misma operación.
+    if (sessions.length !== 1 || !validId(sessions[0].session_id) || !uint(sessions[0].revision) ||
+        !(uint(sessions[0].expected_cents) || (sessions[0].expected_cents == null && sessions[0].expected_withheld === true)) ||
         (requestedId !== undefined && requestedId !== sessions[0].session_id)) fail('INVALID_CANONICAL_CASH_SESSION');
     return sessions[0];
   }
@@ -1262,7 +1311,7 @@
       if (!credit || !uint(credit.current_balance_cents) || input.amount_cents > credit.current_balance_cents || !uint(credit.revision) || !['IMPORT', 'LIVE'].includes(credit.provenance)) fail('INVALID_CANONICAL_CREDIT');
       Object.assign(payload, { credit_id: credit.credit_id, expected_credit_revision: credit.revision, amount_cents: input.amount_cents, payment_method: input.payment_method });
       if (input.payment_method === 'efectivo') {
-        session = openSession(input.session_id); if (!uint(session.expected_cents + input.amount_cents)) fail('UNSAFE_CANONICAL_TOTAL'); payload.session_id = session.session_id;
+        session = openSession(input.session_id); if (session.expected_cents != null && !uint(session.expected_cents + input.amount_cents)) fail('UNSAFE_CANONICAL_TOTAL'); payload.session_id = session.session_id;
       } else if (input.session_id !== undefined) fail('INVALID_CANONICAL_PAYMENT');
       if (input.reference != null && input.reference !== '') { if (!validId(input.reference)) fail('INVALID_CANONICAL_PAYMENT'); payload.reference = input.reference; }
     } else if (command === 'cash.open') {
@@ -1273,7 +1322,7 @@
       session = openSession(input.session_id); if (!uint(input.counted_cents)) fail('INVALID_CANONICAL_CASH_CLOSE');
       Object.assign(payload, { session_id: session.session_id, expected_session_revision: session.revision, counted_cents: input.counted_cents });
     } else if (command === 'adjustment.create') {
-      session = openSession(input.session_id); if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents === 0 || !uint(session.expected_cents + input.amount_cents) || !validReason(input.reason)) fail('INVALID_CANONICAL_ADJUSTMENT');
+      session = openSession(input.session_id); if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents === 0 || (session.expected_cents != null && !uint(session.expected_cents + input.amount_cents)) || !validReason(input.reason)) fail('INVALID_CANONICAL_ADJUSTMENT');
       Object.assign(payload, { session_id: session.session_id, expected_session_revision: session.revision, amount_cents: input.amount_cents, reason: input.reason });
     } else if (command === 'compensation.create') {
       if (!validId(input.compensates_operation_id) || !validReason(input.reason)) fail('INVALID_CANONICAL_COMPENSATION');
@@ -1285,7 +1334,7 @@
       Object.assign(payload, { compensates_operation_id: event.operation_id, reason: input.reason });
       if (input.credit_id !== undefined) payload.credit_id = input.credit_id;
       if (event.cash_delta_cents !== 0) {
-        session = openSession(input.session_id); if (!uint(session.expected_cents - event.cash_delta_cents)) fail('INVALID_CANONICAL_COMPENSATION');
+        session = openSession(input.session_id); if (session.expected_cents != null && !uint(session.expected_cents - event.cash_delta_cents)) fail('INVALID_CANONICAL_COMPENSATION');
         payload.session_id = session.session_id; payload.expected_session_revision = session.revision;
       } else if (input.session_id !== undefined) fail('INVALID_CANONICAL_COMPENSATION');
       if (event.credit_id != null) {
@@ -1602,7 +1651,7 @@
     if (typeof root._naWriteCanonicalReplica === 'function') {
       try {
         var projectedReplica = replicaOf(data);
-        Promise.resolve(root._naWriteCanonicalReplica(projectedReplica)).catch(function () {});
+        Promise.resolve(root._naWriteCanonicalReplica(projectedReplica, identityStillCurrent(identityGeneration))).catch(function () {});
       } catch (_) {}
     }
     return true;
@@ -1734,7 +1783,7 @@
     unchanged();
     // A retry must also fail before POST when storage has become unwritable.
     durableJournal(record);
-    var response, result, baseRevision = authorityBaseRevision();
+    var response, result, baseRevision = authorityBaseRevision(), identityAtSend = identityGeneration;
     try {
       var payment = record.command === 'payment.create' || record.command === 'payment.batch' ||
         ['cash.close','adjustment.create','expense.create','compensation.create'].includes(record.command);
@@ -1766,8 +1815,13 @@
         ((record.command !== 'sale.create' || result.status === 'created') && (result.promotion_id !== expected.promotion_id || result.authority_epoch !== expected.authority_epoch))) fail('CANONICAL_FINANCIAL_PENDING');
     // One atomic storage replacement both saves the receipt and clears PENDING.
     var confirmed = Object.assign({}, record, { state: 'CONFIRMED', receipt: copy(result) });
+    // La identidad cambió mientras el comando viajaba: el recibo (p. ej. cierre de caja del dueño con esperado,
+    // contado y diferencia) no se proyecta en memoria ni deja la réplica lista; el diario lo guarda sin montos de caja.
+    var identityMoved = identityAtSend !== identityGeneration;
+    if (identityMoved) { dropFields([confirmed.receipt], CLOSE_FIELD); dropFields(confirmed.receipt.receipts, CLOSE_FIELD); }
     durableJournal(confirmed);
     closeOnlyReady = false;
+    if (identityMoved) { ready = false; saleOnlyReady = false; forceFullRead = true; afterCommit = null; return copy(confirmed.receipt); }
     rememberCommit(record.command, record.payload, baseRevision, response.status === 201 && result.status === 'created');
     // The receipt is now durable. Publish only the exact affected payment so the
     // UI can update immediately while the full canonical reconciliation stays
@@ -2304,7 +2358,10 @@
   async function startPOS() {
     if (!enabled()) return null;
     warm();
+    var identityAtStart = identityGeneration;
     var cached = await localReplica();
+    // Cambio de identidad durante la lectura de la caché: esa réplica no se publica (la relectura completa decide).
+    if (cached && identityAtStart !== identityGeneration) return refresh();
     if (cached) {
       publishReplica(cached, 'cache');
       // Start the revalidation (its requests leave now) before rendering the cached view.
@@ -2324,7 +2381,7 @@
   }
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleOnlyReady = false; closeOnlyReady = false; } });
   root.addEventListener('offline', function () { ready = false; saleOnlyReady = false; closeOnlyReady = false; });
-  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot, cashSessionsSnapshot: cashSessionsSnapshot,
+  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, refreshFull: refreshFull, resetForIdentityChange: resetForIdentityChange, prepareCommand: prepareCommand, snapshot: snapshot, cashSessionsSnapshot: cashSessionsSnapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, resumePaymentBatch: resumePaymentBatch, releaseRejectedCashClose: releaseRejectedCashClose, releaseUncommittedCashClose: releaseUncommittedCashClose, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale, releaseRejectedSaleJournal: releaseRejectedSaleJournal, releaseRejectedFinancial: releaseRejectedFinancial, settleStrandedFinancial: settleStrandedFinancial,
     createProduct: createProduct, updateProduct: updateProduct, createCustomer: createCustomer, setCustomerContact: setCustomerContact, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense, updateExpense: function(input){return createCommand('expense.update',input);}, voidExpense: function(input){return createCommand('expense.void',input);},
     renderCredits: renderCredits, startPOS: startPOS, commandContext: function () { return commonPayload(); }, warm: warm, legacySnapshot: legacySnapshot, sourceState: sourceState, ping: ping, readProgress: function () { return copy(readProgress); } });
