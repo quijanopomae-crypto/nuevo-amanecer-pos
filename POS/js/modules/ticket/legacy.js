@@ -213,9 +213,6 @@ async function compartirTicketBluetooth(){
   }catch(error){if(error?.name==='AbortError')return;console.error(error);await _naFallbackTicketCompartido(text,name,file,error.message);}
 }
 function _naPrinterAscii(value){return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[¡]/g,'!').replace(/[¿]/g,'?').replace(/[^\x20-\x7E\n]/g,'').replace(/\s+$/gm,'');}
-function _naPrinterCenter(text,width){const clean=_naPrinterAscii(text).slice(0,width),left=Math.max(0,Math.floor((width-clean.length)/2));return ' '.repeat(left)+clean;}
-function _naPrinterPair(left,right,width){left=_naPrinterAscii(left);right=_naPrinterAscii(right);const maxLeft=Math.max(1,width-right.length-1);if(left.length>maxLeft)left=left.slice(0,maxLeft);return left+' '.repeat(Math.max(1,width-left.length-right.length))+right;}
-function _naPrinterWrap(text,width){const words=_naPrinterAscii(text).split(/\s+/).filter(Boolean),lines=[];let line='';for(const word of words){if(!line){line=word.slice(0,width);continue;}if((line+' '+word).length<=width)line+=' '+word;else{lines.push(line);line=word.slice(0,width);}}if(line)lines.push(line);return lines.length?lines:[''];}
 function _naConcatBytes(parts){const total=parts.reduce((sum,p)=>sum+p.length,0),out=new Uint8Array(total);let offset=0;for(const part of parts){out.set(part,offset);offset+=part.length;}return out;}
 function _naCrearTicketEscPos(){
   _naSaveTicketSettings();const v=tkCurrentVenta||{items:[]},built=_naBuildThermalTicket(v,false),enc=new TextEncoder(),bytes=[],txt=s=>bytes.push(enc.encode(_naPrinterAscii(s)));

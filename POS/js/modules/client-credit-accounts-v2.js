@@ -2189,13 +2189,6 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     });
   }
 
-  function labRenderClientProfiles() {
-    labBindClientCards();
-    if (labClientScreenState.clientId && !labScreen()?.hidden) labRenderRoute();
-  }
-  function labOpenClientIds() { return []; }
-  function labRestoreClientOpenState() {}
-
   function labSaleClient() {
     var id = document.getElementById('mCreditoCliente')?.value || '';
     return labClientById(id);
@@ -2230,22 +2223,6 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     wrap.innerHTML = dates.map(function (date, index) {
       return '<label><span>Cuota ' + (index + 1) + '</span><input type="date" class="fi na-credit-installment-date" data-installment-number="' + (index + 1) + '" value="' + labEsc(date) + '"></label>';
     }).join('');
-  }
-
-  function labSaleDestinationHtml(client) {
-    if (!client) return '<div class="na-credit-destination-empty">Selecciona primero el cliente del crédito.</div>';
-    var categories = labCategoriesForClient(client), selected = labSelectedCategory(client);
-    var radios = categories.map(function (cat) {
-      return '<label class="na-credit-destination-option ' + (String(cat.id) === String(selected.id) ? 'selected' : '') + '">' +
-        '<input type="radio" name="labCreditDestination" value="' + labEsc(cat.id) + '" ' + (String(cat.id) === String(selected.id) ? 'checked' : '') + ' onchange="naCanonSelectCreditDestination(\'' + labEsc(cat.id) + '\')">' +
-        '<span><strong>' + labEsc(cat.name) + '</strong><small>' + (cat.id === NA_SMALL_ACCOUNT_ID ? 'Predeterminado' : cat.mode === 'accumulated' ? 'Cuenta acumulada' : 'Créditos separados') + '</small></span></label>';
-    }).join('');
-    var installment = selected.mode === 'separate'
-      ? '<div class="na-credit-installment-config"><label><span>Número de cuotas</span><input id="labCreditInstallmentCount" class="fi" type="number" min="1" max="60" value="' + labSaleCreditState.installmentCount + '" oninput="naCanonRefreshInstallmentDates()"></label><div id="labCreditInstallmentDates" class="na-credit-installment-dates"></div></div>'
-      : '';
-    return '<div class="na-credit-destination-title"><strong>¿Dónde registrar esta venta?</strong><small>Créditos pequeños está seleccionado por defecto.</small></div>' +
-      '<div class="na-credit-destination-options">' + radios + '</div>' +
-      '<button type="button" class="na-credit-new-category" onclick="naCanonOpenNewCreditCategory()">+ Nueva categoría</button>' + installment;
   }
 
   function labEnsureSaleDestinationUi() {
@@ -2435,13 +2412,6 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     } catch (_) {}
     page.classList.toggle('na-client-loading-active',loading);
     loader.hidden=!loading; loader.setAttribute('aria-hidden',loading?'false':'true');
-  }
-
-  function naRequestClientListRender() {
-    if (typeof cliRender !== 'function') return;
-    root.requestAnimationFrame(function () {
-      try { cliRender(); } catch (error) { console.warn('[Nuevo Amanecer] No se pudo refrescar Clientes V2.', error && error.message || error); }
-    });
   }
 
   function naRefreshClientDebtFilter() {

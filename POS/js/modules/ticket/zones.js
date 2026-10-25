@@ -151,6 +151,5 @@ const _naF11BaseHydrateTicket=_naHydrateTicket;
 _naHydrateTicket=function(){appConfig.ticket={..._naDefaults.ticket,...(appConfig.ticket||{})};_naF11BaseHydrateTicket();_naF11RenderEditor();};
 
 // MEJORA FASE 11: los selectores antiguos funcionan como controles rápidos de las zonas equivalentes.
-function _naF11SyncLegacyAlign(code,value){const state=_naF11State();if(state.settings[code])state.settings[code].align=value;_naF11PersistState(state);_naF11RenderEditor();}
 document.addEventListener('change',event=>{const map={tkAlign:['h'],tkInfoAlign:['i'],tkPaymentAlign:['t','y'],tkFooterAlign:['f']},codes=map[event.target?.id];if(!codes)return;const state=_naF11State();for(const code of codes)state.settings[code].align=event.target.value;_naF11PersistState(state);_naF11Refresh();});
 document.addEventListener('DOMContentLoaded',()=>{appConfig.ticket={..._naDefaults.ticket,...(appConfig.ticket||{})};_naF11RenderEditor();});
