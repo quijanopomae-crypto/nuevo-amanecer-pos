@@ -70,7 +70,7 @@ function noExpected(label, sessions) {
 async function ownerWithCommit(f, t) {
   const api = (await t.run).api;
   await api.openCash({ session_id: 'f2-cash', opening_cents: 5000 }); await api.refresh();
-  const expense = await api.createExpense({ amount_cents: EXPENSE_CENTS, concept: 'Compra', category: 'Limpieza', payment_method: 'efectivo', expense_date: '2026-10-21', note: EXPENSE_NOTE, session_id: 'f2-cash' });
+  const expense = await api.createExpense({ amount_cents: EXPENSE_CENTS, concept: 'Compra', category: 'Limpieza', payment_method: 'efectivo', expense_date: new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10), note: EXPENSE_NOTE, session_id: 'f2-cash' });
   assert.equal(expense.status, 'created');
   await api.refresh();
   assert.ok(JSON.stringify(replicaOf(t.ls).expenses).includes(EXPENSE_NOTE), 'precondición: el dueño tiene su gasto persistido');
@@ -185,7 +185,7 @@ test('empleado cambia a dueño: la lectura completa restablece gastos y todo lo 
   const f = await activeCanon(t0, { migrations: ['0024_pos_roles_owner_pin.sql'] });
   const owner = await device(f, { token: 'f2-owner-token', deviceId: 'f2-owner' });
   await owner.api.openCash({ session_id: 'f2-own-cash', opening_cents: 5000 }); await owner.api.refresh();
-  assert.equal((await owner.api.createExpense({ amount_cents: EXPENSE_CENTS, concept: 'Compra', category: 'Limpieza', payment_method: 'efectivo', expense_date: '2026-10-21', note: EXPENSE_NOTE, session_id: 'f2-own-cash' })).status, 'created');
+  assert.equal((await owner.api.createExpense({ amount_cents: EXPENSE_CENTS, concept: 'Compra', category: 'Limpieza', payment_method: 'efectivo', expense_date: new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10), note: EXPENSE_NOTE, session_id: 'f2-own-cash' })).status, 'created');
   const t = await tab(f, { token: 'f2-emp-token', deviceId: 'f2-emp', role: 'empleado' });
   const api = (await t.run).api;
   assert.deepEqual(plain(api.snapshot().expenses), []);

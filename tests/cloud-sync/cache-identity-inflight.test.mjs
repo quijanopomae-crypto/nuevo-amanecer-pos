@@ -45,7 +45,7 @@ function switchRole(f, t, ls, id, role) {
 const hasOwner = (v) => JSON.stringify(v).includes(NOTE);
 async function ownerWithExpense(api) {
   await api.openCash({ session_id: 'w-cash', opening_cents: 5000 }); await api.refresh();
-  assert.equal((await api.createExpense({ amount_cents: EXPENSE_CENTS, concept: 'Compra', category: 'Limpieza', payment_method: 'efectivo', expense_date: '2026-10-21', note: NOTE, session_id: 'w-cash' })).status, 'created');
+  assert.equal((await api.createExpense({ amount_cents: EXPENSE_CENTS, concept: 'Compra', category: 'Limpieza', payment_method: 'efectivo', expense_date: new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10), note: NOTE, session_id: 'w-cash' })).status, 'created');
 }
 
 for (const honor of [true, false]) {
