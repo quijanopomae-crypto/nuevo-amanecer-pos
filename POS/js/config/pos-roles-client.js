@@ -8,7 +8,7 @@
   var doc = root.document;
   var CRED = 'na_cloud_sync_credentials', CACHE = 'na_pos_role_v1';
   var OWNER_COMMANDS = ['inventory.adjust', 'adjustment.create', 'compensation.create', 'product.update', 'customer.credit-policy.set'];
-  var state = { role: 'unknown', pinSet: false, label: null, deviceId: null, ready: false, confirmed: false };
+  var state = { role: 'unknown', pinSet: false, label: null, deviceId: null, ready: false, confirmed: false, absentCost: false };
 
   function creds() {
     try { var c = JSON.parse(root.localStorage.getItem(CRED) || 'null'); return c && c.endpoint && c.token ? c : null; } catch (_) { return null; }
@@ -64,13 +64,18 @@
   try { if (root.localStorage.getItem(REVOKED_KEY)) { if (doc.body) revokedScreen(true); else doc.addEventListener('DOMContentLoaded', function () { revokedScreen(true); }); } } catch (_) {}
   async function refresh() {
     if (!cloud()) { setState({ role: 'owner' }); state.ready = true; return state; }
+    var asked = null; try { asked = (JSON.parse(root.localStorage.getItem(CRED) || 'null') || {}).token || null; } catch (_) { asked = null; }
     try {
       var me = await api('/auth/me');
-      state.confirmed = true;
+      state.confirmed = true; state.confirmedToken = asked;
+      // Capacidad anunciada por el Worker (#886): product.update acepta cost_cents ausente y conserva el costo.
+      // Solo vale la respuesta confirmada de /auth/me; no se guarda en caché (sin red o Worker viejo = apagada).
+      state.absentCost = !!(me && me.capabilities && me.capabilities.product_update_absent_cost === true);
       try { root.localStorage.removeItem(REVOKED_KEY); } catch (_) {} revokedScreen(false);
       setState({ role: me.pos_role, pinSet: me.owner_pin_set, label: me.label, deviceId: me.device_id }, true);
     } catch (e) {
       state.confirmed = false;
+      state.absentCost = false;
       if (e.status === 403 && e.message === 'session_revoked') { try { root.localStorage.setItem(REVOKED_KEY, '1'); } catch (_) {} revokedScreen(true); }
       if (e.status === 401 || e.status === 403) setState({ role: 'unknown' }, true); else paint();
     }
@@ -147,8 +152,14 @@
 
   root.NA_ROLES = {
     get role() { return state.role; }, get pinSet() { return state.pinSet; }, get label() { return state.label; }, get deviceId() { return state.deviceId; },
+    // T-47: sesión confirmada por /auth/me en esta carga (null si no está confirmada): marca local de las colas pendientes.
+    get sessionPrincipal() { return state.confirmed ? state.deviceId : null; },
+    // El rol confirmado vale solo para el token con el que se pidió /auth/me (otra pestaña puede cambiarlo).
+    confirmedFor: function (token) { return !!state.confirmed && typeof token === 'string' && state.confirmedToken === token; },
     isOwner: canConfigure, canConfigure: canConfigure, get confirmed() { return state.confirmed; }, refresh: refresh, api: api, askPin: askPin, approve: approve, beforeCommand: beforeCommand,
-    message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice()
+    message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice(),
+    // Capacidades de /auth/me (solo con sesión confirmada); desconocido = false.
+    get capabilities() { return { product_update_absent_cost: state.confirmed && state.absentCost === true }; }
   };
 
   // Configuración solo para el dueño, por cualquier camino de navegación.
@@ -219,6 +230,8 @@
   root.addEventListener('load', wrapNavigation);
   root.addEventListener('hashchange', guardConfig);
   root.addEventListener('na:role', guardConfig);
+  // T-47: otra pestaña guardó otra sesión: el rol confirmado deja de valer hasta volver a confirmarlo.
+  root.addEventListener('storage', function (event) { if (event && event.key === CRED) { state.confirmed = false; state.confirmedToken = null; refresh(); } });
   root.addEventListener('online', function () { refresh(); });
   root.addEventListener('offline', function () { state.confirmed = false; paint(); guardConfig(); });
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', install); else install();

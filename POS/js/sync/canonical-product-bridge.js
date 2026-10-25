@@ -186,6 +186,62 @@
     return !!root.document.getElementById(id)?.checked;
   }
 
+  // INTERRUPTOR (revisión B1 de #892): ¿el Worker acepta product.update SIN cost_cents?
+  // El Worker actual exige cost_cents y responde invalid_product_update (a6-products.js:224) si falta.
+  // Solo se activa cuando el servidor lo anuncia en /auth/me con
+  // capabilities.product_update_absent_cost === true (Worker de #886: acepta cost_cents ausente y
+  // conserva el costo existente). Ausente, false, sin red o Worker viejo = apagado: se envía 0 como antes.
+  function serverAcceptsAbsentCost() {
+    try {
+      var roles = root.NA_ROLES;
+      var caps = roles && roles.capabilities;
+      return !!(roles && roles.confirmed === true && caps && caps.product_update_absent_cost === true);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function localProducts() {
+    try {
+      /* global productos */
+      return typeof productos === 'undefined' || !Array.isArray(productos) ? [] : productos;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Costo previo del producto en edición (revisión O1 de #892). En edición, el campo de costo vacío
+  // significa «conservar el costo actual»: se toma de la réplica (cost_cents) o, si no lo trae, de la
+  // lista local (productos[].costo). Un 0 real cuenta como conocido. Devuelve:
+  //   - null si no es una edición (alta nueva: el vacío sigue siendo 0);
+  //   - { known: true, cents } si alguna fuente tiene el costo;
+  //   - { known: false } si el costo es realmente desconocido (NULL/ausente en ambas).
+  function editingPreviousCost() {
+    var id = editId();
+    if (id === null || id === undefined) return null;
+    var raw = snapshotProducts().find(function (item) { return String(item.product_id) === String(id); });
+    if (raw && Number.isSafeInteger(raw.cost_cents) && raw.cost_cents >= 0) return { known: true, cents: raw.cost_cents };
+    var local = localProducts().find(function (item) { return item && String(item.id) === String(id); });
+    var known = local && (typeof root._naCostKnown === 'function' ? root._naCostKnown(local.costo)
+      : typeof local.costo === 'number' && Number.isFinite(local.costo));
+    if (known) {
+      var cents = moneyCents(typeof root._naCostValue === 'function' ? root._naCostValue(local.costo) : local.costo, true);
+      if (cents !== null) return { known: true, cents: cents };
+    }
+    if (!raw && !local) return null;
+    return { known: false };
+  }
+
+  // Campo de costo vacío: alta → 0 (sin cambios); edición con costo previo conocido → ese costo
+  // (nunca se sobrescribe con 0); edición con costo desconocido → 0 con el Worker actual
+  // (capacidad apagada, igual que antes de #892) u omitir cost_cents (capacidad anunciada por #886).
+  function emptyCostCents() {
+    var previous = editingPreviousCost();
+    if (!previous) return 0;
+    if (previous.known) return previous.cents;
+    return serverAcceptsAbsentCost() ? undefined : 0;
+  }
+
   function buildInput() {
     var name = clean(value('pNombre'));
     var description = clean(value('pDescripcion'));
@@ -195,7 +251,7 @@
     var unit = clean(value('pUnidad'));
     var purchaseUnit = clean(value('pUnidadCompra')) || 'unidad';
     var purchaseFactor = purchaseUnit === 'unidad' ? 1 : number(value('pFactorCompra'), NaN);
-    var costCents = moneyCents(value('pCosto'), true);
+    var costCents = clean(value('pCosto')) === '' ? emptyCostCents() : moneyCents(value('pCosto'), true);
     var priceCents = moneyCents(value('pPrecio'), false);
     var controlInventory = checked('pControlInventario');
     var stock = controlInventory ? number(value('pStock'), NaN) : 0;
@@ -217,7 +273,8 @@
     }
 
     var cfg = appConfigValue();
-    if (cfg.margenActive && priceCents < costCents) {
+    // Sin costo (ausente) no hay control bajo costo en el cliente: se omite, no se compara contra 0.
+    if (cfg.margenActive && costCents !== undefined && priceCents < costCents) {
       notify('El precio no puede ser menor al costo mientras el control de margen esté activo', 'error');
       return null;
     }
@@ -236,7 +293,7 @@
       notify('Precio mayorista o unidades por caja inválidos', 'error');
       return null;
     }
-    if (cfg.margenActive && boxPriceCents !== null && boxPriceCents < costCents * boxUnits) {
+    if (cfg.margenActive && costCents !== undefined && boxPriceCents !== null && boxPriceCents < costCents * boxUnits) {
       notify('El precio por caja está por debajo del costo total', 'error');
       return null;
     }
@@ -252,7 +309,7 @@
       seen.add(key);
     }
 
-    return {
+    var input = {
       name: name,
       description: description || null,
       sku: sku,
@@ -277,6 +334,8 @@
       complementary_tax: clean(value('pImpuestoComplementario')).toLowerCase(),
       tracks_inventory: controlInventory
     };
+    if (costCents === undefined) delete input.cost_cents;
+    return input;
   }
 
   async function save() {
@@ -395,7 +454,8 @@
         after: {
           venta: centsInput.price_cents / 100,
           mayorista: centsInput.box_price_cents == null ? null : centsInput.box_price_cents / 100,
-          costo: centsInput.cost_cents / 100
+          // Costo omitido (ausente): no es un cambio de costo.
+          costo: centsInput.cost_cents == null ? legacy.costo : centsInput.cost_cents / 100
         }
       });
     } catch (_) {}
@@ -469,12 +529,14 @@
         return false;
       }
       try {
-        receipt = await client.updateProduct({
+        var update = {
           product_id: id, expected_metadata_revision: expected, name: input.name, sku: input.sku, barcode: input.barcode,
           alternate_codes: input.alternate_codes, category: input.category, brand: input.brand, description: input.description,
           icon: input.icon, cost_cents: input.cost_cents, price_cents: input.price_cents, box_price_cents: input.box_price_cents,
           units_per_box: input.units_per_box, stock_min_quantity: input.stock_min_quantity, expiry_date: input.expiry_date
-        });
+        };
+        if (input.cost_cents === undefined) delete update.cost_cents;
+        receipt = await client.updateProduct(update);
       } catch (error) {
         var after = pendingRecord();
         if (after && after.command === 'product.update' && after.last_error) {

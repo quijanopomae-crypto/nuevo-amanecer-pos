@@ -20,7 +20,7 @@ const products = [
   { id: 1, name: 'Vendido hace 10 días', stock: 5, costo: 2 },
   { id: 2, name: 'Vendido hace 45 días', stock: 8, costo: 1.5, sku: 'P-45' },
   { id: 3, name: 'Vendido hace 80 días', stock: 3, costo: 4 },
-  { id: 4, name: 'Nunca vendido', stock: 10, costo: 0 },
+  { id: 4, name: 'Nunca vendido', stock: 10 }, // costo ausente (#892)
   { id: 5, name: 'Inactivo', stock: 9, costo: 1, activo: false },
   { id: 6, name: 'Solo venta anulada', stock: 2, costo: 3 }
 ];
@@ -49,7 +49,7 @@ test('última venta en día de Lima y stock actual', () => {
   assert.equal(r.units, 23);
 });
 
-test('el valor solo existe con withValue (dueño); costo 0 = «Sin costo»', () => {
+test('el valor solo existe con withValue (dueño); costo ausente = «Sin costo»', () => {
   const emp = api.buildReport(sales, products, { days: 30, now });
   assert.equal(emp.value, undefined);
   assert.ok(emp.rows.every(x => !('value' in x) && !('cost' in x)));
@@ -127,4 +127,19 @@ test('#854: stock inmovilizado = solo stock > 0 por defecto; «Incluir sin stock
   assert.equal(all.units, 3.5, 'el stock negativo no resta unidades');
   assert.equal(all.value, 7, 'el stock ≤ 0 no suma valor');
   assert.equal(api.toCsv(def).includes('Stock cero'), false);
+});
+
+test('O4 (#892): un costo 0 real se muestra 0.00 y suma 0; ausente/null/vacío = «Sin costo»', () => {
+  const rows = [{ id: 10, name: 'Cero', stock: 4, costo: 0 }, { id: 11, name: 'Cero texto', stock: 1, costo: '0' },
+    { id: 12, name: 'Nulo', stock: 2, costo: null }, { id: 13, name: 'Vacio', stock: 2, costo: '' }, { id: 14, name: 'Normal', stock: 2, costo: 1.25 }];
+  const r = api.buildReport([], rows, { days: 30, now, withValue: true });
+  const by = Object.fromEntries(r.rows.map((x) => [x.name, x]));
+  assert.equal(by.Cero.cost, 0); assert.equal(by.Cero.value, 0);
+  assert.equal(by['Cero texto'].cost, 0);
+  assert.equal(by.Nulo.cost, null); assert.equal(by.Vacio.cost, null);
+  assert.equal(r.noCost, 2);
+  assert.equal(r.value, 2.5);
+  const csv = api.toCsv(r);
+  assert.match(csv, /Cero,,4,Nunca,0\.00,0\.00/);
+  assert.match(csv, /Nulo,,2,Nunca,Sin costo,Sin costo/);
 });

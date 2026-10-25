@@ -23,7 +23,7 @@
 
 ## Capas de CSS
 Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.css` → `responsive.css` → hojas CANON (`canon-*.css`, `config-*.css`, `inventario-redesign.css`, `mobile-drawer.css`, `proximamente.css`, …) → `theme-dark.css` → correcciones finales (`inventory-form-polish.css`). Para cambios nuevos prefiere una hoja CANON específica y acotada por id de página.
-- `POS/css/experience-v2/pages/*.css` son **copias de laboratorio: no editar**. Se verifican con `node tools/pos-experience/promote-lab-visuals.mjs --check`.
+- `POS/css/experience-v2/pages/*.css` eran copias del laboratorio (retirado; `tools/pos-experience/` ya no existe): hoy son CSS de producción y se pueden editar cuando el cambio lo requiere.
 
 ## Backend y datos
 - Cloudflare Worker (`tools/cloudflare-lab/src/worker.js`) + base de datos **Turso** (vía `turso-d1-adapter.js`).
@@ -36,8 +36,8 @@ Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.
 
 ## Deploy (solo vía ops JSON + PR mergeado a `feature/v1.3-mobile-cloud`)
 - **Backend primero** cuando cambie código del Worker: `ops/v1.3-turso-prod-worker-hotfix-trigger.json` → workflow `.github/workflows/v1.3-turso-prod-worker-hotfix.yml` (incrementar `attempt`, `target_commit`, `rollback_ref`).
-- **Web:** `ops/v1.3-pos-web-deploy-trigger.json` → `.github/workflows/v1.3-pos-web-deploy.yml` (incrementar `retry_attempt`, `approved_base`, `requested_at_utc`, rollback en `retry_reason`). Reemplaza `__BUILD_HASH__`/`__BUILD_DATE__` en `sw.js`, `index.html` y `js/config/build-info.js`.
-- Migraciones remotas: workflows `canon-migration-00NN.yml` con su `ops/canon-migration-00NN.json`, solo con aprobación del owner y respaldo.
+- **Web:** preparar el manifiesto v2 con `node tools/release/web-release.mjs prepare` según `docs/DEVELOPMENT_RISK_POLICY.md`; un único JSON activa `.github/workflows/v1.3-pos-web-deploy.yml`. El guard exige alcance completo, target exacto, CI y rollback. No incrementar manualmente múltiples flags. Reemplaza `__BUILD_HASH__`/`__BUILD_DATE__` en `sw.js`, `index.html` y `js/config/build-info.js`.
+- Migraciones remotas: workflow `canon-migration-00NN.yml` con su `ops/canon-migration-00NN.json`, solo con aprobación del owner y respaldo. Los de 0023–0033 ya se aplicaron una vez y se retiraron del árbol; la plantilla vigente es `canon-migrations-0021-0022.yml` (o `git show bf7d74db:.github/workflows/canon-migration-0033.yml`).
 
 ## Workflows que NUNCA se ejecutan/disparan sin orden explícita del owner
 - `.github/workflows/production-release.yml`

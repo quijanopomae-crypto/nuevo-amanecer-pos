@@ -63,6 +63,10 @@ CANON define la autoridad de persistencia; **no debe equivaler a bloquear la int
 - No generes una cadena de archivos `v1`, `v2`, `v48`, `v49` para cada parche.
 - El archivo probado debe ser exactamente el archivo entregado.
 
+## Política de autorización y revisión
+
+Aplicar `docs/DEVELOPMENT_RISK_POLICY.md`: autorización única por alcance, tres riesgos, revisión independiente automatizada válida cuando se exige. Ningún rol nominal ni humano externo es un requisito universal. Una decisión explícita posterior del propietario autoriza el rediseño de la pantalla indicada.
+
 ## Flujo obligatorio
 
 1. **Comprender:** define resultado esperado, resultado actual, alcance y riesgos.
@@ -94,7 +98,7 @@ Detente y reporta antes de:
 
 - Borrar o migrar datos de manera irreversible.
 - Cambiar reglas comerciales.
-- Rediseñar módulos completos.
+- Rediseñar módulos completos fuera de una autorización específica ya vigente.
 - Añadir backend o servicios externos.
 - Hacer una refactorización extensa.
 - Tomar una decisión cuyo comportamiento esperado no esté definido.
@@ -170,7 +174,7 @@ Cuando una captura sea referencia exacta:
 
 ## Responsive
 
-Prueba como mínimo: 320, 360, 390, 430, 768, 1024, 1366 y 1920 px.
+Teléfono primero. Un cambio pequeño se revisa como mínimo a 390, 768 y 1366 px. Para trabajo grande (pantallas nuevas, rediseños) amplía a 320, 360, 430, 1024 y 1920 px.
 
 En teléfono: sin cortes, sin scroll horizontal innecesario, scroll vertical funcional, modales accesibles y teclado sin ocultar acciones.
 

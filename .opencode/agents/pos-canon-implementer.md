@@ -44,7 +44,7 @@ CANON_WRITE_LOCAL_ONLY.
 
 `CANON_DEFAULT = true`
 `POS_LAB_RETIRED = true`
-`BRANCH_PREVIEW_REQUIRED = true`
+`BRANCH_PREVIEW = solo cambios visuales (ver docs/DEVELOPMENT_RISK_POLICY.md)`
 
 Usa este rol para toda tarea normal del producto en una rama aislada desde CANON. El alcance concreto lo define la solicitud del owner y la especificación durable aplicable.
 
