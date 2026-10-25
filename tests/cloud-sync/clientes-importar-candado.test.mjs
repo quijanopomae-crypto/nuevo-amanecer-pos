@@ -38,3 +38,11 @@ test('candado abierto: previsualiza (buildPreview sigue igual)', () => {
   const res = api.buildPreview('nombre;documento\nAna;87654321\n', { docs: {}, phones: {} });
   assert.equal(res.valid, 1);
 });
+
+test('la tarjeta de Próximamente es honesta: dice CSV, no promete Excel', () => {
+  const reg = readFileSync(new URL('../../POS/js/modules/proximamente-registry.js', import.meta.url), 'utf8');
+  const line = reg.split('\n').find((l) => l.includes("id: 'importar-clientes'"));
+  assert.ok(line);
+  assert.match(line, /name: 'Importar clientes \(CSV\)'/);
+  assert.doesNotMatch(line, /Excel o CSV|Excel\/CSV|'Hoja'/);
+});
