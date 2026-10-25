@@ -26,7 +26,7 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
   assert.equal(api.list().length, 0, 'nothing built until load()');
   await api.load();
   const ids = api.list().map(f => f.id);
-  assert.equal(ids.length, 141);
+  assert.equal(ids.length, 142);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(new Set(api.list().map(f => f.name.toLowerCase())).size, ids.length, 'no duplicate titles');
   assert.equal(JSON.stringify(Object.keys(P.FEATURE_LOCKS).sort()), JSON.stringify(ids.slice().sort()), 'every registry id has exactly one server lock entry');
