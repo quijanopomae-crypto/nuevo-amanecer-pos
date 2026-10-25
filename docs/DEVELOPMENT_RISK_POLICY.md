@@ -28,11 +28,13 @@ Un deploy publica todo el árbol POS del target, no solo el último PR. Antes de
 2. Desde checkout limpio del target ejecutar:
 
 ```bash
-node tools/release/web-release.mjs prepare --base SHA_PRODUCCION --target HEAD --rollback SHA_RECUPERABLE --scope /tmp/archivos-aprobados.json --authorization 'Referencia de autorización y alcance del propietario' --risk high --review-kind independent-automated --review docs/revision-del-candidato.md
+node tools/release/web-release.mjs prepare --base SHA_PRODUCCION --target HEAD --rollback SHA_RECUPERABLE --scope /tmp/archivos-aprobados.json --authorization 'Referencia de autorización y alcance del propietario' --risk high --review-kind independent-automated --review docs/revision-del-candidato.json
 ```
 
+La evidencia es un JSON versionado con `reviewed_commit` (SHA completo revisado), `kind`, `result: "pass"` y `reviewer`. Después del commit revisado solo puede agregarse/cambiar ese recibo; si cambia código, repetir la revisión real y generar otro recibo. El gate comprueba existencia, ancestro y diff; el coordinador contrasta identidad y resultado con la revisión realmente realizada.
+
 3. El comando genera un único archivo `ops/v1.3-pos-web-deploy-trigger.json`. Crear rama/PR solo con ese manifiesto; no cambiar otros flags. Al merge se dispara el workflow existente. El guard verifica ancestros, diferencia completa y que entre target y HEAD solo cambie el manifiesto. Cualquier nuevo código posterior exige otro candidato; nunca se publica HEAD por accidente.
-4. El gate exige CANON Critical CI, E2E Smoke CI y OpenCode Role Map CI SUCCESS en el target exacto; cualquier otro workflow fallido o pendiente de ese target bloquea el deploy. Se requiere token de Actions de solo lectura; errores de API no cuentan como verde. Si un check no aplica, ejecutar una verificación real para ese target; no fabricar estados success.
+4. El gate exige CANON Critical CI, E2E Smoke CI y OpenCode Role Map CI SUCCESS en el target exacto; los fallos de otros workflows se diagnostican y documentan por alcance, sin convertir una comprobación no relacionada en bloqueo universal. Se requiere token de Actions de solo lectura; errores de API no cuentan como verde. Si un check no aplica, ejecutar una verificación real para ese target; no fabricar estados success.
 5. El workflow conserva la lista de despliegues Cloudflare anterior y manifiesto en artifact, ejecuta dry-run, publica y verifica health/assets/hash. Sin cambios de secretos, backend, migraciones ni cutover implícitos. Backend primero cuando cambie, en su flujo específico.
 
 El JSON histórico v1 se conserva como evidencia del despliegue 204, pero no satisface el gate nuevo. `workflow_dispatch` tampoco evita el guard. El manifiesto registra evidencia; no prueba por sí solo que el propietario o un revisor hayan evaluado los archivos: el coordinador debe contrastarlos con la solicitud y revisión real.

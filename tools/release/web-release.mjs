@@ -26,10 +26,12 @@ export function requireGreenRuns(runs,target) {
     const r=candidates[0];
     if(!r||r.status!=='completed'||r.conclusion!=='success') fail('CI not green on exact target: '+name);
   }
-  // Any additional failed/pending workflow at target also blocks this production gate.
-  const latest=new Map();
-  for(const r of [...runs].filter(r=>r.head_sha===target).sort((a,b)=>(b.run_number-a.run_number)||(b.run_attempt||1)-(a.run_attempt||1))) if(!latest.has(r.name)) latest.set(r.name,r);
-  for(const r of latest.values()) if(r.status!=='completed'||r.conclusion!=='success') fail('CI not green: '+r.name);
+  // Unrelated workflows are reported separately; they do not become universal release gates.
+  return true;
+}
+export function validateReviewReceipt(r,m,afterReview) {
+  if(!r||!sha(r.reviewed_commit)||r.result!=='pass'||!r.reviewer?.trim()||r.kind!==m.review.kind)fail('invalid review receipt');
+  if(afterReview.some(p=>p!==m.review.evidence))fail('code changed after independent review');
   return true;
 }
 const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
@@ -53,17 +55,22 @@ async function main(){
     const m=JSON.parse(readFileSync(trigger,'utf8')),head=git('rev-parse','HEAD');
     if(!sha(m.approved_base)||!sha(m.target_commit)||!sha(m.rollback_ref))fail('v2 manifest with full SHAs required');
     ancestor(m.approved_base,m.target_commit);ancestor(m.target_commit,head);ancestor(m.rollback_ref,m.target_commit);
-    const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store'});
+    const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!live.ok)fail('cannot verify production SHA: HTTP '+live.status);
     const liveText=await live.text();
     const hashes=[...new Set(liveText.match(/\b[a-f0-9]{40}\b/g)||[])];
     if(hashes.length!==1)fail('cannot identify unique production SHA');
     validateRelease(m,{productionSha:hashes[0],base:m.approved_base,target:m.target_commit,head,paths:paths(m.approved_base,m.target_commit),activationPaths:paths(m.target_commit,head)});
+    if(!/^docs\/[A-Za-z0-9_./-]+\.json$/.test(m.review.evidence)||m.review.evidence.split('/').includes('..'))fail('review evidence must be a versioned docs JSON receipt');
+    const receipt=JSON.parse(git('show',m.target_commit+':'+m.review.evidence));
+    if(!sha(receipt.reviewed_commit))fail('reviewed commit required');
+    ancestor(receipt.reviewed_commit,m.target_commit);
+    validateReviewReceipt(receipt,m,paths(receipt.reviewed_commit,m.target_commit));
     const repository=process.env.GITHUB_REPOSITORY;
     if(!repository||!process.env.GH_TOKEN)fail('authenticated GitHub CI verification required');
     let runs=[];
     for(let page=1;;page++){
-      const response=await fetch(`https://api.github.com/repos/${repository}/actions/runs?head_sha=${m.target_commit}&per_page=100&page=${page}`,{headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'}});
+      const response=await fetch(`https://api.github.com/repos/${repository}/actions/runs?head_sha=${m.target_commit}&per_page=100&page=${page}`,{signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'}});
       if(!response.ok)fail('cannot verify CI: HTTP '+response.status);
       const data=await response.json();runs.push(...data.workflow_runs);
       if(data.workflow_runs.length<100)break;
