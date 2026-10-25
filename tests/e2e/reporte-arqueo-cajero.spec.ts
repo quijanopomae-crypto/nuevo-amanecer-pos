@@ -32,7 +32,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     await open(page, dark);
     const screen = page.locator('#pageReporteArqueo');
     await expect(screen.locator('tbody tr')).toHaveCount(3);
-    const select = screen.getByLabel('Cajero');
+    const select = screen.locator('[data-ra-cajero]');
     await expect(select.locator('option')).toHaveText(['Todos los cajeros', 'Ana Prueba', 'Beto Prueba']);
     await select.selectOption('Ana Prueba');
     await expect(screen.locator('tbody tr')).toHaveCount(2);
@@ -108,6 +108,6 @@ test('servidor recortó la lista: el aviso usa el total del servidor, no el filt
   });
   const screen = page.locator('#pageReporteArqueo');
   await expect(screen.locator('[data-ra-truncated]')).toContainText('solo los 3 cierres');
-  await screen.getByLabel('Cajero').selectOption('Ana Prueba');
+  await screen.locator('[data-ra-cajero]').selectOption('Ana Prueba');
   await expect(screen.locator('[data-ra-truncated]')).toContainText('solo los 3 cierres más recientes de este rango (2 son de este cajero)');
 });

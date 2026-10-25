@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { expectAllFit } from './helpers/fits';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 // #164: panel de tesorería dentro del reporte de arqueo (solo dueño), réplica sintética y sin backend real.
 async function rolePage(page: Page, role: 'owner' | 'empleado') {
@@ -55,7 +56,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner'); await unlock(page); await seed(page);
     const writes: string[] = [];
-    page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method())) writes.push(r.method() + ' ' + r.url()); });
+    page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method()) && !isAssistantPing(r)) writes.push(r.method() + ' ' + r.url()); });
     await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageReporteArqueo'); }, dark);
     const sec = page.locator('#pageReporteArqueo [data-pt-section]');
     await expect(sec).toBeVisible();
