@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { costHelpersSource } from '../helpers/cost-helpers.mjs';
 const source=fs.readFileSync('POS/js/legacy-inline/inline-06.js','utf8');
 function context(products,sales){
  const ctx={_naEffectiveExpiry:p=>p.venc||null,productos:products,ventas:sales,appConfig:{},document:{addEventListener(){},getElementById(){return null;}},invBadges(){},invRender(){},_naNormalizeData(){},_naInt:(v,d)=>Number.isFinite(Number(v))?Math.trunc(Number(v)):d,_naNumber:(v,d=0)=>Number.isFinite(Number(v))?Number(v):d,_naClean:v=>String(v??'').trim(),_naTracksStock:()=>true,_naUnitsSold:i=>Number(i.cantidad||0),obtenerHoy:()=> '2026-10-10',diasHasta:()=>null};
  ctx.window=ctx;ctx.renderCategorySelects=()=>{};ctx.invTab='todos';ctx.invRender=()=>ctx.renderHook?.();
- vm.createContext(ctx);vm.runInContext(source,ctx);return ctx;
+ vm.createContext(ctx);vm.runInContext(costHelpersSource,ctx);vm.runInContext(source,ctx);return ctx;
 }
 const product=(id,sku)=>({id,sku,name:sku,stock:1,stockMin:3,costo:1,precio:2});
 test('batch analysis preserves the independent original sales calculation',()=>{
