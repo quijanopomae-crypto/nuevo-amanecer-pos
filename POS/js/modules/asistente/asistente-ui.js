@@ -1237,8 +1237,9 @@
   }
 
   // ---------- Configuración > Aparatos: nivel del asistente por aparato de empleado ----------
-  // Se agrega DEBAJO de la lista de aparatos que ya existe (no se toca config-g.js). Guarda solo (sin botón Guardar),
-  // pidiendo el PIN del dueño en la ventana de PIN del POS. El servidor exige aparato dueño + PIN y lo anota si hay bitácora.
+  // Se agrega DEBAJO de la lista de aparatos que ya existe (no se toca config-g.js). Elegir un nivel muestra «Aplicar» y «Cancelar»;
+  // UN toque en «Aplicar» guarda (SIN PIN, pedido del dueño). Va a POST /auth/assistant/levels: solo Admin (el servidor da 403 a un
+  // empleado) y cada cambio queda en la bitácora del asistente que ya existe (pos-assistant-audit.js). Sin migración.
   var LEVELS = [['off', 'Apagado'], ['consultas', 'Solo consultas'], ['consultas_documentos', 'Consultas y documentos']];
   function decorateConfig() {
     if (offHere() || !isOwnerAccess() || root.navigator.onLine === false) return;
@@ -1246,13 +1247,14 @@
     doc.querySelectorAll('#naDevList').forEach(function (list) { var host = list.parentElement; if (host && !host.querySelector('.na-asst-acc')) decorateOne(host); });
   }
   function decorateOne(host) {
-    var box = el('div', 'na-asst-acc'); box.innerHTML = '<h4>Asistente en aparatos de empleado</h4><p class="na-asst-acc-n">Apagado por defecto. Al cambiar se pide tu PIN y se guarda solo. Cualquier cambio de stock, precio o compra que proponga el asistente igual necesita tu PIN.</p><div class="na-asst-acc-l">Cargando…</div>';
+    var box = el('div', 'na-asst-acc'); box.innerHTML = '<h4>Asistente en aparatos de empleado</h4><p class="na-asst-acc-n">Apagado por defecto. Elige el nivel y toca «Aplicar». Queda anotado en la bitácora del asistente.</p><div class="na-asst-acc-l">Cargando…</div>';
     host.appendChild(box);
     decorateOwners(host, box);
     get(ACCESS_PATH).then(function (d) { paintAccess(box, d); }, function () { box.querySelector('.na-asst-acc-l').textContent = 'No se pudo cargar. Revisa internet.'; });
     decorateProvider(host);
   }
   var ACCESS_PATH = '/auth/assistant/employee-access';
+  var LEVELS_PATH = '/auth/assistant/levels';
 
   // ---------- Configuración > Asistente: proveedor de IA (solo dueño) ----------
   // Lista del servidor con «Conectado» / «Falta clave» (nunca se ve una clave ni una URL). «Probar» hace una llamada chica.
@@ -1426,29 +1428,32 @@
         '<div class="na-asst-seg" role="radiogroup" aria-label="Asistente en ' + C.esc(x.label || 'aparato') + '">' + LEVELS.map(function (L) {
           return '<label><input type="radio" name="naAsstLvl' + i + '" value="' + L[0] + '"' + (L[0] === x.level ? ' checked' : '') + '><span>' + L[1] + '</span></label>'; }).join('') + '</div></div>';
     }).join('');
+    // Elegir un nivel no guarda nada: muestra «Aplicar» / «Cancelar» en esa fila. Un toque en «Aplicar» = el cambio (sin PIN).
     l.onchange = function (e) {
       var inp = e.target; if (!inp || inp.type !== 'radio') return;
       var row = inp.closest('.na-asst-acc-r'), st = row.querySelector('.st'), prev = row.dataset.cur, lvl = inp.value;
-      function revert(msg) { var r = row.querySelector('input[value="' + prev + '"]'); if (r) r.checked = true; st.textContent = msg || ''; }
-      var R = root.NA_ROLES;
-      // PIN del dueño -> aprobación 'assistant.employee_access' ligada a ESTE cambio (operation_id) -> el servidor la gasta una vez.
-      var save = async function (pin) {
+      // Nivel 3 («completo», puesto desde el chat) no tiene botón aquí: al revertir no se deja marcada una opción que no es la guardada.
+      var old = row.querySelector('.na-asst-acc-c'); if (old) old.remove();
+      st.textContent = '';
+      if (lvl === prev) return;
+      function revert(msg) { var r = row.querySelector('input[value="' + prev + '"]'); if (r) r.checked = true; else inp.checked = false; var c0 = row.querySelector('.na-asst-acc-c'); if (c0) c0.remove(); st.textContent = msg || ''; }
+      var name = LEVELS.filter(function (L) { return L[0] === lvl; })[0], c = el('div', 'na-asst-acc-c na-asst-prov-c');
+      c.setAttribute('role', 'group'); c.setAttribute('aria-label', 'Aplicar nivel del asistente');
+      c.appendChild(el('p', null, 'Asistente: <strong>' + C.esc(name ? name[1] : lvl) + '</strong>. Aplica desde la próxima pregunta en ese aparato.'));
+      var ok = el('button', 'na-asst-ok'), no = el('button', 'na-asst-no');
+      ok.type = 'button'; ok.dataset.act = 'apply'; ok.textContent = 'Aplicar';
+      no.type = 'button'; no.dataset.act = 'cancel'; no.textContent = 'Cancelar';
+      c.appendChild(ok); c.appendChild(no); row.appendChild(c);
+      no.onclick = function () { revert('Sin cambios.'); };
+      ok.onclick = async function () {
+        if (ok.disabled) return; ok.disabled = true; no.disabled = true; st.textContent = 'Guardando…';
         var op = 'ACC-' + (root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
-        var apr = await post('/auth/owner-approval', { pin: pin, action: 'assistant.employee_access', operation_id: op }, null, 15000);
-        if (!apr || !apr.approval_id) { var ea = String(apr && apr.error || ''); return { msg: /locked/.test(ea) ? 'Demasiados intentos. Espera unos minutos.' : /pin/.test(ea) ? 'PIN incorrecto.' : 'No se pudo verificar el PIN.', stop: !/pin_invalid/.test(ea) }; }
-        var res = await post(ACCESS_PATH, { device_id: row.dataset.dev, level: lvl, operation_id: op }, { 'x-owner-approval': apr.approval_id }, 15000);
-        if (res && res.ok) { row.dataset.cur = lvl; st.textContent = 'Guardado' + (res.logged ? '' : ' (sin bitácora en este servidor)'); return { ok: true }; }
-        var e2 = String(res && res.error || '');
-        return { msg: /locked/.test(e2) ? 'Demasiados intentos. Espera unos minutos.' : /pin/.test(e2) ? 'PIN incorrecto.' : 'No se pudo guardar.', stop: !/pin_invalid/.test(e2) };
+        var res = null; try { res = await post(LEVELS_PATH, { device_id: row.dataset.dev, level: lvl, operation_id: op }, null, 15000); } catch (_) { res = null; }
+        if (res && res.ok) { row.dataset.cur = lvl; c.remove(); st.textContent = 'Guardado' + (res.logged === false ? ' (sin bitácora en este servidor)' : ''); return; }
+        var er = String(res && res.error || '');
+        revert(er === 'admin_only' ? 'Solo el Admin puede cambiar esto.' : er === 'not_employee_device' ? 'Ese aparato ya no es de empleado.' : res ? 'No se pudo guardar.' : 'No se pudo guardar. Revisa internet.');
       };
-      if (R && typeof R.askPin === 'function' && creds()) {
-        R.askPin('Asistente: ' + LEVELS.filter(function (L) { return L[0] === lvl; })[0][1], 'Escribe tu PIN de Admin.', save).then(function (ok) { if (!ok) revert('Sin cambios.'); });
-      } else {
-        // Prototipo local sin sesión: PIN en una ventana simple del navegador.
-        var pin = root.prompt ? root.prompt('PIN del Admin para cambiar el asistente') : '';
-        if (!pin) { revert('Sin cambios.'); return; }
-        save(pin).then(function (r) { if (!r.ok) revert(r.msg); });
-      }
+      ok.focus();
     };
   }
   async function get(path) {
