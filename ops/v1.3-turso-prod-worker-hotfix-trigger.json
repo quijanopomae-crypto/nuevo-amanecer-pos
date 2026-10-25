@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-23: 'Enciéndelas todas, con copia antes' / 'pueden encender las 21 funciones de proximamente disponible'. PR #1021 opens only built+wired locks: edicion-masiva-precios, precio-por-margen, edicion-masiva-productos, stock-negativo-configurable (shared pos-permissions.js). DB backup run 40031504740 first. Backend first then web. No schema, migrations, business data or secret changes.",
-  "rollback_ref": "2356dc12fc030869a6feab12136bb5ef7377391b",
+  "authorization_context": "Owner approved 2026-10-24: 'ya les doy aprobado a todo'. Worker redeploy only for parity of shared pos-permissions.js (1 new CLOSED lock 'reporte-medio-pago', default-deny anyway) and build-reader file list (inline-17/18 retired by #1041). DB backup run first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "80314b962b48159c7850e9fc797ea7359244828f",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 79,
-  "optimization": "FEATURE_LOCKS_WAVE1",
-  "target_commit": "80314b962b48159c7850e9fc797ea7359244828f"
+  "attempt": 80,
+  "optimization": "CLEANUP_PARITY_LOCKS_CLOSED",
+  "target_commit": "d22a43fa6955e2971684e9451fed674e1bcebfe5"
 }
