@@ -375,7 +375,7 @@ test('M1 Ventas KPI: ninguno sin costo normal; mixto dueño «S/ X*» + «N sin 
   }
 });
 
-test('O5: calcularGanancias (legado, solo visual) respeta un 0 real de la venta; V10 inactivo no convierte ausente en 0', () => {
+test('O5: calcularGanancias (legado, solo visual) respeta un 0 real de la venta (V10/inline-17 retirado en #1041)', () => {
   const src = read('POS/js/legacy-inline/inline-02.js');
   const line = src.split('\n').find((l) => l.startsWith('calcularGanancias=function(){'));
   const c = vm.createContext({ console, document: { addEventListener() {}, getElementById() { return null; } } });
@@ -386,5 +386,4 @@ test('O5: calcularGanancias (legado, solo visual) respeta un 0 real de la venta;
     'var ventas=[{fecha:"2026-10-21",total:30,items:[{id:1,name:"A",qty:2,precio:5,costo:0},{id:2,name:"B",qty:2,precio:10}]}];' + line, c);
   const g = c.calcularGanancias();
   assert.equal(g.gananciaBruta, 30, '0 real guardado en la venta: no toma el costo 4 actual; ausente queda 0 (legado)');
-  assert.match(read('POS/js/legacy-inline/inline-17.js'), /ventaSinStock:false,costo:_naCostValue\(prod\?\.costo\),descuento:0/);
 });
