@@ -7,11 +7,13 @@ description: "Checklist obligatorio antes de push/merge/deploy de cambios del PO
 
 - [ ] Rama aislada desde el HEAD vigente de `feature/v1.3-mobile-cloud`; `git status --short` limpio salvo el alcance.
 - [ ] Diff revisado completo; `git diff --check`; sin secretos, tokens, datos de clientes ni identificadores sensibles.
-- [ ] Layout de Venta (`#pagePOS`) e Inicio (`#pageMenu`) sin cambios; sin ediciones en `POS/css/experience-v2/pages/*.css`.
+- [ ] Layout de Venta (`#pagePOS`) e Inicio (`#pageMenu`) sin cambios **salvo cambio de diseño solicitado explícitamente por el owner** (WORK en Inicio es excepción acotada); sin ediciones en `POS/css/experience-v2/pages/*.css`.
 - [ ] Permisos nuevos con default-deny y pruebas cliente + servidor.
 - [ ] Migraciones: solo aditivas, con aprobación del owner y respaldo.
 - [ ] Unit `node --test` (Node 22): cero fallos nuevos frente a la base (fix02 T6 es flaky conocido).
 - [ ] E2E Playwright en puerto libre: todo verde; revisado a 390/768/1366.
 - [ ] Restaurados `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css`, `evidence/**` sobrescritos por la suite; no commiteados.
 - [ ] CI (`canon-critical-ci.yml`, `e2e-smoke-ci.yml`) verde en el PR.
+- [ ] Clasificación BAJO / MEDIO / ALTO según `docs/DEVELOPMENT_RISK_POLICY.md`; revisión proporcional documentada, independiente y reforzada en ALTO (puede ser automatizada). Ningún revisor humano externo o agente nominal es obligatorio para todas las tareas.
+- [ ] Preview del SHA candidato en cambios de interfaz, con viewport 390/768/1366; no confundir UI de demostración con datos reales ni ignorar fallos.
 - [ ] Deploy (si está autorizado): backend primero si cambia el Worker, luego web; anotar rollback ref; nunca los workflows prohibidos.

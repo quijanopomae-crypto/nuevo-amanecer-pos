@@ -1,6 +1,9 @@
 name: E2E Smoke CI
 
 on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
   pull_request:
     paths:
       - "tests/e2e/**"

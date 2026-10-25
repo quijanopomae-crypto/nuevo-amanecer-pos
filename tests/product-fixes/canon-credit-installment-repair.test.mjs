@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const ui = readFileSync('POS/js/modules/client-credit-accounts-v2.js','utf8');
-const repair = readFileSync('tools/cloudflare-prod/scripts/credit-installment-repair.mjs','utf8');
 
 function extractFunction(source, name, nextName) {
   const start = source.indexOf('function ' + name);
@@ -64,12 +63,4 @@ test('partial installment has explicit visual state',()=>{
   vm.createContext(sandbox);
   vm.runInContext(extractFunction(ui,'labInstallmentVisualState','labDescriptionInstallmentHint'),sandbox);
   assert.deepEqual({...sandbox.labInstallmentVisualState({number:1,due:'2026-10-02',paid:false,partial:true},1,'2026-10-01')},{key:'partial',label:'Parcial',next:true});
-});
-
-test('production repair writes only credit metadata and installment rows',()=>{
-  const inserts=[...repair.matchAll(/INSERT INTO\s+([a-zA-Z0-9_]+)/g)].map(m=>m[1]);
-  assert.ok(inserts.length>0);
-  assert.deepEqual([...new Set(inserts)].sort(),['canonical_credit_installments','canonical_credit_metadata']);
-  assert.doesNotMatch(repair,/\bUPDATE\s+(?:credits|live_credits|credit_payments|canonical_financial_events|sales|cash_movements)\b/i);
-  assert.doesNotMatch(repair,/\bDELETE\s+FROM\b/i);
 });

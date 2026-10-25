@@ -107,3 +107,18 @@ test('edicion-masiva-precios: abierto (OK dueño 2026-10-23), owner-only screen 
   }
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
+
+test('aviso-factura-duplicada stays locked for now (feature_locked, no writes)', async t => {
+  assert.equal(PERMISSIONS.featureLocked('aviso-factura-duplicada'), true) // candado cerrado hasta abrirlos todos juntos;
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
+  f.addDevice('dup-owner', 'writer', 'active', 'dup-owner-token');
+  f.addDevice('dup-employee', 'writer', 'active', 'dup-employee-token');
+  f.exec("INSERT INTO pos_device_roles(device_id,pos_role,created_by,created_at) VALUES('session:dup-employee','empleado','test','2026-10-21T00:00:00Z')");
+  const before = f.database.prepare('SELECT * FROM canonical_control').all();
+  for (const token of ['dup-owner-token', 'dup-employee-token']) for (const method of ['GET', 'POST']) {
+    const response = await f.fetch('http://localhost/features/aviso-factura-duplicada', { method, headers: { authorization: 'Bearer ' + token } });
+    const body = await response.json();
+    assert.equal(body.error, 'feature_locked'); // candado cerrado
+  }
+  assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
+});
