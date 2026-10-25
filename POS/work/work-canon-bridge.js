@@ -75,12 +75,28 @@
     if(v)v.textContent='—';
     if(d)d.textContent='Consultando CANON';
   });
-  var recent=$('.recent');
+  var recent=$('.recent'), recentNote=null;
   if(recent) {
     var rows=recent.querySelectorAll('.activity');
     rows.forEach(function(row){row.remove();});
-    var note=doc.createElement('p');note.textContent='Consulta el historial en Ventas; no se mostrarán operaciones de ejemplo.';
-    note.style.cssText='font-size:12px;color:#577086;line-height:1.6';recent.appendChild(note);
+    recentNote=doc.createElement('p');recentNote.textContent='Consulta el historial en Ventas; no se mostrarán operaciones de ejemplo.';
+    recentNote.style.cssText='font-size:12px;color:#577086;line-height:1.6';recent.appendChild(recentNote);
+  }
+  function refreshActivity(items) {
+    if (!recent) return;
+    recent.querySelectorAll('.activity').forEach(function(row){row.remove();});
+    var valid=(Array.isArray(items)?items:[]).slice(0,6).filter(function(row){return row && row.title;});
+    if (recentNote) recentNote.hidden = valid.length > 0;
+    valid.forEach(function(record){
+      var line=doc.createElement('div');line.className='activity';
+      var icon=doc.createElement('div');icon.className='activity-icon';icon.textContent='▤';
+      var info=doc.createElement('div');info.className='activity-info';
+      [['activity-title',record.title],['activity-client',record.client],['activity-date',record.date]].forEach(function(field){
+        var n=doc.createElement('div');n.className=field[0];n.textContent=String(field[1]||'').slice(0,150);info.appendChild(n);
+      });
+      var amt=doc.createElement('div');amt.className='activity-amount';amt.textContent=String(record.amount||'').slice(0,80);
+      line.append(icon,info,amt);recent.appendChild(line);
+    });
   }
   var disc=$('.chat-disclaimer');
   if(disc)disc.textContent='WORK conectado a CANON · Las acciones críticas requieren confirmación en el POS.';
@@ -160,6 +176,9 @@
     if(event.origin!==win.location.origin||event.source!==win.parent)return;
     var d=event.data;if(!d || d.type!=='na-work:response')return;
     if(d.action==='init'){
+      var role=$('.drawer-user-data span');
+      if (role) role.textContent = d.role==='Dueño' ? 'Dueño' : 'Empleado';
+      refreshActivity(d.activity);
       var rows=Array.isArray(d.metrics)?d.metrics:[];
       var targets=metrics?Array.from(metrics.querySelectorAll('.metric')):[];
       targets.forEach(function(card){
