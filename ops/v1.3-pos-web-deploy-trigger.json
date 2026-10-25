@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 184: publicar 38a723d1 (revert #871/#868 vía #878 merge dba42e22, ordenado por el dueño «revertir y republicar»). Worker 64 ya publicado (run 39665647690, live check OK asistente 5). Solo estáticos web. Rollback a Web 183 (8ff0df75).",
-  "retry_attempt": 184,
-  "retry_reason": "Dueño 2026-10-21 14:28 Lima: «revertir y republicar». Code OK asistente 2, spec OK asistente 3, LOCAL OK asistente 4 en #878.",
-  "requested_at_utc": "2026-10-21T20:02:00Z",
-  "approved_base": "38a723d1ca67a52397fed9aca229ef9cd35b0590"
+  "note": "Web 204: PRs 920, 911, 896, 908, 904, 905, 915, 817, 887, 1003 (OK del dueño 'la 1' y 'ok la 204'). Candados nuevos cerrados. Worker sin cambios (79). Respaldo run 40049364913. Rollback Web 203 (4a589e1f).",
+  "retry_attempt": 204,
+  "retry_reason": "OK del dueño 2026-10-23: 'ok la 204'.",
+  "requested_at_utc": "2026-10-24T02:45:00Z",
+  "approved_base": "4e228ea2eb6dca15adda98fe651f337e65cb23c4"
 }

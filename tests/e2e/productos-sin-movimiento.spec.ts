@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 import { readFile } from 'node:fs/promises';
 
 // Misión 5: productos sin movimiento. Datos sintéticos; sin clientes reales.
@@ -9,7 +10,7 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', dark: boolean) {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(String(e)));
   const writes: string[] = [];
-  page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method())) writes.push(r.method() + ' ' + r.url()); });
+  page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method()) && !isAssistantPing(r)) writes.push(r.method() + ' ' + r.url()); });
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
@@ -65,7 +66,9 @@ for (const dark of [false, true]) for (const width of [390, 768, 1280]) {
 
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText('Nunca vendido');
-    await expect(rows.nth(0)).toContainText('Sin costo');
+    // #892 O4: un costo 0 real se muestra 0.00, no «Sin costo».
+    await expect(rows.nth(0)).not.toContainText('Sin costo');
+    await expect(rows.nth(0).locator('.psm-value')).toHaveText('S/ 0.00');
     await expect(rows.nth(1)).toContainText('Vendido hace 45 días');
     await expect(rows.nth(1).locator('.psm-value')).toHaveText('S/ 12.00');
     await expect(screen.locator('[data-psm-total-value]')).toHaveText('S/ 12.00');

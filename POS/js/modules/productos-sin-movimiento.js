@@ -8,6 +8,8 @@
   var PAGE_ID = 'pageProductosSinMovimiento', FEATURE_ID = 'productos-sin-movimiento';
   function text(value) { return String(value == null ? '' : value).trim(); }
   function num(value) { var n = typeof value === 'number' ? value : Number(text(value).replace(',', '.')); return Number.isFinite(n) ? n : null; }
+  // Costo conocido (#892): número finito ≥ 0 o texto con dígitos. Ausente (undefined/null/'') = null; un 0 real es 0.
+  function knownCost(v) { if (typeof v !== 'number' && (typeof v !== 'string' || !/[0-9]/.test(v))) return null; var n = num(v); return n !== null && n >= 0 ? n : null; }
   function identityKey(item) {
     var id = item.id != null ? item.id : item.productoId;
     if (id != null && text(id)) return 'id:' + text(id);
@@ -48,8 +50,7 @@
         code: text(p.sku || p.barcode || p.codigo), stock: stock === null ? 0 : stock, lastSale: last.get(key) || ''
       };
       if (withValue) {
-        var cost = num(p.costo);
-        row.cost = cost !== null && cost > 0 ? cost : null;
+        row.cost = knownCost(p.costo);
         row.value = row.cost === null ? null : Math.round(Math.max(0, row.stock) * row.cost * 100) / 100;
       }
       rows.push(row);
@@ -69,8 +70,16 @@
   function policyReady() {
     try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.canAccessScreen === 'function' && p.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
   }
+  function unlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(FEATURE_ID) === false); } catch (_) { return false; }
+  }
+  // Permisos por empleado (#924): el empleado entra solo si el servidor prendió su casilla (falla cerrada).
+  function employeeMay() {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.may === 'function' && e.may(FEATURE_ID) === true); } catch (_) { return false; }
+  }
+  // Dueño como hoy, o empleado con casilla. El valor de inventario (withValue) sigue siendo solo isOwner().
   function available() {
-    try { var p = root.NA_PERMISSIONS; return isOwner() && policyReady() && !!(p && typeof p.featureLocked === 'function' && !p.featureLocked(FEATURE_ID)); } catch (_) { return false; }
+    try { return policyReady() && unlocked() && (isOwner() || employeeMay()); } catch (_) { return false; }
   }
   function dateLabel(day) { return day ? day.split('-').reverse().join('/') : 'Nunca (en este dispositivo)'; }
   function money(v) { return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -161,6 +170,7 @@
     if (exp) exp.addEventListener('click', exportCsv);
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', function () { if (!available()) render(); else update(); });
+    root.addEventListener('na:employee-perms', function () { if (!available()) render(); else update(); });
     ['na:canonical-updated', 'na:canonical-sale-projection', 'focus'].forEach(function (ev) { root.addEventListener(ev, update); });
     update();
   }

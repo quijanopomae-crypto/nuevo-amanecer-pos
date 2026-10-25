@@ -122,7 +122,7 @@ test.describe('teléfono táctil real sin cambios en el resumen', () => {
 test('tablet 768px: importe de S/ 1,000 no invade otra columna ni altera el cálculo', async ({ page }) => {
   await prepare(page, 768);
   await page.evaluate(() => window.eval('cart[0].precio=1000; posUpdateCart()'));
-  await expect(page.locator('#posTotal')).toContainText('1000.00');
+  await expect(page.locator('#posTotal')).toContainText('S/ 1,000.00');
   await setIgVisible(page, true);
   const contained = await page.evaluate(() => {
     const root = document.querySelector('#pagePOS .cart-totals')!;
@@ -133,7 +133,7 @@ test('tablet 768px: importe de S/ 1,000 no invade otra columna ni altera el cál
   });
   expect(contained).toMatchObject({ right: true, left: true, height: 44 });
   await setIgVisible(page, false);
-  await expect(page.locator('#posTotal')).toContainText('1000.00');
+  await expect(page.locator('#posTotal')).toContainText('S/ 1,000.00');
   await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
 });
 
@@ -191,12 +191,14 @@ for (const width of [768, 1366]) {
       await setIgVisible(page, enabled);
       await expect(main).toHaveCSS('flex-direction', 'row');
       await expect(label).toHaveCSS('text-transform', 'uppercase');
-      // La etiqueta TOTAL debe tener exactamente el mismo tamaño que S/ 4.50.
+      // Sin IGV, TOTAL y S/ 4.50 tienen el mismo tamaño. Con IGV visible (dueño 14:45) ambos se
+      // achican para que entren montos con miles; TOTAL queda algo menor que el importe.
       const fonts = await page.evaluate(() => ({
         label: getComputedStyle(document.querySelector('#pagePOS .total-main>span:first-child')!).fontSize,
         amount: getComputedStyle(document.getElementById('posTotal')!).fontSize,
       }));
-      expect(fonts.label).toBe(fonts.amount);
+      if (enabled) expect(parseFloat(fonts.label)).toBeLessThan(parseFloat(fonts.amount));
+      else expect(fonts.label).toBe(fonts.amount);
       await expect(label).toHaveText('Total');
       await expect(money).toHaveText('S/ 4.50');
       const bounds = await page.evaluate(() => {
@@ -229,3 +231,59 @@ test.describe('TOTAL del teléfono conserva su diseño anterior', () => {
     await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
   });
 });
+
+for (const width of [390, 768, 1024, 1280]) {
+  for (const dark of [false, true]) {
+    test(`miles S/ 111,110.00 a ${width}px ${dark ? 'oscuro' : 'claro'}: resumen, cobro, vuelto y ticket, sin desbordar ni cambiar cálculos`, async ({ page }) => {
+      await prepare(page, width);
+      await page.evaluate(d => document.body.classList.toggle('dark', d), dark);
+      await page.evaluate(() => window.eval('productos[0].precio=111110; cart[0].precio=111110; posRender(); posUpdateCart()'));
+      if (width <= 700) {
+        // En 390px el carrito es un panel: abrirlo antes de medir el Total.
+        const fab = page.locator('.cart-fab');
+        if (await fab.isVisible()) await fab.click();
+        await expect(page.locator('#posTotal')).toBeInViewport();
+        await page.waitForTimeout(600); // fin de la animación del panel
+      }
+      const total = page.locator('#posTotal');
+      await expect(total).toHaveText('S/ 111,110.00');
+      await expect(page.locator('#pagePOS .ci-sub').first()).toHaveText('S/ 111,110.00');
+      const fits = () => page.evaluate(() => {
+        const t = document.querySelector('#posTotal') as HTMLElement;
+        const main = (t.closest('.total-main') || t.parentElement)!.getBoundingClientRect();
+        const r = t.getBoundingClientRect();
+        const lab = (t.closest('.total-main')!.querySelector('span:first-child') as HTMLElement).getBoundingClientRect();
+        return { inMain: r.right <= main.right + 1 && r.left >= main.left - 1 && lab.left >= main.left - 1 && lab.right <= r.left + 1, inView: r.right <= window.innerWidth, oneLine: r.height < 2 * parseFloat(getComputedStyle(t).lineHeight || '40') };
+      });
+      for (const enabled of [false, true]) {
+        await setIgVisible(page, enabled);
+        await expect(total).toHaveText('S/ 111,110.00');
+        { const f = await fits(); expect(f, JSON.stringify(f)).toEqual({ inMain: true, inView: true, oneLine: true }); }
+      }
+      const raw = await page.evaluate(() => window.eval('({precio:cart[0].precio, total:_naTaxBreakdownForSaleItems(cart, !!appConfig.igvActive).totalVenta})'));
+      expect(raw).toMatchObject({ precio: 111110, total: 111110 });
+
+      // Cobro y vuelto: mismos números, con miles; el input sigue siendo numérico.
+      // Caja abierta simulada solo para abrir el cobro (sin tocar datos de caja).
+      await page.evaluate(() => window.eval("cajEstado={...(cajEstado||{}),abierta:true,cerrada:false,fechaApertura:obtenerHoy()}; abrirCobro('normal')"));
+      await expect(page.locator('#mCobroTotal')).toHaveText('S/ 111,110.00');
+      expect(await page.locator('#mMontoRec').inputValue()).toBe('111110.00');
+      await page.evaluate(() => { const i = document.getElementById('mMontoRec') as HTMLInputElement; i.value = '112345.5'; window.eval('calcCambio()'); });
+      await expect(page.locator('#mCambio')).toHaveText('S/ 1,235.50');
+      const change = await page.locator('#mCambio').evaluate(el => {
+        const box = el.getBoundingClientRect(); return el.scrollWidth <= (el as HTMLElement).clientWidth + 1 && box.right <= window.innerWidth;
+      });
+      expect(change).toBe(true);
+
+      // Ticket (impreso / texto para WhatsApp): mismo formato y mismo céntimo que la venta.
+      const ticket = await page.evaluate(() => {
+        const sale = { id: 1, fecha: '2026-10-21', hora: '14:30', items: [{ name: 'Producto prueba', qty: 1, precio: 111110 }], total: 111110, metodo: 'efectivo', recibido: 112345.5, vuelto: 1235.5 };
+        const out = (window as any)._naBuildThermalTicket(sale, false);
+        return String(out.text);
+      });
+      expect(ticket).toContain('111,110.00');
+      expect(ticket).toContain('1,235.50');
+      expect(ticket).not.toMatch(/111110\.00/);
+    });
+  }
+}

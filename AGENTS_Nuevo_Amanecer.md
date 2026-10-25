@@ -16,7 +16,7 @@ Aplica este orden:
 2. Capturas y ejemplos entregados para esa solicitud.
 3. `AGENTS.md` de la raíz, que define el modo normal/LAB/shadow y la frontera CANON.
 4. Este archivo `AGENTS_Nuevo_Amanecer.md`, para reglas funcionales y de seguridad.
-5. La especificación o contrato durable aplicable dentro de `docs/` o `laboratorio/pos-lab/tasks/`.
+5. La especificación o contrato durable aplicable dentro de `docs/` (el antiguo `laboratorio/pos-lab/tasks/` fue eliminado).
 6. Último comportamiento estable aprobado.
 7. Código actual del repositorio.
 
@@ -63,6 +63,10 @@ CANON define la autoridad de persistencia; **no debe equivaler a bloquear la int
 - No generes una cadena de archivos `v1`, `v2`, `v48`, `v49` para cada parche.
 - El archivo probado debe ser exactamente el archivo entregado.
 
+## Política de autorización y revisión
+
+Aplicar `docs/DEVELOPMENT_RISK_POLICY.md`: autorización única por alcance, tres riesgos, revisión independiente automatizada válida cuando se exige. Ningún rol nominal ni humano externo es un requisito universal. Una decisión explícita posterior del propietario autoriza el rediseño de la pantalla indicada.
+
 ## Flujo obligatorio
 
 1. **Comprender:** define resultado esperado, resultado actual, alcance y riesgos.
@@ -94,12 +98,12 @@ Detente y reporta antes de:
 
 - Borrar o migrar datos de manera irreversible.
 - Cambiar reglas comerciales.
-- Rediseñar módulos completos.
+- Rediseñar módulos completos fuera de una autorización específica ya vigente.
 - Añadir backend o servicios externos.
 - Hacer una refactorización extensa.
 - Tomar una decisión cuyo comportamiento esperado no esté definido.
 
-Consulta `docs/05_AUDITORIA_SEGURIDAD_ISHIKAWA.md`.
+Consulta `docs/05_AUDITORIA_SEGURIDAD_ISHIKAWA.md` (no está en `docs/`; vive dentro de `nuevo-amanecer-pos-engineer.zip`, carpeta `Nuevo_Amanecer_Codex_Project/docs/`).
 
 ## Regla Ishikawa
 
@@ -216,12 +220,7 @@ Siempre:
 - `AGENTS.md`
 - este archivo `AGENTS_Nuevo_Amanecer.md`
 
-Para LAB:
-- `laboratorio/README.md`
-- `laboratorio/LAB_POLICY.json`
-- `docs/LABORATORIO_A_CANON.md`
-- `docs/LAB_CANON_MIRROR.md`
-- el contrato de tarea bajo `laboratorio/pos-lab/tasks/`
+Para LAB: el directorio `laboratorio/` fue eliminado (2026-10-24, orden del dueño); ya no hay lecturas obligatorias de LAB. Los documentos históricos `docs/LABORATORIO_A_CANON.md` y `docs/LAB_CANON_MIRROR.md` quedan solo como registro.
 
 Para V1.3 CANON/cloud, lee la especificación V1.3 aplicable existente en `docs/` (A2, A3, A4, A5, A6 o Gate P según el alcance).
 

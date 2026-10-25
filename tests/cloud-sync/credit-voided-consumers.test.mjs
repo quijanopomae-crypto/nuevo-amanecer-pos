@@ -11,16 +11,16 @@ const inline02 = read('POS/js/legacy-inline/inline-02.js'), inline04 = read('POS
 const grab = (src, re) => { const m = src.match(re); assert.ok(m, 'fragmento no encontrado: ' + re); return m[0]; };
 const between = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); assert.ok(a >= 0 && b > a, from); return src.slice(a, b); };
 
-function sandbox({ withHelper = true } = {}) {
+function sandbox() {
   const ctx = { creditos:[], obtenerHoy:() => '2026-10-15',
     diasHasta:day => day ? Math.round((Date.parse(day) - Date.parse('2026-10-15')) / 864e5) : null };
   vm.createContext(ctx);
   const code = [
     grab(utils, /const _naNumber=[^\n]+/), grab(utils, /function _naRoundMoney\([^\n]+/),
-    withHelper ? grab(utils, /function _naIsCreditVoided\(cr\)\{[^\n]+/) : '',
+    grab(utils, /function _naIsCreditVoided\(cr\)\{[^\n]+/),
     between(utils, 'function _naInicioCredits(records)', '// Crítico'),
-    // inline-02 siempre carga después de utils; sin helper solo se prueban los respaldos de inline-01/04.
-    withHelper ? grab(inline02, /const _naSyncCreditStatus=[^\n]+/) : "const _naSyncCreditStatus=cr=>cr.status;", grab(inline02, /function _naCreditOutstanding\(cr\)\{[^\n]+/),
+    // utils.js siempre carga antes que inline-01..04 (POS/index.html), así que el helper está siempre definido.
+    grab(inline02, /const _naSyncCreditStatus=[^\n]+/), grab(inline02, /function _naCreditOutstanding\(cr\)\{[^\n]+/),
     grab(inline01, /const deudaT=[^\n]+/),
     grab(inline04, /function _naCreditCompletionDate\(cr\)\{[^\n]+/),
     between(inline04, 'function _naCreditHistoryMetrics(clientId){', 'function _naCreditBehaviorLabel'),
@@ -55,11 +55,4 @@ test('LIVE / RECONCILED y "no anulado" siguen sumando (el helper no los toma com
   const h = sandbox();
   h.ctx.creditos = [...live(), credit(9, 70, 0, { status:'LIVE', source_status:'VIGENTE' }), credit(10, 5, 0, { status:'RECONCILED', estado:'no anulado' })];
   assert.deepEqual(sums(h), { deudaT:185, score:185, total:5, porCobrar:185 });
-});
-
-test('respaldo sin helper (inline-01/04): vuelve al chequeo anterior, sin romper', () => {
-  const h = sandbox({ withHelper:false });
-  h.ctx.creditos = [...live(), credit(9, 70, 0, { anulado:true, status:'anulado' })];
-  assert.equal(h.ctx.deudaT({ id:7 }), 110);
-  assert.equal(h.run('_naCreditHistoryMetrics(7)').debt, 110);
 });

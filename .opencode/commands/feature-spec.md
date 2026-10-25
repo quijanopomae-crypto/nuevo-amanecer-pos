@@ -6,7 +6,7 @@ subtask: false
 SHADOW_EXPLICIT_ONLY.
 
 Si la solicitud actual no invoca SHADOW de forma explícita, DETENTE y usa
-`/canon-preflight` o `/lab-preflight` según corresponda.
+`/canon-preflight`.
 
 Solicitud: $ARGUMENTS
 

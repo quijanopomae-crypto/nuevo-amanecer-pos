@@ -1,18 +1,14 @@
-// Ops workflow canon-migration-0024.yml: mirrors canon-migration-0023.test.mjs.
+// Contrato de la migración 0024 (el flujo de GitHub que la aplicó ya cumplió y fue retirado; ver docs/MIGRATION_BACKUP_RESTORE.md).
 // Nothing here touches production; the maintenance script runs against local SQLite fixtures.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,existsSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import {activeCanon} from './canon-browser-harness.mjs';
 import * as roles from '../../tools/cloudflare-prod/scripts/turso-pos-roles-maintenance.mjs';
 import {encryptBackup} from '../../tools/cloudflare-prod/scripts/turso-customer-contacts-maintenance.mjs';
 
 const source=readFileSync(roles.migrationPath,'utf8');
 const prior=['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0017_canonical_live_customers.sql','0018_canonical_customer_credit_policy.sql','0020_canonical_customer_contacts.sql','0023_canonical_customer_identity.sql'];
-const WORKFLOW='.github/workflows/canon-migration-0024.yml';
-const TRIGGER='ops/canon-migration-0024.json';
-// The workflow file is added separately (it needs a token with the GitHub `workflow` scope).
-const workflow=existsSync(WORKFLOW)?readFileSync(WORKFLOW,'utf8'):null;
 function adapter(database){
   return {prepare(sql){return {sql,args:[],bind(...args){this.args=args;return this;},async all(){return {results:database.prepare(sql).all(...this.args)};}};},
     async batch(statements){return statements.map(s=>({results:database.prepare(s.sql).all(...s.args)}));}};
@@ -89,57 +85,4 @@ test('full logical backup covers schema and every table, encrypted with the exis
   assert.deepEqual(Object.keys(plain.tables).sort(),tables);
   assert.equal(plain.tables.customers.length,f.database.prepare('SELECT COUNT(*) n FROM customers').get().n);
   assert.ok(plain.schema.some(s=>s.type==='trigger'));
-});
-
-test('workflow order: contracts, read-only preflight, verified R2 backup, then 0024; no deploys',{skip:!workflow},()=>{
-  const steps=workflow.split('\n').filter(l=>/^      - name: /.test(l)).map(l=>l.replace(/^      - name: /,'').trim());
-  const at=name=>{const i=steps.findIndex(s=>s.startsWith(name));assert.ok(i>=0,'missing step '+name);return i;};
-  const order=['Require existing deployment credentials','Checkout exact authorized HEAD','Validate authorized scope','Verify migration contracts',
-    'Read-only preflight 0024','Create consistent encrypted logical Turso backup','Store and verify backup in private remote R2',
-    'Apply additive migration 0024','Verify schema and production health'];
-  const idx=order.map(at);
-  assert.deepEqual([...idx].sort((a,b)=>a-b),idx,'steps out of order');
-  assert.match(workflow,/paths:\n\s+- "ops\/canon-migration-0024\.json"/);
-  assert.match(workflow,/group: nuevo-amanecer-production-change\n\s+cancel-in-progress: false/);
-  assert.match(workflow,/R2_BUCKET: nuevo-amanecer-prod-v2-backups/);
-  assert.match(workflow,/r2 object put[^\n]+--remote/);
-  assert.match(workflow,/r2 object get[^\n]+--remote/);
-  assert.match(workflow,/test "\$\(sha256sum \/tmp\/turso-migration-0024-backup\.json/);
-  assert.match(workflow,/t\.action!=='apply-canon-migration-0024'/);
-  assert.match(workflow,/t\.destructive!==false/);
-  assert.match(workflow,/\['0024'\]/);
-  assert.match(workflow,/::add-mask::\$TURSO_PROD_AUTH_TOKEN/);
-  assert.doesNotMatch(workflow,/workflow_dispatch/);
-  assert.doesNotMatch(workflow,/wrangler deploy(?! --dry-run)/,'this workflow must not deploy Worker or POS');
-  assert.doesNotMatch(workflow,/wrangler d1 /,'Turso is the authority; D1 must not be touched');
-  assert.doesNotMatch(workflow,/set -x/);
-});
-
-test('trigger file is optional; when present it carries exactly the authorized scope',()=>{
-  if(!existsSync(TRIGGER))return;
-  const t=JSON.parse(readFileSync(TRIGGER,'utf8'));
-  assert.equal(t.action,'apply-canon-migration-0024');
-  assert.equal(t.authorized,true);assert.equal(t.authorized_by,'owner');assert.equal(t.provider,'turso');assert.equal(t.destructive,false);
-  assert.deepEqual(t.migrations,['0024']);
-  assert.match(t.feature_commit,/^[a-f0-9]{40}$/);
-});
-
-test('workflow refresh preserves ancestry needed to validate approved feature commit',{skip:!workflow},async(t)=>{
-  const {mkdtempSync,rmSync}=await import('node:fs');
-  const {tmpdir}=await import('node:os');
-  const {join}=await import('node:path');
-  const {execFileSync,spawnSync}=await import('node:child_process');
-  const root=mkdtempSync(join(tmpdir(),'migration-0024-history-'));
-  t.after(()=>rmSync(root,{recursive:true,force:true}));
-  const origin=join(root,'origin'),clone=join(root,'clone');
-  const git=(cwd,...args)=>execFileSync('git',args,{cwd,stdio:['ignore','pipe','pipe']}).toString().trim();
-  git(root,'init','--initial-branch=feature/v1.3-mobile-cloud',origin);
-  git(origin,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-m','approved feature');
-  const feature=git(origin,'rev-parse','HEAD');
-  git(origin,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-m','migration trigger');
-  git(root,'clone','file://'+origin,clone);
-  const fetch=workflow.split('\n').find(line=>line.trim().startsWith('git fetch origin ')).trim().split(/\s+/).slice(1);
-  git(clone,...fetch);
-  const out=spawnSync('git',['merge-base','--is-ancestor',feature,'HEAD'],{cwd:clone});
-  assert.equal(out.status,0,'refresh must retain feature ancestry');
 });

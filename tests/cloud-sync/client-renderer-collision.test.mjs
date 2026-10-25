@@ -10,7 +10,7 @@ const index = read('../../POS/index.html');
 const clientV2 = read('../../POS/js/modules/client-credit-accounts-v2.js');
 
 test('canonical client renderer keeps fail-closed retry and advanced renderer', () => {
-  assert.equal((inline12.match(/\bcliRender\s*=/g) || []).length, 0,
+  assert.equal((inline12.match(/\bcliRender\s*=(?!=)/g) || []).length, 0,
     'inline-12 must not replace the canonical cliRender wrapper');
   const scriptPaths = [...index.matchAll(/<script\b[^>]*\bsrc=["']([^"']+\.js)["'][^>]*>/gi)]
     .map((match) => match[1]);
@@ -18,7 +18,7 @@ test('canonical client renderer keeps fail-closed retry and advanced renderer', 
   assert.notEqual(canonicalWrapperIndex, -1, 'index loads the canonical wrapper');
   for (const scriptPath of scriptPaths.slice(canonicalWrapperIndex + 1)) {
     const source = read(`../../POS/${scriptPath}`);
-    assert.doesNotMatch(source, /\bcliRender\s*=/,
+    assert.doesNotMatch(source, /\bcliRender\s*=(?!=)/,
       `${scriptPath} must not override cliRender after inline-03`);
   }
   assert.match(inline12, /_baseCliRender\s*=\s*function\s*\(/,
@@ -27,7 +27,7 @@ test('canonical client renderer keeps fail-closed retry and advanced renderer', 
     'canonical base renderer delegates the visible Clientes list to V2');
   assert.match(clientV2, /function naRenderClientList\(rows, list\)/);
   assert.match(clientV2, /renderClientList:naRenderClientList/);
-  assert.doesNotMatch(clientV2, /\bcliRender\s*=/,
+  assert.doesNotMatch(clientV2, /\bcliRender\s*=(?!=)/,
     'V2 must own list rendering through delegation, not replace canonical cliRender');
   assert.match(inline12, /cliSearch/);
   assert.match(inline12, /cliSort/);

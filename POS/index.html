@@ -41,6 +41,9 @@
     <noscript><link rel="stylesheet" href="css/motion/notifications.css"></noscript>
     <link rel="stylesheet" href="css/client-credit-accounts-v2.css">
     <link rel="stylesheet" href="css/clientes-reporte-deuda.css">
+    <link rel="stylesheet" href="css/clientes-deudores-caja.css">
+    <link rel="stylesheet" href="css/clonar-venta.css">
+    <link rel="stylesheet" href="css/clientes-importar.css">
     <link rel="stylesheet" href="css/receipt-share.css">
     <link rel="stylesheet" href="css/experience-v2/tokens.css">
     <link rel="stylesheet" href="css/experience-v2/layout.css">
@@ -78,6 +81,7 @@
     <link rel="stylesheet" href="css/canon-desktop-dashboard.css">
     <link rel="stylesheet" href="css/mobile-inventory.css">
     <link rel="stylesheet" href="css/codigos-duplicados.css">
+    <link rel="stylesheet" href="css/edicion-masiva-productos.css">
     <link rel="stylesheet" href="css/stock-lots.css">
     <link id="naMobileHomeBaseStyles" rel="stylesheet" href="css/canon-mobile-home.css">
     <link rel="stylesheet" href="css/canon-ux-fixes.css">
@@ -95,14 +99,19 @@
     <link rel="stylesheet" href="css/kardex.css">
     <link rel="stylesheet" href="css/ventas-stock.css">
     <link rel="stylesheet" href="css/reporte-arqueo.css">
+    <link rel="stylesheet" href="css/reporte-medio-pago.css">
+    <link rel="stylesheet" href="css/panel-tesoreria.css">
     <link rel="stylesheet" href="css/historial-compras.css">
     <link rel="stylesheet" href="css/price-history.css">
     <link rel="stylesheet" href="css/etiquetas-precios.css">
+    <link rel="stylesheet" href="css/catalogo-pos.css">
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/precios-masivos.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
+<link rel="stylesheet" href="css/cobro-qr-yape-plin.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
       window.addEventListener('DOMContentLoaded', function () {
@@ -117,6 +126,10 @@
     </style>
 
 <script defer src="js/modules/caja-movimientos-historial.js"></script>
+<!-- Asistente (encendido salvo que se apague en este aparato: Configuración o ?asistente=0): si el ÚLTIMO ping dijo «dueño», se reserva el alto de la tarjeta de Inicio
+     desde el primer pintado (no mueve nada). Ese dato guardado SOLO reserva espacio; el cargador pregunta al servidor y lo quita si ya no es dueño. -->
+<style>html.na-asst-owner #naMobileWelcome{display:none!important}html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:304px}@media (min-width:380px) and (max-width:699px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:304px}}@media (min-width:700px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:398px}}@media (min-width:1100px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:314px}}</style>
+<script>try{if(localStorage.getItem('na_asistente_off')!=='1'&&localStorage.getItem('na_asistente_acc')==='owner'&&!/[?&]asistente=0\b/.test(location.search))document.documentElement.classList.add('na-asst-owner','na-asst-pre')}catch(e){}</script>
 </head>
 <body>
 <aside class="pwa-update-prompt" id="pwaUpdatePrompt" hidden role="dialog" aria-live="polite" aria-label="Nueva versión disponible">
@@ -459,6 +472,28 @@
   </div>
 </div>
 
+<div class="page" id="pageEdicionPrecios" aria-labelledby="edicionPreciosTitle">
+  <div class="pm-shell">
+    <header>
+      <h1 id="edicionPreciosTitle">Edición masiva de precios</h1>
+      <p class="pm-description">Cambia el precio de venta de muchos productos a la vez, por % o monto, o calcúlalo con un margen sobre el costo. Revisa la vista previa antes de aplicar. No cambia el stock ni las ventas.</p>
+    </header>
+    <p class="pm-status" data-pm-status role="status" aria-live="polite"></p>
+    <div data-pm-main hidden>
+      <div class="pm-controls">
+        <label>Buscar<input type="search" data-pm-search aria-label="Buscar producto" placeholder="Nombre del producto"></label>
+        <label>Categoría<select data-pm-category aria-label="Categoría"><option value="">Todas las categorías</option></select></label>
+        <label>Tipo de cambio<select data-pm-mode aria-label="Tipo de cambio"><option value="porcentaje">Subir o bajar %</option><option value="monto">Sumar o restar S/</option><option value="margen">Margen sobre costo (recargo) %</option></select></label>
+        <label>Valor<input type="number" step="0.01" inputmode="decimal" data-pm-value aria-label="Valor" placeholder="Ej. 10 o -5"></label>
+        <button type="button" data-pm-apply disabled>Aplicar</button>
+      </div>
+      <div data-pm-content></div>
+      <button type="button" class="pm-undo" data-pm-undo hidden>Deshacer último lote</button>
+      <div class="pm-log-box" data-pm-log></div>
+    </div>
+  </div>
+</div>
+
 <div class="page" id="pageAjustesInventario" aria-labelledby="ajustesInventarioTitle">
   <div class="aj-shell">
     <header>
@@ -567,10 +602,33 @@
     <div class="ra-controls" data-ra-controls hidden>
       <label>Desde<input type="date" data-ra-desde aria-label="Desde"></label>
       <label>Hasta<input type="date" data-ra-hasta aria-label="Hasta"></label>
+      <label>Cajero<select data-ra-cajero aria-label="Cajero"><option value="">Todos los cajeros</option></select></label>
       <button type="button" data-ra-export>Exportar CSV</button>
     </div>
     <p class="ra-status" data-ra-status role="status" aria-live="polite"></p>
     <div data-ra-content></div>
+    <section class="rmp-section" data-rmp-section aria-labelledby="reporteMedioPagoTitle" hidden>
+      <details class="rmp-details" data-rmp-details>
+      <summary><h2 id="reporteMedioPagoTitle">Movimientos por medio de pago por turno</h2></summary>
+      <p class="ra-description">Ventas y cobros de cada turno cerrado, separados por medio de pago. Solo lectura, con fechas de Lima.</p>
+      <div class="rmp-controls" data-rmp-controls hidden>
+        <label>Desde<input type="date" data-rmp-desde aria-label="Desde (medios de pago)"></label>
+        <label>Hasta<input type="date" data-rmp-hasta aria-label="Hasta (medios de pago)"></label>
+        <label>Cajero<select data-rmp-cajero aria-label="Cajero"><option value="">Todos</option></select></label>
+        <button type="button" data-rmp-export>Exportar CSV</button>
+      </div>
+      <p class="ra-status" data-rmp-status role="status" aria-live="polite"></p>
+      <div data-rmp-content></div>
+      </details>
+    </section>
+    <section class="pt-section" data-pt-section aria-labelledby="panelTesoreriaTitle" hidden>
+      <details class="pt-details" data-pt-details>
+      <summary><h2 id="panelTesoreriaTitle">Panel de tesorería</h2></summary>
+      <p class="ra-description">Efectivo en cada caja abierta y lo cobrado por Yape, Plin y transferencia pendiente de acreditar. Solo lectura.</p>
+      <p class="ra-status" data-pt-status role="status" aria-live="polite"></p>
+      <div data-pt-content></div>
+      </details>
+    </section>
   </div>
 </div>
 <div class="page" id="pageClienteHistorial" aria-labelledby="clienteHistorialTitle">
@@ -1330,13 +1388,17 @@
 <script src="js/adapters/canonical-ui-adapter.js"></script>
 <script src="js/config/pos-permissions.js"></script>
 <script src="js/config/pos-roles-client.js"></script>
+<script src="js/config/pos-employee-toggles.js"></script>
+<script src="js/config/employee-perms-client.js"></script>
 <script src="js/sync/canonical-client.js"></script>
 <script src="js/legacy-inline/inline-01.js"></script>
 <script src="js/modules/ticket/legacy.js"></script>
 <script src="js/legacy-inline/inline-02.js"></script>
 <script src="js/modules/ticket/overrides.js"></script>
 <script src="js/legacy-inline/inline-03.js"></script>
+<script src="js/modules/ventas-espera.js"></script>
 <script src="js/inventory/stock-lots.js"></script>
+<script src="js/inventory/presentaciones.js"></script>
 <script src="js/sync/canonical-sale-intent.js"></script>
 <script src="js/sync/canonical-sale-outbox.js"></script>
 <script src="js/sync/canonical-sale-projection.js"></script>
@@ -1414,11 +1476,9 @@
 <script id="na-security-pos-render" src="js/legacy-inline/inline-14.js"></script>
 <script id="na-security-expense-render" src="js/legacy-inline/inline-15.js"></script>
 <script src="js/legacy-inline/inline-16.js"></script>
-<script src="js/legacy-inline/inline-17.js"></script>
-
-<script src="js/legacy-inline/inline-18.js"></script>
 <script src="js/navigation/menu-navigation.js"></script>
 <script src="js/inventory/codigos-duplicados.js"></script>
+<script src="js/modules/edicion-masiva-productos.js"></script>
 <script src="js/motion/core.js"></script>
 <script src="js/motion/page-transitions.js"></script>
 <script src="js/motion/scroll-motion.js"></script>
@@ -1428,6 +1488,9 @@
 <script src="js/motion/cart-motion.js"></script>
 <script src="js/modules/client-credit-accounts-v2.js"></script>
 <script src="js/modules/clientes-reporte-deuda.js"></script>
+<script src="js/modules/clientes-deudores-caja.js"></script>
+<script src="js/modules/clonar-venta.js"></script>
+<script src="js/modules/clientes-importar.js"></script>
 <script src="js/sync/canonical-sale-view.js"></script>
 <script src="js/sync/canonical-credit-payment-bridge.js"></script>
 <script src="js/sync/canonical-payment-annul-bridge.js"></script>
@@ -1445,7 +1508,8 @@
 <script src="js/app.js"></script>
 <script src="js/modules/ticket/share-receipt.js"></script>
 <script src="js/modules/ticket/share-receipt-ui.js"></script>
-<script src="js/perf/cash-perf-probe.js"></script>
+<!-- Sonda de rendimiento de caja (#432): solo bajo demanda (?perf=1|true|yes o localStorage.na_cash_perf="1"). Sin la condición no se descarga ni se ejecuta. -->
+<script>(function(){var r=window;try{var q=new URLSearchParams(r.location.search).get('perf');if(q==='1'||q==='true'||q==='yes'||(r.localStorage&&r.localStorage.getItem('na_cash_perf')==='1')){var s=document.createElement('script');s.src='js/perf/cash-perf-probe.js';(document.body||document.documentElement).appendChild(s);return;}}catch(_){}r.NA_CASH_PERF=Object.freeze({active:false,reason:'gate_off'});})();</script>
 <script src="js/canon-pos-reference-ui.js"></script>
 <script src="js/canon-phone-sale.js"></script>
 <script src="js/canon-desktop-dashboard.js"></script>
@@ -1456,15 +1520,22 @@
 <script src="js/modules/reporte-productos-vencer.js"></script>
 <script src="js/modules/cliente-historial-compras.js"></script>
 <script src="js/modules/kardex.js"></script>
+<script src="js/modules/cobro-qr-yape-plin.js"></script>
 <script src="js/modules/ventas-stock.js"></script>
 <script src="js/modules/reporte-arqueo.js"></script>
+<script src="js/modules/reporte-medio-pago.js"></script>
+<script src="js/modules/panel-tesoreria.js"></script>
 <script src="js/inventory/historial-compras.js"></script>
 <script src="js/products/costo-compra-ficha.js"></script>
 <script src="js/modules/etiquetas-precios.js"></script>
+<script src="js/modules/catalogo-pos.js"></script>
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/precios-masivos.js"></script>
+<script src="js/modules/stock-negativo.js"></script>
 <script src="js/config/config-e2.js"></script>
+<script src="js/config/employee-perms-ui.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
 <script src="js/config/pos-annul-client.js"></script>
@@ -1491,10 +1562,18 @@
 // CANON-PWA-UPDATE-001: actualización visible, accionable y de recarga única.
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
+    var PWA_UPDATE_FAIL_MS = 120000;
     var hadController = !!navigator.serviceWorker.controller;
     var reloadingForWorkerUpdate = false;
     var updateBusy = false;
     var updateFallbackTimer = 0;
+    var updateInstallTimer = 0;
+    var watchedInstalling = null;
+    var stopInstallWatch = null;
+    var updateFailed = false;
+    var updateRetried = false;
+    var updateDismissed = false;
+    var updateAttempt = 0;
     var pwaRegistration = null;
     var prompt = document.getElementById('pwaUpdatePrompt');
     var status = document.getElementById('pwaUpdateStatus');
@@ -1580,6 +1659,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 
     function markVersionPending(message, downloading) {
       if (!hadController) return;
+      if (updateFailed || updateDismissed) return;
       if (updateBusy) return;
       versionPending = true;
       // Mientras se descarga, el botón no acepta clics: antes el primer clic esperaba la
@@ -1587,6 +1667,86 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       if (downloading) setUpdateUi(message || 'Descargando la versión nueva…', 'working', 'Descargando…', false, true);
       else { setUpdateUi(message || readyText(), 'ready', 'Recargar', true, true); }
       try { window.dispatchEvent(new CustomEvent('na:version-update-pending')); } catch (_) {}
+    }
+
+    function clearInstallWatch() {
+      window.clearTimeout(updateInstallTimer);
+      updateInstallTimer = 0;
+      if (stopInstallWatch) stopInstallWatch();
+      stopInstallWatch = null;
+      watchedInstalling = null;
+    }
+    function failPwaUpdate() {
+      if (!hadController || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
+      clearInstallWatch();
+      window.clearTimeout(updateFallbackTimer);
+      var passive = !updateBusy;
+      updateBusy = false;
+      updateFailed = true;
+      updateAttempt++;
+      if (updateRetried) {
+        // Solo se descarta en esta página: la próxima apertura vuelve a comprobar la versión.
+        updateDismissed = true;
+        versionPending = false;
+        window.clearInterval(quietTimer); quietTimer = 0;
+        if (prompt) prompt.hidden = true;
+        return;
+      }
+      versionPending = true;
+      setUpdateUi('No se pudo actualizar', 'error', 'Reintentar', true, passive);
+    }
+    function watchInstalling(registration) {
+      var installing = registration.installing;
+      if (!installing || !hadController || updateFailed || updateDismissed || watchedInstalling === installing) return;
+      clearInstallWatch();
+      watchedInstalling = installing;
+      markVersionPending('Descargando la versión nueva…', true);
+      function inspect() {
+        if (installing.state === 'installed' || installing.state === 'activated') {
+          clearInstallWatch();
+          if (installing.state === 'installed') markVersionPending();
+        } else if (installing.state === 'redundant') failPwaUpdate();
+      }
+      if (typeof installing.addEventListener === 'function') {
+        installing.addEventListener('statechange', inspect);
+        installing.addEventListener('error', failPwaUpdate);
+        stopInstallWatch = function () {
+          if (typeof installing.removeEventListener !== 'function') return;
+          installing.removeEventListener('statechange', inspect);
+          installing.removeEventListener('error', failPwaUpdate);
+        };
+      }
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
+      inspect();
+    }
+    async function checkPwaUpdate(registration) {
+      var attempt = updateAttempt;
+      try {
+        await registration.update();
+        return attempt === updateAttempt;
+      } catch (error) {
+        if (attempt === updateAttempt && (watchedInstalling || updateBusy || (updateRetried && updateInstallTimer))) failPwaUpdate();
+        return false;
+      }
+    }
+    async function retryPwaUpdate() {
+      updateFailed = false;
+      updateRetried = true;
+      updateAttempt++;
+      clearInstallWatch();
+      setUpdateUi('Descargando la versión nueva…', 'working', 'Descargando…', false);
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
+      if (!await checkPwaUpdate(pwaRegistration) || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
+      if (pwaRegistration.waiting) {
+        clearInstallWatch();
+        markVersionPending();
+      } else if (pwaRegistration.installing && pwaRegistration.installing.state !== 'redundant') {
+        watchInstalling(pwaRegistration);
+      } else {
+        clearInstallWatch();
+        versionPending = false;
+        if (prompt) prompt.hidden = true;
+      }
     }
 
     if (later) {
@@ -1626,6 +1786,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           window.clearTimeout(timer);
           if (typeof worker.removeEventListener === 'function') {
             worker.removeEventListener('statechange', inspect);
+            worker.removeEventListener('error', failed);
           }
           resolve(ok);
         }
@@ -1636,6 +1797,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
             finish(false);
           }
         }
+        function failed() { finish(false); }
 
         inspect();
         if (settled) return;
@@ -1644,7 +1806,8 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           return;
         }
         worker.addEventListener('statechange', inspect);
-        timer = window.setTimeout(function () { finish(false); }, 120000);
+        worker.addEventListener('error', failed);
+        timer = window.setTimeout(function () { finish(false); }, PWA_UPDATE_FAIL_MS);
       });
     }
 
@@ -1663,6 +1826,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       return false;
     }
     function scheduleReload() {
+      clearInstallWatch();
       enableManualUpdateMode();
       if (!hadController || reloadingForWorkerUpdate) return;
       reloadingForWorkerUpdate = true;
@@ -1703,6 +1867,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     var pwaUpdateQueued = false;
     async function runPwaUpdate() {
         if (updateBusy) return;
+        if (updateDismissed) return;
         if (saleInProgress()) {
           setUpdateUi('Termina o vacía la venta en curso: la app se actualizará sola después.', 'working', 'Esperando la venta…', false);
           afterSaleFinishes(runPwaUpdate);
@@ -1714,13 +1879,15 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           setUpdateUi('Preparando la actualización…', 'working', 'Actualizando…', false);
           return;
         }
+        if (updateFailed) { retryPwaUpdate(); return; }
         updateBusy = true;
+        var attempt = updateAttempt;
         window.clearTimeout(updateFallbackTimer);
         setUpdateUi('Buscando la versión nueva…', 'working', 'Actualizando…', false);
 
         try {
           if (!pwaRegistration.waiting && !pwaRegistration.installing && typeof pwaRegistration.update === 'function') {
-            await pwaRegistration.update();
+            if (!await checkPwaUpdate(pwaRegistration)) return;
           }
 
           var worker = pwaRegistration.waiting || pwaRegistration.installing || null;
@@ -1741,12 +1908,9 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
             return;
           }
 
-          updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
+          if (attempt === updateAttempt) updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
         } catch (error) {
-          updateBusy = false;
-          reloadingForWorkerUpdate = false;
-          window.clearTimeout(updateFallbackTimer);
-          setUpdateUi('No se pudo actualizar. Comprueba internet y vuelve a intentar.', 'error', 'Reintentar', true);
+          if (attempt === updateAttempt) failPwaUpdate();
           console.warn('No se pudo aplicar la nueva versión del POS.', error);
         }
     }
@@ -1782,32 +1946,31 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       if (pwaUpdateQueued) { pwaUpdateQueued = false; runPwaUpdate(); }
 
       if (registration.waiting) markVersionPending();
+      if (registration.installing) watchInstalling(registration);
       if (typeof registration.addEventListener === 'function') {
         registration.addEventListener('updatefound', function () {
-          if (!registration.installing || !hadController) return;
-          markVersionPending('Descargando la versión nueva…', true);
-          var installing = registration.installing;
-          if (typeof installing.addEventListener === 'function') {
-            installing.addEventListener('statechange', function () {
-              if (installing.state === 'installed') markVersionPending();
-            });
-          }
+          watchInstalling(registration);
         });
+        registration.addEventListener('error', failPwaUpdate);
       }
 
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') registration.update().catch(function () {});
+        if (document.visibilityState === 'visible') checkPwaUpdate(registration);
       });
       window.addEventListener('online', function () {
-        registration.update().catch(function () {});
+        checkPwaUpdate(registration);
       });
 
-      return registration.update().catch(function () {});
+      return checkPwaUpdate(registration);
     }).catch(function (error) {
       console.warn('No se pudo registrar el shell PWA.', error);
     }); });
   });
 }
 </script>
+<!-- Asistente: el servidor decide; se apaga por aparato en Configuración (solo Admin) o con ?asistente=0 -->
+<script src="js/modules/asistente/asistente-loader.js" defer></script>
+<!-- WORK: isolated optional interface on the canonical POS. -->
+<script src="js/work-host.js" defer></script>
 </body>
 </html>

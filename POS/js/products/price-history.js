@@ -5,9 +5,14 @@
   'use strict';
   var KEY = 'na_price_history_v1';
   var TYPES = { venta: 'Venta', mayorista: 'Mayorista', costo: 'Costo' };
-  var ORIGINS = { ficha: 'Ficha del producto', importacion: 'Importación', compra: 'Compra' };
+  var ORIGINS = { ficha: 'Ficha del producto', importacion: 'Importación', compra: 'Compra', masivo: 'Edición masiva', deshacer: 'Deshacer masivo' };
+  var LOCK_ID = 'historial-precios-producto';
   var FIELDS = ['venta', 'mayorista', 'costo'];
   var entrySeq = 0;
+  // Candado: solo con featureLocked(LOCK_ID) === false. Si falta o falla, el historial queda cerrado.
+  function enabled() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(LOCK_ID) === false); } catch (_) { return false; }
+  }
 
   function read() {
     try {
@@ -108,8 +113,9 @@
     opts = opts || {};
     var productId = opts.productId == null ? '' : String(opts.productId);
     var origin = opts.origin;
+    if (!enabled()) return [];
     if (!productId || !opts.before || !opts.after) return [];
-    if (origin !== 'ficha' && origin !== 'importacion' && origin !== 'compra') return [];
+    if (!Object.prototype.hasOwnProperty.call(ORIGINS, origin)) return [];
     var data = read();
     var list = Array.isArray(data[productId]) ? data[productId].slice() : [];
     var added = [];
@@ -223,12 +229,14 @@
     } catch (_) { return false; }
   }
   function list(productId, options) {
+    if (!enabled()) return [];
     var rows = read()[String(productId == null ? '' : productId)];
     if (!Array.isArray(rows)) return [];
     var seeCost = options && Object.prototype.hasOwnProperty.call(options, 'includeCost')
       ? !!options.includeCost
       : canSeeCost();
-    return rows.filter(function (row) { return row && (seeCost || row.type !== 'costo'); }).sort(function (a, b) {
+    var only = options && typeof options.type === 'string' && Object.prototype.hasOwnProperty.call(TYPES, options.type) ? options.type : '';
+    return rows.filter(function (row) { return row && (seeCost || row.type !== 'costo') && (!only || row.type === only); }).sort(function (a, b) {
       var delta = (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0);
       if (delta) return delta;
       return (Number(b.seq) || 0) - (Number(a.seq) || 0);
@@ -242,6 +250,8 @@
   }
   root.NA_PRICE_HISTORY = Object.freeze({
     KEY: KEY,
+    LOCK_ID: LOCK_ID,
+    enabled: enabled,
     recordDiff: recordDiff,
     recordCatalogDiff: recordCatalogDiff,
     recordPurchase: recordPurchase,

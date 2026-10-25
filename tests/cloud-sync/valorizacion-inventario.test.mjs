@@ -29,11 +29,11 @@ test('groups by inventory category, uses physical units and reconciles category 
   assert.equal(result.totals.saleValue, 16.5);
 });
 
-test('missing, blank, malformed, negative and zero costs (catalog normalizes missing to 0) count as sin costo', () => {
+test('missing, blank, malformed and negative costs count as sin costo; a real 0 cost is known (#892 O4)', () => {
   const missing = [undefined, null, '', '  ', 'sin costo', 'S/ —', NaN, Infinity, -1, false];
   const result = api.calculate([...missing.map(costo => product({ costo })), product({ costo: 0 }), product({ costo: '0' })]);
-  assert.equal(result.totals.noCostProducts, 12);
-  assert.equal(result.totals.noCostUnits, 24);
+  assert.equal(result.totals.noCostProducts, 10, 'costo 0 real (0 y "0") cuenta como conocido');
+  assert.equal(result.totals.noCostUnits, 20);
   assert.equal(result.totals.units, 24);
   assert.equal(result.totals.costValue, 0);
   assert.equal(result.totals.saleValue, 72, 'missing cost must not exclude units or sale value');

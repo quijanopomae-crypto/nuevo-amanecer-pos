@@ -263,7 +263,7 @@ function assertHealthy(result, label) {
     saveAllData: 'function', snapshotPresent: true,
   });
   assert.deepEqual(result.probe.v10, {
-    apiAvailable: 'function', dbPromiseNull: true, channelNull: true,
+    apiAvailable: 'undefined', dbPromiseNull: false, channelNull: false, // V10 retirado: no queda ningún símbolo
   });
 }
 

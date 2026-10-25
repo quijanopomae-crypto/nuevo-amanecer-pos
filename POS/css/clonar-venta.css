@@ -1,0 +1,7 @@
+/* «Clonar venta» (#160): solo el botón dentro del detalle de una venta en Ventas. */
+.na-clonar-venta-wrap { display: flex; justify-content: flex-end; padding: 8px 0 2px; }
+.na-clonar-venta-btn { min-height: 40px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--teal, #0d9488); background: transparent; color: var(--teal, #0d9488); font-weight: 700; font-size: 13px; cursor: pointer; }
+.na-clonar-venta-btn:hover:not(:disabled) { background: rgba(13, 148, 136, .08); }
+.na-clonar-venta-btn:disabled { opacity: .55; cursor: not-allowed; border-color: var(--slate, #64748b); color: var(--slate, #64748b); }
+body.dark .na-clonar-venta-btn { color: #5eead4; border-color: #5eead4; }
+body.dark .na-clonar-venta-btn:disabled { color: #94a3b8; border-color: #94a3b8; }

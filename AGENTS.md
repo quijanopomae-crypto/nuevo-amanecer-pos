@@ -16,7 +16,7 @@ Toda tarea normal del POS debe ejecutarse así:
 4. ejecutar pruebas focalizadas y regresiones;
 5. abrir Draft PR;
 6. exigir CANON Critical CI + E2E Smoke CI cuando apliquen;
-7. revisión independiente Reviewer/Forensic;
+7. clasificar BAJO / MEDIO / ALTO y aplicar `docs/DEVELOPMENT_RISK_POLICY.md`; ningún agente nominal ni revisor humano externo es universalmente obligatorio;
 8. preview temporal del mismo SHA cuando la validación visual o de navegador sea necesaria;
 9. completar merge/deploy cuando estén incluidos en la autorización vigente del owner;
 10. borrar la rama después del merge.
@@ -27,7 +27,7 @@ No existe promoción LAB -> CANON para trabajo nuevo.
 
 La solicitud explícita actual del propietario es la máxima autoridad para tareas normales de desarrollo del producto.
 
-Cuando el propietario diga «impleméntalo», «aplícalo a CANON» o autorice continuar una implementación, esa autorización cubre publicar la rama/PR, integrar y desplegar el cambio solicitado y aplicar las migraciones aditivas indispensables para activarlo. No se vuelve a pedir permiso para esos pasos dentro del mismo alcance. Se conservan pruebas, revisión independiente, respaldo previo a migraciones remotas y verificación posterior. Una petición de debatir, revisar o preparar un borrador no autoriza producción. Acciones destructivas, force-push, cambios de secrets o ampliaciones del alcance requieren autorización explícita específica. Las restricciones de la plataforma no pueden desactivarse desde este repositorio.
+Cuando el propietario diga «aprobado», «impleméntalo», «aplícalo a CANON», «corrígelo» o «continúa» en relación con una implementación concreta, esa autorización cubre publicar la rama/PR, integrar y desplegar el cambio solicitado y aplicar las migraciones aditivas indispensables para activarlo. No se vuelve a pedir permiso para esos pasos dentro del mismo alcance. Se conservan pruebas, revisión proporcional al riesgo, respaldo previo a migraciones remotas y verificación posterior. El owner no necesita repetir autorizaciones dentro del alcance aprobado. Una petición de debatir, revisar o preparar un borrador no autoriza producción. Acciones destructivas, force-push, cambios de secrets o ampliaciones del alcance requieren autorización explícita específica. Las restricciones de la plataforma no pueden desactivarse desde este repositorio.
 
 ## Zonas y agentes
 
@@ -69,8 +69,7 @@ Un candidato solo puede solicitar merge cuando:
 - el diff corresponde al alcance;
 - CANON Critical CI está verde cuando aplica;
 - E2E Smoke CI está verde cuando aplica;
-- Reviewer no tiene P0/P1 abiertos;
-- Forensic confirma integridad de datos/rutas sensibles;
+- no hay P0/P1 abiertos y existe la revisión proporcional exigida por `docs/DEVELOPMENT_RISK_POLICY.md`; la revisión independiente puede ser automatizada, realmente ejecutada y registrada;
 - el preview, si se exige, ejecuta el mismo SHA revisado.
 
 Un fallo de CI se clasifica primero como **REGRESIÓN REAL** o **TEST OBSOLETO**. No se debilitan assertions sin reemplazarlas por invariantes equivalentes o más fuertes.
@@ -119,7 +118,7 @@ En shadow mode:
 
 Reglas duras (no negociables):
 
-1. **Nunca** cambiar el layout de la pantalla Venta ni de la página Inicio (sus funciones internas sí pueden mejorar).
+1. **No modificar** los layouts de Venta o Inicio sin una petición específica y aprobada por el owner. Una autorización expresa para rediseñar Inicio —como WORK— habilita únicamente esa pantalla y ese alcance; no habilita modificar Venta, caja, finanzas o flujos de datos.
 2. Toda pantalla debe funcionar en 1366, 768 y 390 px; diseñar primero para teléfono.
 3. Permisos: tabla única `POS/js/config/pos-permissions.js`, denegación por defecto en servidor; todo cambio de permiso lleva prueba cliente + servidor.
 4. Migraciones de BD/CANON: solo aditivas, con respaldo previo y aprobación del owner.
@@ -127,3 +126,9 @@ Reglas duras (no negociables):
 6. No editar `POS/css/experience-v2/pages/*.css` (copias de laboratorio).
 7. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` sobrescritos por la suite de pruebas (restaurar con `git checkout`); los cambios intencionales a esos archivos se hacen y commitean antes de correr la suite.
 8. Nunca escribir secretos, tokens, datos de clientes ni identificadores sensibles de producción en código, docs, logs o prompts.
+
+## Clasificación de riesgo para evitar bloqueos innecesarios
+
+La política única vigente es `docs/DEVELOPMENT_RISK_POLICY.md`: BAJO (visual sin datos), MEDIO (integración sin operaciones críticas), ALTO (datos, autenticación y operaciones críticas). Tiene prioridad sobre instrucciones históricas de revisión universal en comandos o skills del repositorio. WORK exige evaluar integración, sesión, roles y caché; no se clasifica como exclusivamente visual.
+
+La ausencia de respuesta de un agente no es un bloqueo técnico: usar otro revisor automatizado independiente cuando corresponda. Si falta evidencia crítica, aislar esa parte y continuar los cambios seguros. Nunca inventar una revisión ni convertir un fallo en PASS.

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 // Ejecutar después del cableado del integrador. No se sustituyen SCREENS,
 // ALLOWED_PAGES, la navegación ni la API financiera V2 en estas pruebas.
@@ -91,7 +92,7 @@ for (const width of [1366, 768, 390]) for (const dark of [false, true]) {
     await page.setViewportSize({ width, height:900 });
     await setup(page, 'owner', dark);
     const writes: string[] = [];
-    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
     const before = await financialSnapshot(page);
     await expect(page.locator('#naClientesReporteDeudaBtn')).toBeVisible();
     await accessibleHit(page, '#naClientesReporteDeudaBtn');
@@ -168,7 +169,7 @@ test('empleado: sin botón ni datos del reporte; acceso directo muestra Sin perm
   await setup(page, 'empleado');
   const before = await financialSnapshot(page);
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method()); });
   await expect(page.locator('#naClientesReporteDeudaBtn')).toBeHidden();
   expect(await page.evaluate(() => (window as any).NA_CLIENTES_REPORTE_DEUDA.open())).toBe(false);
   await page.evaluate(() => (window as any).goPage('pageReporteDeuda'));

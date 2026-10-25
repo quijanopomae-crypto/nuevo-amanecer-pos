@@ -9,7 +9,7 @@
  * Excluidas deliberadamente (dominio unico): familia ticket (_naTk, _naTicket),
  * familia reportes (_naF8, _naF9), importacion/productos (_naImport, alt-codes,
  * category), impresion-UI (_naEsAndroid, _naEsMovil), seguridad (_naSecHash),
- * _naNewUuid (reside dentro del script V10 dormante) y un-consumidor
+ * _naNewUuid (vivia en el script V10, ya retirado) y un-consumidor
  * (_naTime24, _naParseTime24, _naUnitsPerQty, _naUnitsSold, _naLineKey,
  * _naDatePlus, _naCashierIdNumber, _naCsvCell).
  *
@@ -76,3 +76,32 @@ function _naInicioCashText(state) {
   }
   return ['Abierta', name, time].filter(Boolean).join(' · ');
 }
+
+// Costo ausente (#884/#886): el servidor y la réplica offline omiten el costo para los roles sin permiso.
+// Ausente (undefined, null, '' o texto sin dígitos) NO es 0: se muestra «—» y nunca se convierte en 0.
+// Un costo 0 real (cargado por el dueño) sigue siendo 0. _naCostValue devuelve el número o undefined.
+const NA_COST_ABSENT='—';
+function _naCostKnown(v){if(v===undefined||v===null)return false;if(typeof v==='number')return Number.isFinite(v);if(typeof v!=='string'||!/[0-9]/.test(v))return false;return Number.isFinite(_naNumber(v,NaN));}
+function _naCostValue(v){return _naCostKnown(v)?Math.max(0,_naNumber(v)):undefined;}
+if (typeof window !== 'undefined') { window._naCostKnown = _naCostKnown; window._naCostValue = _naCostValue; window.NA_COST_ABSENT = NA_COST_ABSENT; }
+
+// KPIs «Costo inv.» y «Ganancia pot.» con costos ausentes (revisión M1 de #892). Relevantes: productos con stock > 0.
+// - Ninguno ausente: cifras normales. Todos ausentes: «—» en ambos.
+// - Algunos ausentes: «Costo inv.» suma solo los costos conocidos con «*» y su rótulo dice «N sin costo»;
+//   «Ganancia pot.» con «*» solo sobre productos con costo conocido para el dueño; para un empleado queda «—».
+// Un costo 0 real cuenta como conocido. owner debe ser true solo con sesión de dueño (falla cerrada).
+function _naInvCostSummary(tracked,owner){
+  let cost=0,sale=0,knownSale=0,absent=0,relevant=0;
+  for(const p of tracked||[]){
+    const stock=Math.max(0,_naNumber(p.stock)),value=_naNumber(p.precio)*stock;
+    sale+=value;
+    if(stock<=0)continue;
+    relevant++;
+    if(_naCostKnown(p.costo)){cost+=_naCostValue(p.costo)*stock;knownSale+=value;}else absent++;
+  }
+  const money=v=>`S/${v.toFixed(0)}`;
+  if(!absent)return{costText:money(cost),gainText:money(sale-cost),saleText:money(sale),costLabel:'Costo inv.',absent:0};
+  if(absent===relevant)return{costText:NA_COST_ABSENT,gainText:NA_COST_ABSENT,saleText:money(sale),costLabel:'Costo inv.',absent};
+  return{costText:money(cost)+'*',gainText:owner?money(knownSale-cost)+'*':NA_COST_ABSENT,saleText:money(sale),costLabel:`${absent} sin costo`,absent};
+}
+if (typeof window !== 'undefined') window._naInvCostSummary = _naInvCostSummary;

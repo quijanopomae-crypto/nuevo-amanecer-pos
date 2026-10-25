@@ -20,7 +20,7 @@ const ago = n => new Date(Date.parse('2026-10-15T12:00:00-05:00') - n * 86400000
 const products = [
   { id: 1, name: 'Arroz', stock: 2, stockMin: 5, costo: 3, proveedor: 'Distribuidora Sol' },
   { id: 2, name: 'Azúcar', stock: 20, stockMin: 5, costo: 2 },             // proveedor desde movimientos
-  { id: 3, name: 'Aceite', stock: 1, stockMin: 0, costo: 0 },               // sin proveedor, sin costo
+  { id: 3, name: 'Aceite', stock: 1, stockMin: 0 },                        // sin proveedor, sin costo (ausente, #892)
   { id: 4, name: 'Sobrado', stock: 50, stockMin: 5 },                        // no se pide
   { id: 5, name: 'Inactivo', stock: 0, stockMin: 10, activo: false },
   { id: 6, name: 'Servicio', stock: 0, stockMin: 3, controlInventario: false }
@@ -130,4 +130,16 @@ test('#855: las cantidades editadas (por producto) se reaplican al recalcular; s
   // Sin ediciones queda la sugerencia.
   assert.deepEqual(plain(api.buildSuggestion(sales, products, { now, movements }).groups.map(g => g.rows[0].qty)), [7, 15, 2]);
   assert.equal(typeof api.resetQuantities, 'function');
+});
+
+test('O4 (#892): costo 0 real = 0.00 (conocido); ausente, null o vacío = «Sin costo»', () => {
+  const rows = [{ id: 21, name: 'Cero', stock: 0, stockMin: 2, costo: 0 }, { id: 22, name: 'Nulo', stock: 0, stockMin: 2, costo: null },
+    { id: 23, name: 'Vacio', stock: 0, stockMin: 2, costo: '' }, { id: 24, name: 'Ausente', stock: 0, stockMin: 2 }];
+  const plan = api.buildSuggestion([], rows, { now });
+  const by = Object.fromEntries(plan.groups.flatMap((g) => g.rows).map((r) => [r.name, r.cost]));
+  assert.deepEqual(plain(by), { Cero: 0, Nulo: null, Vacio: null, Ausente: null });
+  assert.deepEqual(plain(api.totals(plan.groups)), { lines: 4, units: 8, cost: 0, noCost: 3 });
+  const csv = api.toCsv(plan);
+  assert.match(csv, /,Cero,,0,2,0,2,2,0\.00,0\.00/);
+  assert.match(csv, /,Ausente,,0,2,0,2,2,Sin costo,Sin costo/);
 });

@@ -32,3 +32,6 @@
 #pPriceHistory time,
 #pPriceHistory small { font-size: 11px; line-height: 1.35; color: var(--slate, #64748b); overflow-wrap: anywhere; }
 #pPriceHistory span { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+#pPriceHistory .na-ph-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+#pPriceHistory .na-ph-filter button { min-height: 36px; padding: 4px 10px; border: 1px solid var(--slate, #64748b); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+#pPriceHistory .na-ph-filter button[aria-pressed="true"] { background: #0f766e; border-color: #0f766e; color: #fff; }
