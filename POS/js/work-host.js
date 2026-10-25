@@ -11,8 +11,15 @@
   function isHome() { var p=doc.getElementById('pageMenu'); return !!(p && p.classList.contains('active')); }
   // WORK is the default Inicio experience; ?work=0 is a reversible legacy fallback.
   // The fallback does not affect sales, cash, local outbox or canonical storage.
-  var featureEnabled = true, temporarilyLegacy = false;
-  try { featureEnabled = new URLSearchParams(root.location.search).get('work') !== '0'; } catch (_) {}
+  // Only the authenticated hosted CANON opens WORK by default.
+  // Local tests retain the current screens; ?work=1 exercises the new interface.
+  var featureEnabled = !!(root.NA_HOSTED_CONFIG &&
+    root.NA_HOSTED_CONFIG.environment === 'production'), temporarilyLegacy = false;
+  try {
+    var mode = new URLSearchParams(root.location.search).get('work');
+    if (mode === '1') featureEnabled = true;
+    if (mode === '0') featureEnabled = false;
+  } catch (_) {}
   function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || (featureEnabled && !temporarilyLegacy); }
   function syncView() {
     if (!isHome()) {
