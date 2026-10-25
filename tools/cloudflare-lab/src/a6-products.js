@@ -1,3 +1,4 @@
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, foreignOperationLedgerSql, crossLedgerConflict } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -76,15 +77,8 @@ function normalize(body) {
   }};
 }
 
-async function operationConflict(db, operationId) {
-  const row=await db.prepare(`SELECT operation_id FROM (
-    SELECT operation_id FROM sales WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_expense_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_accounts WHERE operation_id=?1
-  ) LIMIT 1`).bind(operationId).first();
-  return !!row;
-}
+const OWN_CREATE=['canonical_product_operations'];
+const OWN_UPDATE=['canonical_product_revisions'];
 
 async function authorityError(db, auth, body) {
   const control=await db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
@@ -152,7 +146,9 @@ export async function createCanonicalProduct(request, env, auth, json) {
     const result=JSON.parse(existing.result_json);
     return json({...result,status:'already_processed',idempotent:true},200);
   }
-  if (await operationConflict(db,body.operation_id)) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
+  const foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_CREATE).first();
+  if (foreign) return json(crossLedgerConflict(body.operation_id,foreign),409);
 
   if (await db.prepare(`SELECT product_id FROM (
       SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2
@@ -171,6 +167,7 @@ export async function createCanonicalProduct(request, env, auth, json) {
   };
   const token='product:'+crypto.randomUUID();
   const statements=[
+    foreignOperationAssertion(db,token+':foreign-operation',body.operation_id,ledgers,OWN_CREATE),
     db.prepare(`INSERT INTO canonical_product_operations
       (operation_id,command,request_hash,result_json,promotion_id,product_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
       VALUES(?1,'product.create',?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)`)
@@ -185,7 +182,7 @@ export async function createCanonicalProduct(request, env, auth, json) {
         body.unit,body.purchase_unit,body.purchase_factor,body.cost_cents,body.price_cents,body.box_price_cents,body.units_per_box,body.initial_stock_quantity,body.stock_min_quantity,
         body.expiry_date,body.includes_igv,body.tax_type,body.complementary_tax,body.tracks_inventory,body.created_at),
     db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)`).bind(token+':product'),
-    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(token+':operation',token+':product')
+    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2,?3)').bind(token+':operation',token+':product',token+':foreign-operation')
   ];
   try { await db.batch(statements); }
   catch {
@@ -193,6 +190,8 @@ export async function createCanonicalProduct(request, env, auth, json) {
     const stale=await authorityError(db,auth,body); if (stale) return json({error:stale},409);
     if (replay?.request_hash===requestHash) return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
     if (replay) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+    const raced=await foreignOperationRead(db,body.operation_id,ledgers,OWN_CREATE).first();
+    if (raced) return json(crossLedgerConflict(body.operation_id,raced),409);
     const collision=await conflictingCode(db,body,revisionsReady);
     if (collision) return json({error:'product_code_conflict',code:collision.code,product_id:collision.product_id},409);
     return json({error:'canonical_product_conflict',operation_id:body.operation_id},409);
@@ -251,12 +250,13 @@ function normalizeUpdate(body) {
 }
 
 // One statement: schema readiness, authority row and idempotent replay.
-async function updatePreflight(db, auth, body) {
+async function updatePreflight(db, auth, body, ledgers = []) {
   return db.prepare(`SELECT
       (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_product_revisions') AS ready,
+      ${foreignOperationLedgerSql(ledgers,OWN_UPDATE,'?2')} AS foreign_ledger,
       c.mode,c.active_promotion_id,c.authority_epoch,c.revision,c.minimum_client_contract,
       d.role AS device_role,d.status AS device_status,d.credential_hash
-    FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first();
+    FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId,body.operation_id).first();
 }
 
 function authorityFrom(control, auth, body) {
@@ -320,8 +320,8 @@ export async function updateCanonicalProduct(request, env, auth, json) {
   if (checked.error) return json({error:checked.error,...(checked.field?{field:checked.field}:{})},400);
   const body=checked.value, db=getDatabase(env);
 
-  let pre;
-  try { pre=await updatePreflight(db,auth,body); } catch { return json({error:'canonical_product_stage_error',stage:'preflight'},500); }
+  let pre, ledgers;
+  try { ledgers=await operationLedgers(db,auth?.ledgerTables); pre=await updatePreflight(db,auth,body,ledgers); } catch { return json({error:'canonical_product_stage_error',stage:'preflight'},500); }
   if (!pre || Number(pre.ready)!==1) return json({error:'product_update_schema_not_ready'},503);
   const denied=authorityFrom(pre,auth,body);
   if (denied) return json({error:denied},409);
@@ -335,6 +335,8 @@ export async function updateCanonicalProduct(request, env, auth, json) {
   };
   const previous=await replay();
   if (previous) return previous;
+  // After own-ledger replay, before product CAS (stale_product).
+  if (pre.foreign_ledger) return json(crossLedgerConflict(body.operation_id,{ledger:pre.foreign_ledger}),409);
 
   let state;
   try { state=await productState(db,body); } catch { return json({error:'canonical_product_stage_error',stage:'product'},500); }
@@ -352,21 +354,30 @@ export async function updateCanonicalProduct(request, env, auth, json) {
     status:'created',command:'product.update',operation_id:body.operation_id,product_id:body.product_id,
     promotion_id:body.promotion_id,authority_epoch:body.authority_epoch,metadata_revision:revision,idempotent:false
   };
+  // Atomic fence in the same write (one batch = one round trip): the 0022 trigger
+  // does not see every ledger (e.g. canonical_expense_revisions).
+  const fenceId='product-update:'+crypto.randomUUID()+':foreign-operation';
   try {
-    await db.prepare(`INSERT INTO canonical_product_revisions
+    const insert=db.prepare(`INSERT INTO canonical_product_revisions
       (operation_id,promotion_id,product_id,command,request_hash,result_json,revision,name,sku,barcode,alternate_codes_json,category,brand,description,icon,
        cost_cents,price_cents,box_price_cents,units_per_box,stock_min_quantity,expiry_date,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
       VALUES(?1,?2,?3,'product.update',?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)`)
       .bind(body.operation_id,body.promotion_id,body.product_id,requestHash,stableStringify(result),revision,body.name,body.sku,body.barcode,
         JSON.stringify(body.alternate_codes),body.category,body.brand,body.description,body.icon,body.cost_cents,body.price_cents,
         body.box_price_cents,body.units_per_box,body.stock_min_quantity,body.expiry_date,body.authority_epoch,body.expected_control_revision,
-        body.client_contract,auth.principalId,auth.credentialHash,body.created_at).run();
+        body.client_contract,auth.principalId,auth.credentialHash,body.created_at);
+    await db.batch([
+      foreignOperationAssertion(db,fenceId,body.operation_id,ledgers,OWN_UPDATE),
+      insert,
+      db.prepare('DELETE FROM canonical_assertions WHERE assertion_id=?1').bind(fenceId),
+    ]);
   } catch (error) {
     try {
       const again=await replay(); if (again) return again;
-      const now=await updatePreflight(db,auth,body);
+      const now=await updatePreflight(db,auth,body,ledgers);
       const stale=authorityFrom(now,auth,body); if (stale) return json({error:stale},409);
       const message=String(error && error.message || '');
+      if (now?.foreign_ledger) return json(crossLedgerConflict(body.operation_id,{ledger:now.foreign_ledger}),409);
       if (/operation_id_conflict/.test(message)) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
       const fresh=await productState(db,body);
       if (!fresh) return json({error:'product_not_found',product_id:body.product_id},409);

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { webcrypto, randomUUID } from 'node:crypto';
 import { a6Fixture, response } from './a6-fixture.mjs';
+import { resetOperationLedgerCache } from '../../tools/cloudflare-lab/src/operation-ledgers.js';
 import { webLocks } from './web-locks-sim.mjs';
 
 const read = (path) => readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
@@ -31,6 +32,7 @@ export async function activeCanon(t, { migrations = [] } = {}) {
   f.database.exec('DROP TRIGGER canonical_control_no_legacy');
   f.exec("UPDATE canonical_control SET mode='ACTIVE',revision=revision+1,authority_epoch=authority_epoch+1,minimum_client_contract='a6-gate-c-v1' WHERE id=1");
   for (const name of [...new Set([...ACTIVE_MIGRATIONS, ...migrations])]) f.database.exec(read('infra/database/migrations/' + name));
+  resetOperationLedgerCache(); // schema just changed: forget the per-isolate ledger list
   return f;
 }
 

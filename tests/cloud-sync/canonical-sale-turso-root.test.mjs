@@ -1,14 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {readFileSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
 import {activeCanon, device} from './canon-browser-harness.mjs';
 import {tursoSqlite} from './turso-sqlite-protocol.mjs';
 const source = name => readFileSync('POS/js/' + name, 'utf8');
 const saleScripts = ['canonical-sale-intent','canonical-sale-outbox','canonical-sale-projection','canonical-sale-integration','canonical-sale-view'];
 
-async function fixture(t, options={}) {
-  const f=await activeCanon(t,{migrations:['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0024_pos_roles_owner_pin.sql']});
+const ROOT_MIGRATIONS=['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0024_pos_roles_owner_pin.sql'];
+// Production schema: every migration 0014-0034, i.e. all 14 operation ledgers (incl. pos_purchases, 0028).
+const FULL_MIGRATIONS=readdirSync(new URL('../../infra/database/migrations/',import.meta.url)).filter(n=>/^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
+
+async function fixture(t, options={}, migrations=ROOT_MIGRATIONS) {
+  const f=await activeCanon(t,{migrations});
   const turso=tursoSqlite(f.database);
   f.env.DB=turso.adapter;
   f.env.nuevo_amanecer_lab={prepare(){throw Error('D1 must not be used');}};
@@ -148,7 +152,7 @@ test('post-sale ACTIVE refresh keeps previous history visible until the new comp
   assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002']);
 });
 
-test('production simple sale commits auth, authority, stock and cash in one Turso pipeline',async t=>{
+test('production simple sale commits auth, authority, stock and cash in one atomic Turso pipeline (partial schema: plus one ledger re-read)',async t=>{
   const {f,tab,turso}=await fixture(t);
   f.env.RUNTIME_ENVIRONMENT='production';
   const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({
@@ -159,9 +163,41 @@ test('production simple sale commits auth, authority, stock and cash in one Turs
   const receipt=await tab.api.createSale(intent);
   const calls=turso.calls.slice(start);
   assert.equal(receipt.status,'created');
-  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['batch'],
-    'simple production sale must cross Worker→Turso only once');
+  // This fixture's schema lacks most operation ledgers (no 0017-0034). Since delta 3
+  // (SPEC-885-delta2 O-D2-1) an incomplete ledger list is never served from the
+  // isolate cache: the fast sale re-reads it (1 standalone sqlite_master read) so a
+  // ledger created after the last read is still fenced. That read exists only on a
+  // partial schema. With all 14 ledgers and this same reused adapter the sale is 2
+  // pipelines (stock-lots reads + atomic commit), exactly as on ed480383: see the
+  // full-schema sibling test below (and operation-ledger-trip-budget for worker-entry).
+  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['execute','batch'],
+    'simple production sale (partial schema): one ledger re-read + one atomic Turso pipeline');
+  assert.match(calls[0].requests[0].stmt.sql,/^SELECT name FROM sqlite_master WHERE type='table' AND name IN \('sales'/);
   assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_write_guards').n,0);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_assertions').n,0);
+});
+
+test('production simple sale on the full schema (14 ledgers) with a reused adapter: two pipelines, no sqlite_master read',async t=>{
+  // Guard for M6: any extra Worker→Turso trip on the production schema must fail here.
+  // Reused adapter (one per fixture, like P-1), warm isolate after setup. Same as ed480383:
+  // pipeline 1 = stock-lots/product reads, pipeline 2 = guard+sale+stock+cash atomic commit.
+  const {f,tab,turso}=await fixture(t,{},FULL_MIGRATIONS);
+  f.env.RUNTIME_ENVIRONMENT='production';
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({
+    sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]
+  });
+  const start=turso.calls.length;
+  const receipt=await tab.api.createSale(intent);
+  const calls=turso.calls.slice(start);
+  assert.equal(receipt.status,'created');
+  assert.deepEqual(calls.map(call=>call.requests?.map(r=>r.type).filter(type=>type!=='close')),[['batch'],['batch']],
+    'full schema, reused adapter: exactly two Turso pipelines (reads + atomic commit), like ed480383');
+  const sqls=calls.flatMap(call=>call.requests.flatMap(r=>r.type==='execute'?[r.stmt.sql]:r.type==='batch'?r.batch.steps.map(s=>s.stmt.sql):[]));
+  assert.equal(sqls.filter(sql=>/sqlite_master/.test(sql)).length,0,'complete ledger list: no sqlite_master read at all');
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
   assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_write_guards').n,0);
   assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_assertions').n,0);
