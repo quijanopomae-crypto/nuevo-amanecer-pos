@@ -152,12 +152,23 @@
     if(!Recognition){var c=$('#voiceCaptionBox'),t=$('#voiceSubtitle');if(c)c.hidden=false;if(t)t.textContent='Reconocimiento de voz no disponible. Puedes escribir en el cuadro inferior.';return;}
     if(speech){try{speech.stop();}catch(_){}speech=null;setState('');return;}
     var recog=new Recognition();speech=recog;recog.lang='es-PE';recog.interimResults=false;recog.maxAlternatives=1;
-    recog.onresult=function(e){var t=e.results&&e.results[0]&&e.results[0][0]?e.results[0][0].transcript:'';if(t)ask(t,'voice');};
+    recog.onresult=function(e){if(speech!==recog)return;var t=e.results&&e.results[0]&&e.results[0][0]?e.results[0][0].transcript:'';if(t)ask(t,'voice');};
     recog.onerror=function(){setState('');speech=null;};
     recog.onend=function(){setState('');speech=null;};
     setState('listening');
     try{recog.start();}catch(_){speech=null;setState('');}
   });
+  function stopRealVoice() {
+    var active=speech;speech=null;
+    if(active){try{active.abort();}catch(_){}}
+    if('speechSynthesis' in win)win.speechSynthesis.cancel();
+    setState('');
+  }
+  // Keep the design's close handler; release the real bridge microphone first.
+  ['#voiceExit','#chatBack'].forEach(function(selector){
+    var button=$(selector);if(button)button.addEventListener('click',stopRealVoice,true);
+  });
+  win.addEventListener('pagehide',stopRealVoice);
   intercept($('#voiceStop'),'click',function(){
     if(speech){try{speech.abort();}catch(_){}speech=null;}
     if('speechSynthesis'in win)win.speechSynthesis.cancel();
@@ -170,7 +181,7 @@
     if(!spoken && 'speechSynthesis' in win)win.speechSynthesis.cancel();
   });
   intercept($('#newConversation'),'click',function(){
-    pending.clear();if($msgs)$msgs.replaceChildren();bubble('theirs','Nueva conversación de WORK. Tus datos del POS no se han modificado.');
+    post('reset');pending.clear();if($msgs)$msgs.replaceChildren();bubble('theirs','Nueva conversación de WORK. Tus datos del POS no se han modificado.');
   });
   win.addEventListener('message',function(event){
     if(event.origin!==win.location.origin||event.source!==win.parent)return;
@@ -202,13 +213,23 @@
       if(d.ok)say(output);
     }
   });
+  // Render actual displayed turns in the voice history instead of the standalone demo array.
+  var historyToggle=$('#voiceHistoryToggle');
+  if(historyToggle)historyToggle.addEventListener('click',function(){
+    var list=$('#voiceHistoryList'), count=$('#voiceHistoryCount');
+    if(!list||!$msgs)return;
+    list.replaceChildren();
+    var rows=Array.from($msgs.querySelectorAll('.chat-row'));
+    rows.forEach(function(row){var text=row.querySelector('.chat-bubble > div');if(!text)return;var item=doc.createElement('p');item.textContent=(row.classList.contains('mine')?'Tú: ':'WORK: ')+text.textContent;list.appendChild(item);});
+    if(count)count.textContent=String(rows.filter(function(r){return r.classList.contains('mine');}).length);
+  });
   // WORK closes to the existing POS without destroying app state.
   var closeBtn=$('#chatBack');if(closeBtn)closeBtn.title='Volver a WORK';
   var closeMain=doc.createElement('button');
   closeMain.type='button';closeMain.textContent='Volver al POS';
   closeMain.style.cssText='position:fixed;right:8px;bottom:8px;z-index:13;background:#073d59;color:#fff;border:0;border-radius:12px;padding:8px 12px;font-size:11px;box-shadow:0 2px 7px #0003';
   closeMain.setAttribute('aria-label','Volver al punto de venta');
-  closeMain.addEventListener('click',function(){post('close');});
+  closeMain.addEventListener('click',function(){stopRealVoice();post('close');});
   doc.body.appendChild(closeMain);
   post('metrics');
 })(window);

@@ -20,9 +20,16 @@
     if (mode === '1') featureEnabled = true;
     if (mode === '0') featureEnabled = false;
   } catch (_) {}
+  function sessionReady() {
+    return !(root.NA_HOSTED_CONFIG && root.NA_HOSTED_CONFIG.environment === 'production') ||
+      !!(root.NA_ROLES && root.NA_ROLES.confirmed === true);
+  }
+  function ownerDataAllowed() {
+    try { return sessionReady() && !!(root.NA_ROLES && root.NA_ROLES.isOwner() === true); } catch (_) { return false; }
+  }
   function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || !featureEnabled || !temporarilyLegacy; }
   function syncView() {
-    if (!isHome()) {
+    if (!sessionReady() || !isHome()) {
       temporarilyLegacy = false;
       if (overlay) close();
     } else if (featureEnabled && !temporarilyLegacy && !overlay) {
@@ -31,6 +38,7 @@
     syncButton();
   }
   function realMetrics() {
+    if (!ownerDataAllowed()) return [];
     var items = Array.from(doc.querySelectorAll('#pageMenu .quick-stats .qs-card'));
     return items.map(function (card) {
       var label = card.querySelector('.qs-label'), value = card.querySelector('.qs-val'), detail = card.querySelector('.qs-sub');
@@ -38,6 +46,7 @@
     }).filter(function (x) {return x.label && x.value;});
   }
   function realActivity() {
+    if (!ownerDataAllowed()) return [];
     var list = doc.getElementById('naMobileActivityList');
     if (!list) return [];
     return Array.from(list.querySelectorAll('.na-mobile-activity-row')).slice(0,6).map(function (el) {
@@ -56,12 +65,15 @@
       target.postMessage(Object.assign({type:'na-work:response'},data),root.location.origin);
     }
   }
+  var history = [], generation = 0, busy = false;
+  function resetConversation() { history = []; generation++; busy = false; }
   function close() {
+    resetConversation();
     if (overlay) { overlay.remove(); overlay=null; frame=null; doc.body.classList.remove('na-work-open'); }
     syncButton();
   }
   function open() {
-    if (overlay || !doc.body) return;
+    if (overlay || !doc.body || !sessionReady()) return;
     overlay=doc.createElement('section');
     overlay.id='naWorkOverlay';
     overlay.setAttribute('aria-label','WORK — Nuevo Amanecer');
@@ -78,9 +90,13 @@
     syncButton();
   }
   async function ask(target,id,message) {
+    if (busy) { respond(target,{action:'chat',id:id,ok:false,text:'Espera a que termine la consulta actual.'}); return; }
+    var requestGeneration = generation;
+    busy = true;
     try {
-      if (!root.NA_ROLES || typeof root.NA_ROLES.api!=='function') throw Error('Asistente no disponible en esta sesión');
-      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:String(message||'').slice(0,1500),context:{products:[]}});
+      if (!sessionReady() || !root.NA_ROLES || typeof root.NA_ROLES.api!=='function') throw Error('Asistente no disponible en esta sesión');
+      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:String(message||'').slice(0,1500),history:history.slice(),context:{products:[]}});
+      if (requestGeneration !== generation || !sessionReady()) return;
       var out=answer && typeof answer==='object' ? answer : {};
       if (out.error) throw Error('El servidor respondió: '+String(out.error).slice(0,80));
       var text=out.texto || out.text || out.reply || out.respuesta || out.answer || out.message || '';
@@ -88,15 +104,22 @@
       if (!text && out.final) text=typeof out.final==='string'?out.final:out.final.text || out.final.respuesta || '';
       if (!text) text='El servidor respondió sin texto visible. La operación no se considera completada.';
       if (Array.isArray(out.proposals) && out.proposals.length) text+='\n\nHay propuestas pendientes de confirmar mediante el flujo autorizado del POS. No se han ejecutado automáticamente.';
+      // Preserve server signatures unchanged; no synthetic assistant turns enter authenticated memory.
+      if (Array.isArray(out.turns) && out.turns.length === 2 && out.turns.every(function(t){return t && ['user','assistant'].indexOf(t.role)>=0 && typeof t.content==='string' && t.content.length<=12000 && typeof t.sig==='string';})) {
+        history = history.concat(out.turns).slice(-24);
+        while (history.length && JSON.stringify(history).length > 60000) history.splice(0,2);
+      }
       respond(target,{action:'chat',id:id,ok:true,text:String(text).slice(0,12000)});
     } catch (err) {
+      if (requestGeneration !== generation || !sessionReady()) return;
       respond(target,{action:'chat',id:id,ok:false,text:err && err.message ? String(err.message).slice(0,200) : 'Error de conexión. No se ha confirmado ninguna acción.'});
-    }
+    } finally { if (requestGeneration === generation) busy = false; }
   }
   root.addEventListener('message',function (event) {
     if (event.origin!==root.location.origin || !frame || event.source!==frame.contentWindow) return;
     var data=event.data;
     if (!data || typeof data!=='object' || typeof data.type!=='string' || !data.type.startsWith('na-work:')) return;
+    if (data.type==='na-work:reset') {resetConversation();return;}
     if (data.type==='na-work:close') {temporarilyLegacy = true;close();return;}
     if (data.type==='na-work:metrics') {respond(event.source,initPayload());return;}
     if (data.type==='na-work:navigate') {
@@ -125,6 +148,7 @@
     var home=doc.getElementById('pageMenu');
     if (home && root.MutationObserver) new root.MutationObserver(syncView).observe(home,{attributes:true,attributeFilter:['class']});
     root.addEventListener('pageshow', syncView);
+    root.addEventListener('na:role', syncView);
     syncView();
     // Refresh read-only figures from the POS DOM; does not query the backend or change data.
     root.setInterval(function(){if(overlay && isHome() && frame)respond(frame.contentWindow,initPayload());},10000);
