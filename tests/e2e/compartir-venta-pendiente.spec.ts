@@ -75,7 +75,7 @@ async function openHistoryTicket(page: Page, saleId: string) {
   await page.evaluate(() => (window as any).ventasRender());
   const button = page.locator(`#ventasContent [data-na-sale-action="ticket"][data-sale-id="${saleId}"]`).first();
   if (!(await button.isVisible())) await page.locator('#ventasContent [data-na-sale-action="toggle"]').filter({ hasText: saleId.replace('V-', '') }).first().click();
-  await button.click();
+  await button.evaluate((el) => (el as HTMLElement).click()); // clic por DOM: el listado se redibuja y el clic con actionability se quedaba reintentando
   await page.locator('#mTicket.open').waitFor();
   return readPreview(page);
 }
