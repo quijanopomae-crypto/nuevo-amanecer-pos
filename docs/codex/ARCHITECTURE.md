@@ -23,7 +23,7 @@
 
 ## Capas de CSS
 Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.css` → `responsive.css` → hojas CANON (`canon-*.css`, `config-*.css`, `inventario-redesign.css`, `mobile-drawer.css`, `proximamente.css`, …) → `theme-dark.css` → correcciones finales (`inventory-form-polish.css`). Para cambios nuevos prefiere una hoja CANON específica y acotada por id de página.
-- `POS/css/experience-v2/pages/*.css` son **copias de laboratorio: no editar**. Se verifican con `node tools/pos-experience/promote-lab-visuals.mjs --check`.
+- `POS/css/experience-v2/pages/*.css` eran copias del laboratorio (retirado; `tools/pos-experience/` ya no existe): hoy son CSS de producción y se pueden editar cuando el cambio lo requiere.
 
 ## Backend y datos
 - Cloudflare Worker (`tools/cloudflare-lab/src/worker.js`) + base de datos **Turso** (vía `turso-d1-adapter.js`).

@@ -1,134 +1,40 @@
-# AGENTS.md — Modos de trabajo del proyecto Nuevo Amanecer
+# AGENTS.md — Cómo trabajar en Nuevo Amanecer (guía corta)
 
-## Estado operativo del propietario
+CANON_DEFAULT = true · POS_LAB_RETIRED = true · rama activa: `feature/v1.3-mobile-cloud`
 
-**CANON_DEFAULT = true**
-**POS_LAB_RETIRED = true**
-**BRANCH_PREVIEW_REQUIRED = true**
-
-CANON es la única fuente funcional del producto. El antiguo POS-LAB deja de ser una zona de desarrollo activa.
-
-Toda tarea normal del POS debe ejecutarse así:
-
-1. partir del HEAD vigente de `feature/v1.3-mobile-cloud`;
-2. crear una rama aislada `feature/*`, `fix/*`, `perf/*` o `arch/*`;
-3. modificar únicamente el alcance autorizado;
-4. ejecutar pruebas focalizadas y regresiones;
-5. abrir Draft PR;
-6. exigir CANON Critical CI + E2E Smoke CI cuando apliquen;
-7. clasificar BAJO / MEDIO / ALTO y aplicar `docs/DEVELOPMENT_RISK_POLICY.md`; ningún agente nominal ni revisor humano externo es universalmente obligatorio;
-8. preview temporal del mismo SHA cuando la validación visual o de navegador sea necesaria;
-9. completar merge/deploy cuando estén incluidos en la autorización vigente del owner;
-10. borrar la rama después del merge.
-
-No existe promoción LAB -> CANON para trabajo nuevo.
+Objetivo: que un cambio pequeño (CSS, texto, color, espaciado) sea fácil de hacer y de publicar, también desde el móvil. Guía paso a paso: `docs/GUIA_CAMBIO_RAPIDO.md`. Política de riesgo y publicación: `docs/DEVELOPMENT_RISK_POLICY.md`.
 
 ## Regla principal
 
-La solicitud explícita actual del propietario es la máxima autoridad para tareas normales de desarrollo del producto.
+El pedido explícito del dueño ES la autorización. «Cambia el color de X», «aplícalo», «corrígelo», «continúa» cubren hacer el cambio, probarlo, abrir el PR, integrarlo y publicarlo, dentro de ese alcance. No pidas permiso otra vez por cada paso ni exijas validación visual previa: la captura o el preview son una ayuda, no un requisito para empezar. Si no puedes probar algo, dilo y sigue con lo demás; no te niegues a trabajar.
 
-Cuando el propietario diga «aprobado», «impleméntalo», «aplícalo a CANON», «corrígelo» o «continúa» en relación con una implementación concreta, esa autorización cubre publicar la rama/PR, integrar y desplegar el cambio solicitado y aplicar las migraciones aditivas indispensables para activarlo. No se vuelve a pedir permiso para esos pasos dentro del mismo alcance. Se conservan pruebas, revisión proporcional al riesgo, respaldo previo a migraciones remotas y verificación posterior. El owner no necesita repetir autorizaciones dentro del alcance aprobado. Una petición de debatir, revisar o preparar un borrador no autoriza producción. Acciones destructivas, force-push, cambios de secrets o ampliaciones del alcance requieren autorización explícita específica. Las restricciones de la plataforma no pueden desactivarse desde este repositorio.
+## Flujo (5 pasos)
 
-## Zonas y agentes
+1. Parte del HEAD de `feature/v1.3-mobile-cloud` y crea una rama `feature/*`, `fix/*` o `perf/*`.
+2. Haz el cambio mínimo, solo del alcance pedido.
+3. Corre las pruebas del archivo tocado (Node 22: `node --test tests/<carpeta>/<archivo>.test.mjs`); compara con la base: cero fallos nuevos.
+4. Abre PR; que pase CANON Critical CI y E2E Smoke CI. Un fallo se clasifica como regresión real o prueba obsoleta; nunca se tapa ni se debilita una prueba para dar verde.
+5. Integra y, si el dueño lo pidió, publica (ver guía). Borra la rama.
 
-- **CANON** → `pos-canon-implementer`: producto `POS/**` y código CANON versionado dentro del alcance autorizado. Deploy remoto únicamente dentro de la autorización vigente descrita arriba.
-- **PREVIEW DE RAMA** → no es otra copia del producto: sirve exactamente el SHA del Draft PR/candidato.
-- **POS-LAB histórico** → retirado. `laboratorio/pos-lab/**` no es destino de nuevas escrituras ni fuente de promoción.
-- **SHADOW legacy** → `pos-implementer`: solo infraestructura/evidence shadow; `PRODUCT_WRITE = DENIED`.
-- **PLANNER** → `pos-planner`: READ-ONLY.
-- **REVIEWER** → `pos-reviewer`: READ-ONLY independiente.
-- **TESTER** → `pos-tester`: TEST-ONLY; no cambia expectativas para fabricar PASS.
+## Riesgo, en una línea
 
-La referencia corta es `.opencode/ROLE_MAP.md`.
+BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, sin revisor externo. MEDIO = pantallas que usan una API existente: revisión técnica documentada. ALTO = ventas, pagos, crédito, caja, inventario, clientes, permisos, sincronización, migraciones, Worker: revisión independiente (puede ser automatizada) y respaldo. Se usa el riesgo mayor del cambio real.
 
-## Seguridad Git
+## Lo que NO se toca sin pedido explícito del dueño (protecciones que se mantienen)
 
-Antes y después de cambios:
+- Layouts de Venta (`#pagePOS`) e Inicio (`#pageMenu`): se cambian cuando el dueño lo pide para esa pantalla; ese pedido basta.
+- Permisos y candados: `POS/js/config/pos-permissions.js` (tabla única, denegación por defecto, `FEATURE_LOCKS`). Costos, totales y proveedores son solo del dueño. Todo cambio de permiso lleva prueba de cliente y de servidor. No abrir candados en bloque.
+- Datos de producción: migraciones solo aditivas y con respaldo previo; nunca borrar datos; nunca alterar ventas ni abonos pendientes (outbox).
+- Secretos: nunca escribir tokens, claves ni datos de clientes en código, docs, logs o prompts. Los cambios de secrets requieren orden explícita.
+- Worker de producción y backend: `tools/cloudflare-lab/**` (nombre histórico, es producción), `tools/cloudflare-prod/**`, `tools/cloudflare-backup/**`. No se borra ni se renombra por nombre.
+- Publicación: la web se publica con el manifiesto de `tools/release/web-release.mjs` (rollback, SHA de producción y CI exacta). Nada de force-push ni de workflows de cutover/migración sin orden del dueño.
+- POS-LAB está retirado: no crear ramas `lab/*` ni escribir en `laboratorio/**`. El modo SHADOW legacy sigue con `PRODUCT_WRITE = DENIED`.
+- No editar `POS/css/experience-v2/pages/*.css`. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si los sobrescribió la suite (restaurar con `git checkout`).
 
-- confirmar rama y HEAD;
-- `git status --short`;
-- pruebas focalizadas;
-- regresiones relevantes;
-- `git diff --check`;
-- revisar diff completo.
+## Diseño
 
-Prohibido sin autorización vigente que cubra la acción:
+Teléfono primero (390 px). Revisa como mínimo 390, 768 y 1366 px cuando el cambio es visual. Los 8 anchos de `AGENTS_Nuevo_Amanecer.md` son referencia para trabajo grande, no requisito de un cambio de 1 línea.
 
-- merge a CANON fuera del alcance aprobado;
-- deploy de producción fuera del alcance aprobado;
-- force-push;
-- cambios de secrets;
-- migraciones remotas fuera del alcance aprobado;
-- borrar datos;
-- ocultar o saltar tests fallidos.
+## Contexto adicional (leer solo si hace falta)
 
-## Gates de rama
-
-Un candidato solo puede solicitar merge cuando:
-
-- el diff corresponde al alcance;
-- CANON Critical CI está verde cuando aplica;
-- E2E Smoke CI está verde cuando aplica;
-- no hay P0/P1 abiertos y existe la revisión proporcional exigida por `docs/DEVELOPMENT_RISK_POLICY.md`; la revisión independiente puede ser automatizada, realmente ejecutada y registrada;
-- el preview, si se exige, ejecuta el mismo SHA revisado.
-
-Un fallo de CI se clasifica primero como **REGRESIÓN REAL** o **TEST OBSOLETO**. No se debilitan assertions sin reemplazarlas por invariantes equivalentes o más fuertes.
-
-## Retiro de POS-LAB
-
-El POS-LAB activo queda retirado.
-
-- no crear ramas `lab/*`;
-- no ejecutar `/lab-preflight` ni `/lab-validate`;
-- no publicar GitHub Pages LAB;
-- no ejecutar deploy/refresh remoto LAB;
-- no usar `laboratorio/pos-lab/**` como fuente de verdad;
-- `POS/**` nunca depende en runtime de `laboratorio/**`.
-
-Los contratos/evidence históricos pueden conservarse como auditoría hasta una limpieza posterior explícita.
-
-**Importante:** `tools/cloudflare-lab/**` NO se borra por nombre. Parte de ese árbol contiene hoy el Worker/backend y harnesses usados también por CANON/producción. Su renombre o partición requiere una migración separada con pruebas.
-
-Documentos vigentes:
-
-- `docs/BRANCH_PREVIEW_WORKFLOW.md`
-- `docs/LAB_RETIREMENT.md`
-- `REPO_MAP.yaml`
-- `docs/V1.3_STATUS.md`
-- `AGENTS_Nuevo_Amanecer.md`
-
-Los documentos LAB anteriores pasan a ser evidencia histórica y no habilitan un flujo LAB nuevo.
-
-## Shadow mode legacy
-
-El shadow mode sigue disponible únicamente cuando una tarea lo invoque explícitamente.
-
-En shadow mode:
-
-- `PRODUCT_WRITE = DENIED`;
-- solo puede escribir infraestructura/evidence según su contrato;
-- no gobierna automáticamente tareas normales del POS.
-
-## Contexto para Codex (resumen; detalle en `docs/codex/`)
-
-- Negocio, reglas de farmacia/caja/roles y reglas de diseño: `docs/codex/BUSINESS_CONTEXT.md`
-- Mapa de arquitectura (módulos, CSS, backend, sync, migraciones, deploy, workflows prohibidos): `docs/codex/ARCHITECTURE.md`
-- Pruebas (Node 22, unit, e2e en puerto libre, archivos que la suite sobrescribe): `docs/codex/TESTING.md`
-- Skills del repo para tareas recurrentes: `.agents/skills/` (add-screen, add-permission, add-migration, unlock-proximamente-feature, write-e2e-test, pre-publish-verification)
-
-Reglas duras (no negociables):
-
-1. **No modificar** los layouts de Venta o Inicio sin una petición específica y aprobada por el owner. Una autorización expresa para rediseñar Inicio —como WORK— habilita únicamente esa pantalla y ese alcance; no habilita modificar Venta, caja, finanzas o flujos de datos.
-2. Toda pantalla debe funcionar en 1366, 768 y 390 px; diseñar primero para teléfono.
-3. Permisos: tabla única `POS/js/config/pos-permissions.js`, denegación por defecto en servidor; todo cambio de permiso lleva prueba cliente + servidor.
-4. Migraciones de BD/CANON: solo aditivas, con respaldo previo y aprobación del owner.
-5. Nunca alterar ventas ni abonos pendientes (outbox/sin confirmar).
-6. No editar `POS/css/experience-v2/pages/*.css` (copias de laboratorio).
-7. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` sobrescritos por la suite de pruebas (restaurar con `git checkout`); los cambios intencionales a esos archivos se hacen y commitean antes de correr la suite.
-8. Nunca escribir secretos, tokens, datos de clientes ni identificadores sensibles de producción en código, docs, logs o prompts.
-
-## Clasificación de riesgo para evitar bloqueos innecesarios
-
-La política única vigente es `docs/DEVELOPMENT_RISK_POLICY.md`: BAJO (visual sin datos), MEDIO (integración sin operaciones críticas), ALTO (datos, autenticación y operaciones críticas). Tiene prioridad sobre instrucciones históricas de revisión universal en comandos o skills del repositorio. WORK exige evaluar integración, sesión, roles y caché; no se clasifica como exclusivamente visual.
-
-La ausencia de respuesta de un agente no es un bloqueo técnico: usar otro revisor automatizado independiente cuando corresponda. Si falta evidencia crítica, aislar esa parte y continuar los cambios seguros. Nunca inventar una revisión ni convertir un fallo en PASS.
+`docs/codex/BUSINESS_CONTEXT.md`, `docs/codex/ARCHITECTURE.md`, `docs/codex/TESTING.md`, `AGENTS_Nuevo_Amanecer.md` (reglas funcionales), `.opencode/ROLE_MAP.md` (roles), skills en `.agents/skills/`. Ningún agente nominal ni revisor humano externo es obligatorio.
