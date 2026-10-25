@@ -34,9 +34,9 @@ Un cambio que no toca Inicio ni Venta no necesita capturas.
 ## 5. Integrar y publicar
 
 - Integrar: merge del PR cuando CI esté verde. Borra la rama.
-- Publicar la web solo si el dueño lo pidió: `docs/DEVELOPMENT_RISK_POLICY.md` (manifiesto con SHA de producción, rollback y alcance). La lista de alcance incluye solo lo que se publica: `POS/**`, `tools/cloudflare-pos-web/**`, el workflow de deploy y `tools/release/**`.
+- Publicar la web solo si el dueño lo pidió: `docs/DEVELOPMENT_RISK_POLICY.md` (manifiesto con SHA de producción, rollback y alcance). La lista de alcance incluye solo lo que se publica o define el gate: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/lock de `tools/cloudflare-lab` y los 3 workflows de CI exigidos.
 
 ## Lo que no se toca (sigue protegido)
 
-Permisos y candados (`POS/js/config/pos-permissions.js`), costos/totales/proveedores solo del dueño, migraciones y respaldos, ventas/abonos pendientes, secretos, `tools/cloudflare-lab/**` (Worker de producción), `POS/css/experience-v2/pages/*.css`.
+Permisos y candados (`POS/js/config/pos-permissions.js`), costos/totales/proveedores solo del dueño, migraciones (con respaldo y OK del dueño), ventas/abonos pendientes, secretos, `tools/cloudflare-lab/**` (Worker de producción), `POS/css/experience-v2/pages/*.css`.
 No commitees `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si la suite de pruebas los sobrescribió (`git checkout -- <archivo>`).

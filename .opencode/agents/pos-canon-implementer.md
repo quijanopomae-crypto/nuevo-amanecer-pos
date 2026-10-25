@@ -15,6 +15,7 @@ permission:
     "POS/**": allow
     "tests/product-fixes/**": allow
     "tests/cloud-sync/**": allow
+    "tests/e2e/**": allow
     "infra/database/migrations/**": allow
     "tools/cloudflare-backup/**": allow
     "tools/cloudflare-lab/src/**": allow
@@ -35,6 +36,7 @@ permission:
     "rg *": allow
     "node --check *": allow
     "node --test *": allow
+    "npx playwright test*": allow
     "python3 -m unittest*": allow
 ---
 
