@@ -17,7 +17,6 @@ const PRECACHE_URLS = [
   './css/inventory-form-polish.css',
   './js/core/theme-state.js',
   './js/config/pos-permissions.js',
-  './js/perf/cash-perf-probe.js',
   './css/proximamente.css',
   './css/sales-reports.css',
   './js/modules/proximamente.js',
@@ -205,6 +204,7 @@ const PRECACHE_URLS = [
 ];
 const LAZY_URLS = [
   './css/product-image-review.css',
+  './js/perf/cash-perf-probe.js', // sonda de caja: solo bajo demanda (?perf=1 / na_cash_perf), index.html la inyecta
   './js/catalog/reference-catalog-data.js',
   './js/catalog/reference-catalog.js',
   './js/ocr/ocr-extract.js',
