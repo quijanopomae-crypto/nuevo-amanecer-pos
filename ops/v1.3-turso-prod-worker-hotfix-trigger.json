@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner authorized (2026-10-15 Lima) deploy of base f66e2d5d: #689/#690 review fixes (expense.update rejects future/outside-shift dates with 409, MAX(revision) scoped by promotion_id) and #691 /features/<id> 403 lock. No schema changes (0032 already applied). No live sale. Rollback to 616fb754.",
-  "target_commit": "f66e2d5d56602df956736f6ccf311f8d331ff691",
-  "rollback_ref": "616fb7548883e1aebe70c15f786a1729fac12ac2",
+  "authorization_context": "Owner approved 2026-10-23: 'Enciéndelas todas, con copia antes' / 'pueden encender las 21 funciones de proximamente disponible'. PR #1021 opens only built+wired locks: edicion-masiva-precios, precio-por-margen, edicion-masiva-productos, stock-negativo-configurable (shared pos-permissions.js). DB backup run 40031504740 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "2356dc12fc030869a6feab12136bb5ef7377391b",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 36,
-  "optimization": "REVIEW_FIXES"
+  "attempt": 79,
+  "optimization": "FEATURE_LOCKS_WAVE1",
+  "target_commit": "80314b962b48159c7850e9fc797ea7359244828f"
 }

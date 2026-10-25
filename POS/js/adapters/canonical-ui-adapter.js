@@ -22,6 +22,20 @@
     return number(value, 0) / 100;
   }
 
+  // Costo ausente (#884/#886: el servidor y la réplica omiten cost_cents para roles restringidos).
+  // Ausente queda undefined (se muestra «—»); un 0 real sigue siendo 0.
+  function optionalCostCents(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    var out = Number(value);
+    return Number.isFinite(out) ? out / 100 : undefined;
+  }
+
+  function optionalCost(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    var out = Number(value);
+    return Number.isFinite(out) ? out : undefined;
+  }
+
   function safeArrayJson(value) {
     if (Array.isArray(value)) return value.slice();
     if (typeof value !== 'string' || !value.trim()) return [];
@@ -75,7 +89,7 @@
       unidad: text(p.unit, 'unidad'),
       unidadCompra: text(p.purchase_unit, unitsPerBox > 1 ? 'caja' : 'unidad'),
       factorCompra: purchaseFactor,
-      costo: cents(p.cost_cents),
+      costo: optionalCostCents(p.cost_cents),
       precio: cents(p.price_cents),
       precioCaja: boxPrice > 0 ? boxPrice / 100 : null,
       unidCaja: unitsPerBox > 0 ? unitsPerBox : null,
@@ -261,6 +275,8 @@
       cajeroNombre: seller,
       status: text(c.source_status || c.status),
       estado: text(c.source_status || c.status),
+      // Estado real del crédito en CANON (VIGENTE, VENCIDO, PAGADO, ANULADO); status de CANON es el de sincronización.
+      source_status: text(c.source_status),
       anulado: false,
       pagos: payments,
       creditAccount: account,
@@ -343,7 +359,7 @@
       precio: price,
       precioUnitario: price,
       subtotal: cents(row.line_total_cents),
-      costo: generic ? 0 : number(product.costo, 0),
+      costo: generic ? 0 : optionalCost(product.costo),
       tipoImpuesto: generic ? '' : text(product.tipoImpuesto),
       incluyeIGV: generic ? true : product.incluyeIGV !== false,
       ventaLibre: generic,

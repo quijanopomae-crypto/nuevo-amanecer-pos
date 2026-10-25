@@ -39,9 +39,11 @@
   function get(id) { return list().find(function (feature) { return feature.id === id; }); }
   function isUnlocked(feature) { return !!(feature && feature.enabled && feature.page); }
   function isEnabled(id) { return isUnlocked(get(id)); }
-  function ownerAllowed() {
-    return !!(root.NA_ROLES && typeof root.NA_ROLES.canConfigure === 'function' && root.NA_ROLES.canConfigure());
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  function ownerAllowed() { return isOwner(); }
   function element(tag, className, text) {
     var node = root.document.createElement(tag);
     if (className) node.className = className;
@@ -83,6 +85,7 @@
     root.document.body.appendChild(dialog); dialog.showModal();
   }
   function openFeature(feature) {
+    if (!feature || !ownerAllowed()) return;
     if (isUnlocked(feature) && typeof root.goPage === 'function') {
       var open = root.document && root.document.getElementById('naProxPreview');
       if (open) open.close();
@@ -100,19 +103,21 @@
   function card(feature) {
     var unlocked = isUnlocked(feature);
     var node = element('button', 'na-prox-card' + (unlocked ? ' is-enabled' : '')); node.type = 'button'; node.dataset.featureId = feature.id;
+    if (unlocked) node.appendChild(element('span','na-prox-available','Disponible'));
     if (!unlocked) node.appendChild(element('span', 'na-prox-badge', '🔒 Próximamente' + (PRIORITY_LABELS[feature.priority] ? ' · ' + PRIORITY_LABELS[feature.priority] : '')));
     if (feature.uncertain) node.appendChild(element('span', 'na-prox-tag', 'por confirmar'));
     var icon = element('span', 'na-prox-icon', feature.icon); icon.setAttribute('aria-hidden', 'true'); node.appendChild(icon);
     node.appendChild(element('span', 'na-prox-name', feature.name));
     node.appendChild(element('span', 'na-prox-description', feature.description));
+    if (feature.note) node.appendChild(element('span', 'na-prox-note', feature.note));
     node.addEventListener('click', function () { openFeature(feature); });
     return node;
   }
   function renderSections(host) {
     host.replaceChildren();
     var shown = 0;
-    MODULES.forEach(function (module) {
-      var items = list().filter(function (f) { return f.module === module && matches(f); });
+    ['Disponible'].concat(MODULES).forEach(function (module) {
+      var items = list().filter(function (f) { return matches(f) && (module==='Disponible'?isUnlocked(f):f.module===module&&!isUnlocked(f)); });
       var rank = { alta: 0, media: 1, baja: 2 };
       items = items.slice().sort(function (a, b) { return (isUnlocked(b) - isUnlocked(a)) || ((a.priority ? rank[a.priority] : 3) - (b.priority ? rank[b.priority] : 3)); });
       if (!items.length) return;

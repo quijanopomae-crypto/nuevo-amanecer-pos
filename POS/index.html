@@ -4,6 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <!-- Arranque rápido: en el dominio publicado, sin sesión guardada se vuelve al lanzador antes de pedir CSS/JS.
+         Es un subconjunto estricto de lo que ya redirige la guardia de abajo (que sigue validando todo). -->
+    <script>(function(){try{var l=location;if(!/\.nuevo-amanecer-pos\.workers\.dev$/.test(l.hostname)||!/^\/app(\/|$)/.test(l.pathname))return;var c=JSON.parse(localStorage.getItem('na_cloud_sync_credentials')||'null');if(!c||typeof c.token!=='string'||!c.token)l.replace(l.origin+'/');}catch(_){}})();</script>
+    <!-- Comprobación completa, síncrona y antes de los recursos de la app; no usa document.body. -->
+    <script src="/runtime-config.js"></script>
+    <script src="js/sync/hosted-canonical-guard.js"></script>
     <meta name="theme-color" content="#0f766e">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,50 +23,65 @@
          Las hojas diferidas conservan su posición en el documento, así que la cascada final es idéntica. -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"></noscript>
     <!-- SheetJS solo al exportar/importar Excel (js/core/lazy-assets.js). -->
     <script type="text/x-na-lazy" data-na-lazy="sheetjs" src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/proximamente.css">
     <link rel="stylesheet" href="css/layout.css">
     <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="css/responsive.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/responsive.css">
     <link rel="stylesheet" href="css/print.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/print.css"></noscript>
     <link rel="stylesheet" href="css/motion/motion.css">
     <link rel="stylesheet" href="css/motion/transitions.css">
     <link rel="stylesheet" href="css/motion/modals.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/motion/modals.css"></noscript>
     <link rel="stylesheet" href="css/motion/notifications.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/client-credit-accounts-v2.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/receipt-share.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/motion/notifications.css"></noscript>
+    <link rel="stylesheet" href="css/client-credit-accounts-v2.css">
+    <link rel="stylesheet" href="css/clientes-reporte-deuda.css">
+    <link rel="stylesheet" href="css/clientes-deudores-caja.css">
+    <link rel="stylesheet" href="css/clonar-venta.css">
+    <link rel="stylesheet" href="css/clientes-importar.css">
+    <link rel="stylesheet" href="css/receipt-share.css">
     <link rel="stylesheet" href="css/experience-v2/tokens.css">
-    <link rel="stylesheet" href="css/experience-v2/layout.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/responsive.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/components/buttons.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/components/cards.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/components/tables.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/components/forms.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/experience-v2/layout.css">
+    <link rel="stylesheet" href="css/experience-v2/responsive.css">
+    <link rel="stylesheet" href="css/experience-v2/components/buttons.css">
+    <link rel="stylesheet" href="css/experience-v2/components/cards.css">
+    <link rel="stylesheet" href="css/experience-v2/components/tables.css">
+    <link rel="stylesheet" href="css/experience-v2/components/forms.css">
     <link rel="stylesheet" href="css/experience-v2/components/modals.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/components/navigation.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/experience-v2/components/modals.css"></noscript>
+    <link rel="stylesheet" href="css/experience-v2/components/navigation.css">
     <link rel="stylesheet" href="css/experience-v2/pages/menu.css">
-    <link rel="stylesheet" href="css/experience-v2/pages/pos.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/experience-v2/pages/pos.css">
 <link rel="stylesheet" href="css/canon-pos-reference-ui.css">
 <link rel="stylesheet" href="css/canon-phone-sale.css">
-    <link rel="stylesheet" href="css/experience-v2/pages/inventario.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/pages/clientes.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/pages/caja.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/canon-caja-responsive.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/pages/ventas.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/canon-pending-sales.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/canon-ventas-tabs.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/pages/gastos.css" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="css/experience-v2/pages/configuracion.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/experience-v2/pages/inventario.css">
+    <link rel="stylesheet" href="css/experience-v2/pages/clientes.css">
+    <link rel="stylesheet" href="css/experience-v2/pages/caja.css">
+    <link rel="stylesheet" href="css/canon-caja-responsive.css">
+    <link rel="stylesheet" href="css/experience-v2/pages/ventas.css">
+    <link rel="stylesheet" href="css/canon-pending-sales.css">
+    <link rel="stylesheet" href="css/canon-ventas-tabs.css">
+    <link rel="stylesheet" href="css/experience-v2/pages/gastos.css">
+    <link rel="stylesheet" href="css/experience-v2/pages/configuracion.css">
     <link rel="stylesheet" href="css/experience-v2/animations/motion.css">
     <link rel="stylesheet" href="css/experience-v2/animations/transitions.css">
     <link rel="stylesheet" href="css/experience-v2/animations/menu.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/experience-v2/animations/menu.css"></noscript>
     <link rel="stylesheet" href="css/experience-v2/animations/pos.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/experience-v2/animations/pos.css"></noscript>
     <link rel="stylesheet" href="css/experience-v2/animations/modals.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/experience-v2/animations/modals.css"></noscript>
     <link rel="stylesheet" href="css/experience-v2/animations/notifications.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/experience-v2/animations/notifications.css"></noscript>
     <link rel="stylesheet" href="css/canon-desktop-dashboard.css">
-    <link rel="stylesheet" href="css/mobile-inventory.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/mobile-inventory.css">
+    <link rel="stylesheet" href="css/codigos-duplicados.css">
+    <link rel="stylesheet" href="css/edicion-masiva-productos.css">
     <link rel="stylesheet" href="css/stock-lots.css">
     <link id="naMobileHomeBaseStyles" rel="stylesheet" href="css/canon-mobile-home.css">
     <link rel="stylesheet" href="css/canon-ux-fixes.css">
@@ -70,7 +91,27 @@
     <link rel="stylesheet" href="css/inventario-redesign.css">
     <link rel="stylesheet" href="css/theme-dark.css">
     <link rel="stylesheet" href="css/sales-reports.css">
+    <link rel="stylesheet" href="css/valorizacion-inventario.css">
+    <link rel="stylesheet" href="css/rotacion-abc.css">
+    <link rel="stylesheet" href="css/clientes-frecuencia.css">
+    <link rel="stylesheet" href="css/reporte-productos-vencer.css">
+    <link rel="stylesheet" href="css/cliente-historial-compras.css">
+    <link rel="stylesheet" href="css/kardex.css">
+    <link rel="stylesheet" href="css/ventas-stock.css">
+    <link rel="stylesheet" href="css/reporte-arqueo.css">
+    <link rel="stylesheet" href="css/reporte-medio-pago.css">
+    <link rel="stylesheet" href="css/panel-tesoreria.css">
+    <link rel="stylesheet" href="css/historial-compras.css">
+    <link rel="stylesheet" href="css/price-history.css">
+    <link rel="stylesheet" href="css/etiquetas-precios.css">
+    <link rel="stylesheet" href="css/catalogo-pos.css">
+    <link rel="stylesheet" href="css/productos-sin-movimiento.css">
+    <link rel="stylesheet" href="css/sugerencia-compra.css">
+    <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/precios-masivos.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
+<link rel="stylesheet" href="css/costo-compra-ficha.css">
+<link rel="stylesheet" href="css/cobro-qr-yape-plin.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
       window.addEventListener('DOMContentLoaded', function () {
@@ -85,6 +126,10 @@
     </style>
 
 <script defer src="js/modules/caja-movimientos-historial.js"></script>
+<!-- Asistente (encendido salvo que se apague en este aparato: Configuración o ?asistente=0): si el ÚLTIMO ping dijo «dueño», se reserva el alto de la tarjeta de Inicio
+     desde el primer pintado (no mueve nada). Ese dato guardado SOLO reserva espacio; el cargador pregunta al servidor y lo quita si ya no es dueño. -->
+<style>html.na-asst-owner #naMobileWelcome{display:none!important}html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:304px}@media (min-width:380px) and (max-width:699px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:304px}}@media (min-width:700px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:398px}}@media (min-width:1100px){html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:314px}}</style>
+<script>try{if(localStorage.getItem('na_asistente_off')!=='1'&&localStorage.getItem('na_asistente_acc')==='owner'&&!/[?&]asistente=0\b/.test(location.search))document.documentElement.classList.add('na-asst-owner','na-asst-pre')}catch(e){}</script>
 </head>
 <body>
 <aside class="pwa-update-prompt" id="pwaUpdatePrompt" hidden role="dialog" aria-live="polite" aria-label="Nueva versión disponible">
@@ -243,7 +288,7 @@
 <!-- INVENTARIO -->
 <div class="page" id="pageInventario">
     <div class="page-chrome">
-    <div class="top-mod-bar"><span class="top-mod-title na-li-host"><svg class="na-li" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg> Inventario</span><div class="ocr-purchase-actions"><button class="top-btn-nuevo" type="button" onclick="document.getElementById('mOcrPurchaseSource').classList.add('open')">OCR compras</button><button class="top-btn-nuevo" type="button" onclick="NuevoAmanecerImageBatch.open()">Cargar fotos</button><button class="top-btn-nuevo" type="button" onclick="abrirModalProd()">+ Nuevo</button></div></div>
+    <div class="top-mod-bar"><span class="top-mod-title na-li-host"><svg class="na-li" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg> Inventario</span><div class="ocr-purchase-actions"><button class="top-btn-nuevo" type="button" onclick="document.getElementById('mOcrPurchaseSource').classList.add('open')">OCR compras</button><button class="top-btn-nuevo" id="invPhotosBtn" type="button" onclick="NuevoAmanecerImageBatch.open()">Cargar fotos</button><button class="top-btn-nuevo" type="button" onclick="abrirModalProd()">+ Nuevo</button></div></div>
     <div class="ocr-purchase-status" id="ocrPurchaseStatus" role="status" aria-live="polite">Toma una foto o sube una imagen, PDF o documento.</div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="invSetTab(this,'todos')">Todos <span class="tbadge teal" id="invB0">0</span></button>
@@ -334,11 +379,11 @@
         </div>
         <div class="sales-report-control date" id="salesReportFromWrap">
             <label for="salesReportFrom">Desde</label>
-            <input type="date" id="salesReportFrom" onchange="_naF8CustomRangeChanged()">
+            <input type="date" id="salesReportFrom" onchange="_naF8CustomRangeChanged()" lang="es-PE">
         </div>
         <div class="sales-report-control date" id="salesReportToWrap">
             <label for="salesReportTo">Hasta</label>
-            <input type="date" id="salesReportTo" onchange="_naF8CustomRangeChanged()">
+            <input type="date" id="salesReportTo" onchange="_naF8CustomRangeChanged()" lang="es-PE">
         </div>
         <div class="sales-report-control">
             <label for="salesReportView">Vista</label>
@@ -362,6 +407,402 @@
 <div class="page" id="pageProximamente">
     <h1>Próximamente</h1>
     <div class="na-prox-grid" id="naProximamenteGrid"></div>
+</div>
+
+<div class="page" id="pageHistorialCompras">
+  <div class="hc-shell">
+    <h1>Historial de compras por producto</h1>
+    <p class="hc-note">Consulta de solo lectura · Solo dueño · Fechas en hora de Lima</p>
+    <p class="hc-denied" data-hc-denied role="alert">Sin permiso. Pídele acceso al dueño.</p>
+    <section data-hc-content hidden aria-label="Consultar compras por producto">
+      <label class="hc-search-label" for="hcProductSearch">Buscar producto</label>
+      <input
+        class="hc-search"
+        id="hcProductSearch"
+        type="search"
+        data-hc-search
+        autocomplete="off"
+        placeholder="Nombre o código del producto"
+      >
+      <div class="hc-products" data-hc-products role="group" aria-label="Productos encontrados"></div>
+      <p class="hc-note" data-hc-status role="status" aria-live="polite"></p>
+      <button class="hc-retry" type="button" data-hc-retry hidden>Volver a intentar</button>
+      <section data-hc-result aria-live="polite" aria-label="Historial y resumen del producto"></section>
+    </section>
+  </div>
+</div>
+
+<div class="page" id="pageEtiquetasPrecios">
+  <div class="etq-shell">
+    <h1>Etiquetas e impresión de precios</h1>
+    <p class="etq-note">Solo lectura · No cambia productos, stock ni ventas</p>
+    <label class="etq-field" for="etqSearch">Buscar producto (nombre o código)</label>
+    <input class="etq-search" id="etqSearch" type="search" autocomplete="off" placeholder="Nombre o código" data-etq-search>
+    <div class="etq-matches" data-etq-matches aria-live="polite"></div>
+    <h2>Productos elegidos</h2>
+    <p class="etq-note" data-etq-empty>Aún no eliges productos.</p>
+    <ul class="etq-selected" data-etq-selected></ul>
+    <label class="etq-field" for="etqFormat">Formato</label>
+    <select id="etqFormat" data-etq-format>
+      <option value="chica">Chica (38 × 25 mm)</option>
+      <option value="mediana" selected>Mediana (50 × 30 mm)</option>
+      <option value="a4">A4 · 24 por hoja (3 × 8)</option>
+    </select>
+    <h2>Vista previa · <span data-etq-count>0 etiquetas</span></h2>
+    <p class="etq-note etq-cap" data-etq-cap role="status" hidden></p>
+    <div class="etq-preview-wrap"><div class="etq-sheet etq-format-mediana" data-etq-sheet></div></div>
+    <button class="etq-print" type="button" data-etq-print disabled>Imprimir</button>
+  </div>
+</div>
+
+<div class="page" id="pageSugerenciaCompra" aria-labelledby="sugerenciaCompraTitle">
+  <div class="sc-shell">
+    <header>
+      <h1 id="sugerenciaCompraTitle">Sugerencia de compra</h1>
+      <p class="sc-description">Qué pedir a cada proveedor según el stock mínimo y lo vendido en los últimos 30 días. Ajusta las cantidades antes de exportar o imprimir; no cambia productos ni stock.</p>
+    </header>
+    <div class="sc-controls" data-sc-controls hidden>
+      <button type="button" data-sc-recalc>Recalcular</button>
+      <button type="button" data-sc-reset disabled>Usar sugeridos</button>
+      <button type="button" data-sc-export>Exportar CSV</button>
+      <button type="button" data-sc-print>Imprimir</button>
+    </div>
+    <p class="sc-status" data-sc-status role="status" aria-live="polite"></p>
+    <div data-sc-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageEdicionPrecios" aria-labelledby="edicionPreciosTitle">
+  <div class="pm-shell">
+    <header>
+      <h1 id="edicionPreciosTitle">Edición masiva de precios</h1>
+      <p class="pm-description">Cambia el precio de venta de muchos productos a la vez, por % o monto, o calcúlalo con un margen sobre el costo. Revisa la vista previa antes de aplicar. No cambia el stock ni las ventas.</p>
+    </header>
+    <p class="pm-status" data-pm-status role="status" aria-live="polite"></p>
+    <div data-pm-main hidden>
+      <div class="pm-controls">
+        <label>Buscar<input type="search" data-pm-search aria-label="Buscar producto" placeholder="Nombre del producto"></label>
+        <label>Categoría<select data-pm-category aria-label="Categoría"><option value="">Todas las categorías</option></select></label>
+        <label>Tipo de cambio<select data-pm-mode aria-label="Tipo de cambio"><option value="porcentaje">Subir o bajar %</option><option value="monto">Sumar o restar S/</option><option value="margen">Margen sobre costo (recargo) %</option></select></label>
+        <label>Valor<input type="number" step="0.01" inputmode="decimal" data-pm-value aria-label="Valor" placeholder="Ej. 10 o -5"></label>
+        <button type="button" data-pm-apply disabled>Aplicar</button>
+      </div>
+      <div data-pm-content></div>
+      <button type="button" class="pm-undo" data-pm-undo hidden>Deshacer último lote</button>
+      <div class="pm-log-box" data-pm-log></div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="pageAjustesInventario" aria-labelledby="ajustesInventarioTitle">
+  <div class="aj-shell">
+    <header>
+      <h1 id="ajustesInventarioTitle">Ajustes de inventario</h1>
+      <p class="aj-description">Registra mermas, roturas, vencidos y correcciones de stock con motivo, usuario y nota. No cambia ventas ni pagos.</p>
+    </header>
+    <p class="aj-status" data-aj-status role="status" aria-live="polite"></p>
+    <div data-aj-main hidden>
+      <form class="aj-form" data-aj-form novalidate>
+        <label class="aj-wide">Buscar producto
+          <input type="search" data-aj-search autocomplete="off" placeholder="Nombre o código">
+        </label>
+        <label class="aj-wide">Producto
+          <select data-aj-product required></select>
+        </label>
+        <label>Tipo
+          <select data-aj-type>
+            <option value="merma">Merma</option>
+            <option value="rotura">Rotura</option>
+            <option value="vencido">Vencido</option>
+            <option value="correccion">Corrección</option>
+          </select>
+        </label>
+        <p class="aj-lot-note aj-wide" data-aj-lot-note role="note" hidden></p>
+        <label data-aj-direction-wrap hidden>Corrección
+          <select data-aj-direction>
+            <option value="restar">Restar stock</option>
+            <option value="sumar">Sumar stock</option>
+          </select>
+        </label>
+        <label>Cantidad
+          <input type="text" data-aj-qty inputmode="decimal" autocomplete="off" spellcheck="false" required>
+        </label>
+        <label class="aj-wide">Nota
+          <textarea data-aj-note maxlength="300" placeholder="Detalle del ajuste (opcional)"></textarea>
+        </label>
+        <button type="submit" class="aj-submit aj-wide" data-aj-submit>Registrar ajuste</button>
+        <p class="aj-message aj-wide" data-aj-message role="status" aria-live="polite"></p>
+      </form>
+      <h2>Reporte de ajustes (solo dueño)</h2>
+      <button type="button" data-aj-export>Exportar CSV</button>
+      <div data-aj-report></div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="pageProductosSinMovimiento" aria-labelledby="productosSinMovimientoTitle">
+  <div class="psm-shell">
+    <header>
+      <h1 id="productosSinMovimientoTitle">Productos sin movimiento</h1>
+      <p class="psm-description">Productos activos sin ventas en el período, con su stock actual. Solo lectura.</p>
+    </header>
+    <div class="psm-controls" data-psm-controls hidden>
+      <label>Período
+        <select data-psm-period aria-label="Período">
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="60">Últimos 60 días</option>
+          <option value="90">Últimos 90 días</option>
+        </select>
+      </label>
+      <label class="psm-check"><input type="checkbox" data-psm-no-stock> Incluir sin stock</label>
+      <button type="button" data-psm-refresh>Actualizar reporte</button>
+      <button type="button" data-psm-export>Exportar CSV</button>
+    </div>
+    <p class="psm-status" data-psm-status role="status" aria-live="polite"></p>
+    <div data-psm-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageValorizacion">
+    <header class="val-header">
+        <div class="val-heading">
+            <h1>Valorización de inventario</h1>
+            <p>Consulta de solo lectura · Solo dueño</p>
+        </div>
+        <button type="button" class="val-refresh" data-valorizacion-refresh>Actualizar</button>
+    </header>
+    <div class="val-content">
+        <p class="val-explanation">Unidades físicas del stock en memoria, incluidos lotes y unidades sin lote. Valor calculado con el costo y precio actuales por unidad. Los productos sin costo se indican aparte.</p>
+        <div data-valorizacion-report></div>
+    </div>
+</div>
+
+<div class="page" id="pageVentasStock" aria-labelledby="ventasStockTitle">
+  <div class="vs-shell">
+    <header><h1 id="ventasStockTitle">Ventas con stock</h1>
+      <p class="vs-description">Consulta las ventas y la cobertura del stock para priorizar la reposición.</p></header>
+    <div class="vs-controls" data-vs-controls hidden>
+      <label>Período<select data-vs-period aria-label="Período">
+        <option value="7">Últimos 7 días</option><option value="30" selected>Últimos 30 días</option><option value="90">Últimos 90 días</option>
+      </select></label>
+      <label>Categoría<select data-vs-category aria-label="Categoría"><option value="*">Todas las categorías</option></select></label>
+      <label>Buscar producto<input type="search" data-vs-search aria-label="Buscar producto" placeholder="Nombre o código"></label>
+      <button type="button" data-vs-refresh>Actualizar reporte</button>
+      <button type="button" data-vs-export>Exportar CSV</button>
+    </div>
+    <p class="vs-method">Cobertura = stock ÷ promedio diario vendido. Reponer: cobertura &lt; 7 días o stock ≤ mínimo (con stock y mínimo positivos). Se excluyen ventas anuladas. Los productos fuera del catálogo figuran sin control.</p>
+    <p class="vs-status" data-vs-status role="status" aria-live="polite"></p>
+    <div data-vs-content></div>
+  </div>
+</div>
+<div class="page" id="pageReporteArqueo" aria-labelledby="reporteArqueoTitle">
+  <div class="ra-shell">
+    <header><h1 id="reporteArqueoTitle">Reporte de arqueo de caja por fechas</h1>
+      <p class="ra-description">Consulta y descarga los cierres de caja de un rango de fechas. Solo lectura, con fechas y horas de Lima.</p></header>
+    <div class="ra-controls" data-ra-controls hidden>
+      <label>Desde<input type="date" data-ra-desde aria-label="Desde"></label>
+      <label>Hasta<input type="date" data-ra-hasta aria-label="Hasta"></label>
+      <label>Cajero<select data-ra-cajero aria-label="Cajero"><option value="">Todos los cajeros</option></select></label>
+      <button type="button" data-ra-export>Exportar CSV</button>
+    </div>
+    <p class="ra-status" data-ra-status role="status" aria-live="polite"></p>
+    <div data-ra-content></div>
+    <section class="rmp-section" data-rmp-section aria-labelledby="reporteMedioPagoTitle" hidden>
+      <details class="rmp-details" data-rmp-details>
+      <summary><h2 id="reporteMedioPagoTitle">Movimientos por medio de pago por turno</h2></summary>
+      <p class="ra-description">Ventas y cobros de cada turno cerrado, separados por medio de pago. Solo lectura, con fechas de Lima.</p>
+      <div class="rmp-controls" data-rmp-controls hidden>
+        <label>Desde<input type="date" data-rmp-desde aria-label="Desde (medios de pago)"></label>
+        <label>Hasta<input type="date" data-rmp-hasta aria-label="Hasta (medios de pago)"></label>
+        <label>Cajero<select data-rmp-cajero aria-label="Cajero"><option value="">Todos</option></select></label>
+        <button type="button" data-rmp-export>Exportar CSV</button>
+      </div>
+      <p class="ra-status" data-rmp-status role="status" aria-live="polite"></p>
+      <div data-rmp-content></div>
+      </details>
+    </section>
+    <section class="pt-section" data-pt-section aria-labelledby="panelTesoreriaTitle" hidden>
+      <details class="pt-details" data-pt-details>
+      <summary><h2 id="panelTesoreriaTitle">Panel de tesorería</h2></summary>
+      <p class="ra-description">Efectivo en cada caja abierta y lo cobrado por Yape, Plin y transferencia pendiente de acreditar. Solo lectura.</p>
+      <p class="ra-status" data-pt-status role="status" aria-live="polite"></p>
+      <div data-pt-content></div>
+      </details>
+    </section>
+  </div>
+</div>
+<div class="page" id="pageClienteHistorial" aria-labelledby="clienteHistorialTitle">
+  <div class="ch-shell">
+    <header>
+      <h1 id="clienteHistorialTitle">Historial de compras por cliente</h1>
+      <p class="ch-description">Consulta cuánto consumió un cliente y los productos que compró.</p>
+    </header>
+    <div class="ch-controls" data-ch-controls hidden>
+      <label>Buscar por nombre o DNI
+        <input type="search" data-ch-search aria-label="Buscar por nombre o DNI" placeholder="Nombre o DNI" autocomplete="off">
+      </label>
+      <div class="ch-filter-row">
+        <label>Cliente
+          <select data-ch-customer aria-label="Cliente"><option value="">Selecciona un cliente</option></select>
+        </label>
+        <label>Desde
+          <input type="date" data-ch-from aria-label="Desde">
+        </label>
+        <label>Hasta
+          <input type="date" data-ch-to aria-label="Hasta">
+        </label>
+        <p class="ch-date-hint" data-ch-date-hint hidden>Sin límite de fechas</p>
+        <label>Vendedor
+          <select data-ch-seller aria-label="Vendedor"><option value="">Todos</option></select>
+        </label>
+      </div>
+      <label>Período
+        <select data-ch-period aria-label="Período">
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="90">Últimos 90 días</option>
+          <option value="365">Últimos 365 días</option>
+          <option value="all">Todo el historial</option>
+          <option value="custom">Personalizado</option>
+        </select>
+      </label>
+      <button type="button" data-ch-refresh>Actualizar reporte</button>
+      <button type="button" data-ch-export disabled hidden>Exportar CSV</button>
+    </div>
+    <p class="ch-method">Consulta de solo lectura. Se excluyen ventas anuladas. Total consumido = total registrado de las ventas; importe por producto = subtotal de la línea o precio vendido × cantidad. Los abonos no se cuentan como compras.</p>
+    <p class="ch-status" data-ch-status role="status" aria-live="polite"></p>
+    <div data-ch-content></div>
+  </div>
+</div>
+<div class="page" id="pageKardex" aria-labelledby="kardexTitle">
+  <div class="kardex-shell">
+    <header>
+      <h1 id="kardexTitle">Kardex valorizado por producto</h1>
+      <p>Consulta entradas, salidas y saldo de stock en unidades físicas.</p>
+    </header>
+    <div data-kardex-controls hidden>
+      <div class="kardex-filters">
+        <label>Producto<input type="search" data-kardex-search aria-label="Buscar producto" placeholder="Nombre o código" autocomplete="off"></label>
+        <label>Desde<input type="date" data-kardex-from aria-label="Desde"></label>
+        <label>Hasta<input type="date" data-kardex-to aria-label="Hasta"></label>
+      </div>
+      <div class="kardex-products" data-kardex-products aria-label="Productos encontrados"></div>
+      <div class="kardex-actions">
+        <button type="button" data-kardex-refresh>Actualizar Kardex</button>
+        <button type="button" data-kardex-export disabled>Exportar CSV</button>
+      </div>
+    </div>
+    <p class="kardex-method">El saldo inicial se calcula desde el stock actual y el historial disponible. El saldo al cierre corresponde al rango elegido; el stock actual se muestra por separado. Se conservan ventas y devoluciones registradas; las ventas anuladas sin movimiento se excluyen.</p>
+    <p class="kardex-method" data-kardex-cost-method hidden>Promedio ponderado por unidades físicas con costo conocido: cada entrada con costo recalcula el promedio y cada salida usa el promedio vigente. Las entradas sin costo usan costo estimado si hay promedio; de lo contrario, quedan sin costo y no suman valor. El último costo del producto no se aplica al historial anterior. La valorización depende del historial disponible.</p>
+    <p data-kardex-status role="status" aria-live="polite"></p>
+    <div data-kardex-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageRotacionAbc" aria-labelledby="rotacionAbcTitle">
+  <div class="abc-shell">
+    <header>
+      <h1 id="rotacionAbcTitle">Rotación ABC por categoría</h1>
+      <p class="abc-description">Identifica los productos que concentran el importe vendido de cada categoría.</p>
+    </header>
+    <div class="abc-controls" data-abc-controls hidden>
+      <label>Período
+        <select data-abc-period aria-label="Período">
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="90">Últimos 90 días</option>
+        </select>
+      </label>
+      <label>Categoría
+        <select data-abc-category aria-label="Categoría">
+          <option value="*">Todas las categorías</option>
+        </select>
+      </label>
+      <button type="button" data-abc-refresh>Actualizar reporte</button>
+    </div>
+    <p class="abc-method">ABC se calcula dentro de cada categoría: A reúne los primeros productos hasta alcanzar el 80% del importe; B continúa hasta el 95%; C reúne el resto. El producto que alcanza cada corte cierra esa clase. Los productos sin ventas son C. Importe = precio vendido × cantidad, como en Reportes. Se excluyen ventas anuladas.</p>
+    <p class="abc-status" data-abc-status role="status" aria-live="polite"></p>
+    <div data-abc-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageClientesFrecuencia" aria-labelledby="clientesFrecuenciaTitle">
+  <div class="cf-shell">
+    <header>
+      <h1 id="clientesFrecuenciaTitle">Frecuencia de compra del cliente</h1>
+      <p class="cf-description">Consulta cada cuánto compran tus clientes y quiénes podrían volver.</p>
+    </header>
+    <div class="cf-controls" data-cf-controls hidden>
+      <label>Período
+        <select data-cf-period aria-label="Período">
+          <option value="90" selected>Últimos 90 días</option>
+          <option value="180">Últimos 180 días</option>
+          <option value="365">Últimos 365 días</option>
+        </select>
+      </label>
+      <label>Buscar cliente
+        <input type="search" data-cf-search aria-label="Buscar cliente" placeholder="Nombre del cliente" autocomplete="off">
+      </label>
+      <button type="button" data-cf-refresh>Actualizar reporte</button>
+    </div>
+    <p class="cf-method">Cada (días) es el promedio entre compras del período, en días calendario de Lima. Al día: no supera ese promedio. Por volver: lo supera. Inactivo: supera el doble o lleva más de 60 días sin comprar. Una sola compra: aún no hay promedio (si supera 60 días, es Inactivo). Se cuentan también compras del mismo día. Se excluyen ventas anuladas y sin cliente. Importe = precio vendido × cantidad, como en Reportes.</p>
+    <p class="cf-status" data-cf-status role="status" aria-live="polite"></p>
+    <div data-cf-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageReporteProductosVencer" aria-labelledby="reporteProductosVencerTitle">
+  <div class="rpv-shell">
+    <header>
+      <h1 id="reporteProductosVencerTitle">Reporte de productos por vencer</h1>
+      <p class="rpv-description">Revisa primero los lotes vencidos y luego los que vencen pronto.</p>
+    </header>
+    <div class="rpv-controls" data-rpv-controls hidden>
+      <label>Horizonte
+        <select data-rpv-horizon aria-label="Horizonte">
+          <option value="30" selected>Próximos 30 días</option>
+          <option value="60">Próximos 60 días</option>
+          <option value="90">Próximos 90 días</option>
+        </select>
+      </label>
+      <label>Lote
+        <input type="search" data-rpv-lot autocomplete="off" placeholder="Filtrar por lote" aria-label="Filtrar por lote">
+      </label>
+      <button type="button" data-rpv-refresh>Actualizar reporte</button>
+      <button type="button" data-rpv-export>Exportar CSV</button>
+    </div>
+    <p class="rpv-method">Solo consulta: se muestran lotes cargados con stock mayor a cero. Los vencidos siempre se incluyen. El horizonte incluye hoy y su último día, según el calendario de Lima. Stock se expresa en la unidad física de cada producto.</p>
+    <p class="rpv-status" data-rpv-status role="status" aria-live="polite"></p>
+    <p class="rpv-summary" data-rpv-summary hidden></p>
+    <div data-rpv-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageReporteDeuda">
+    <header class="rd-header">
+        <h1>Reporte de deuda</h1>
+        <p>Clientes con saldo pendiente. Toca un cliente para abrir su ficha.</p>
+    </header>
+    <div class="rd-toolbar">
+        <button type="button" class="rd-back" data-rd-back>Volver a Clientes</button>
+        <label data-rd-owner-control>Ordenar por
+            <select data-rd-sort>
+                <option value="saldo">Saldo pendiente: mayor a menor</option>
+                <option value="vencida">Deuda vencida: mayor a menor</option>
+            </select>
+        </label>
+    </div>
+    <p class="rd-status" role="status" aria-live="polite" data-rd-status></p>
+    <div class="rd-content" data-rd-content></div>
+</div>
+
+<div class="page" id="pageCodigosDuplicados">
+    <header class="cd-header">
+        <h1>Códigos duplicados</h1>
+        <button class="cd-button" type="button" data-cd-back>Volver a Inventario</button>
+        <button class="cd-button" type="button" data-cd-refresh data-cd-owner hidden>Actualizar lista</button>
+    </header>
+    <p class="cd-intro" data-cd-owner hidden>Las fotos de esos códigos no se asignan solas porque el código pertenece a más de un producto. Se corrige editando el producto y revisando sus códigos. Esta lista es de solo lectura.</p>
+    <p class="cd-status" data-cd-status role="status" aria-live="polite"></p>
+    <div class="cd-list" data-cd-list></div>
 </div>
 
 <!-- GASTOS -->
@@ -630,6 +1071,8 @@
             <div class="fg"><div class="fl">Precio por caja (S/)</div><input class="fi" id="pPrecioCaja" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0"></div>
             <div class="fg"><div class="fl">Unidades por caja (precio mayorista)</div><input class="fi" id="pUnidCaja" type="number" inputmode="numeric" placeholder="24" min="1"></div>
         </div>
+
+        <div id="pPriceHistory" hidden></div>
 
         </div></details><details class="inv-form-section"><summary>Inventario</summary><div class="inv-section-body">
         <div id="pInventoryFields">
@@ -920,7 +1363,7 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="mGasto"><div class="modal"><div class="mhead red"><div class="mhead-title"><i class="na-ic na-ic-receipt" aria-hidden="true"></i> Registrar gasto</div><button class="btn-close-m" onclick="cerrarModal('mGasto')">✕</button></div><div class="mbody"><div class="fg"><div class="fl">Concepto <span class="req">*</span></div><input class="fi" id="gasDesc" placeholder="Ej: Pago luz, compra útiles..."></div><div class="frow"><div class="fg"><div class="fl">Monto (S/) <span class="req">*</span></div><input class="fi-big" id="gasMonto" type="number" placeholder="0.00" min="0.01" step="0.50" style="font-size:18px"></div><div class="fg"><div class="fl">Fecha</div><input class="fi" id="gasFecha" type="date"></div></div><div class="fg"><div class="fl">Categoría</div><select class="fs" id="gasCat"><option value="Servicios">Servicios (luz, agua, internet)</option><option value="Proveedor">Pago a proveedor</option><option value="Operativo">Operativo (útiles, bolsas)</option><option value="Personal">Personal / Sueldo</option><option value="Transporte">Transporte / Flete</option><option value="Otro">Otro</option></select></div><div class="fg"><div class="fl">Método de pago</div><select class="fs" id="gasMetodo"><option value="efectivo">Efectivo</option><option value="yape">Yape</option><option value="plin">Plin</option><option value="transferencia">Transferencia</option></select></div><div class="fg"><div class="fl">Nota</div><input class="fi" id="gasNota" placeholder="Opcional..."></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mGasto')">Cancelar</button><button class="mbtn mbtn-ok red" onclick="guardarGasto()"><i class="na-ic na-ic-save" aria-hidden="true"></i> Registrar</button></div></div></div></div>
+<div class="modal-overlay" id="mGasto"><div class="modal"><div class="mhead"><div class="mhead-title"><i class="na-ic na-ic-receipt" aria-hidden="true"></i> Registrar gasto</div><button class="btn-close-m" onclick="cerrarModal('mGasto')">✕</button></div><div class="mbody"><div class="fg"><div class="fl">Concepto <span class="req">*</span></div><input class="fi" id="gasDesc" placeholder="Ej: Pago luz, compra útiles..."></div><div class="frow"><div class="fg"><div class="fl">Monto (S/) <span class="req">*</span></div><input class="fi-big" id="gasMonto" type="number" placeholder="0.00" min="0.01" step="0.50" style="font-size:18px"></div><div class="fg"><div class="fl">Fecha</div><input class="fi" id="gasFecha" type="date" lang="es-PE"></div></div><div class="fg"><div class="fl">Categoría</div><select class="fs" id="gasCat"><option value="Servicios">Servicios (luz, agua, internet)</option><option value="Proveedor">Pago a proveedor</option><option value="Operativo">Operativo (útiles, bolsas)</option><option value="Personal">Personal / Sueldo</option><option value="Transporte">Transporte / Flete</option><option value="Otro">Otro</option></select></div><div class="fg"><div class="fl">Método de pago</div><select class="fs" id="gasMetodo"><option value="efectivo">Efectivo</option><option value="yape">Yape</option><option value="plin">Plin</option><option value="transferencia">Transferencia</option></select></div><div class="fg"><div class="fl">Nota</div><input class="fi" id="gasNota" placeholder="Opcional..."></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mGasto')">Cancelar</button><button class="mbtn mbtn-ok" onclick="guardarGasto()"><i class="na-ic na-ic-save" aria-hidden="true"></i> Registrar</button></div></div></div></div>
 
 
 <div id="securityLockScreen" aria-hidden="true">
@@ -938,21 +1381,24 @@
 
 <script src="js/core/theme-state.js"></script>
 <script src="js/ui/na-line-icons.js"></script>
-<script src="/runtime-config.js"></script>
 <script src="js/core/utils.js"></script>
 <script src="js/core/lima-time.js"></script>
+<script src="js/core/seller-labels.js"></script>
 <script src="js/sync/outbox.js"></script>
-<script src="js/sync/hosted-canonical-guard.js"></script>
 <script src="js/adapters/canonical-ui-adapter.js"></script>
 <script src="js/config/pos-permissions.js"></script>
 <script src="js/config/pos-roles-client.js"></script>
+<script src="js/config/pos-employee-toggles.js"></script>
+<script src="js/config/employee-perms-client.js"></script>
 <script src="js/sync/canonical-client.js"></script>
 <script src="js/legacy-inline/inline-01.js"></script>
 <script src="js/modules/ticket/legacy.js"></script>
 <script src="js/legacy-inline/inline-02.js"></script>
 <script src="js/modules/ticket/overrides.js"></script>
 <script src="js/legacy-inline/inline-03.js"></script>
+<script src="js/modules/ventas-espera.js"></script>
 <script src="js/inventory/stock-lots.js"></script>
+<script src="js/inventory/presentaciones.js"></script>
 <script src="js/sync/canonical-sale-intent.js"></script>
 <script src="js/sync/canonical-sale-outbox.js"></script>
 <script src="js/sync/canonical-sale-projection.js"></script>
@@ -1022,7 +1468,7 @@
 <script id="na-security-sales-render" src="js/legacy-inline/inline-10.js"></script>
 <script id="na-security-cash-render" src="js/legacy-inline/inline-11.js"></script>
 <script id="na-security-credit-render" src="js/legacy-inline/inline-12.js"></script>
-<div class="modal-overlay" id="productImageBatchModal" role="dialog" aria-modal="true" aria-labelledby="productImageBatchTitle" style="display:none"><div class="modal" style="max-width:760px;width:95vw"><div class="mhead teal"><span class="mhead-title" id="productImageBatchTitle">Fotos múltiples</span><button class="btn-close-m" onclick="document.getElementById('productImageBatchModal').style.display='none'">✕</button></div><div class="mbody"><p>Las fotos se guardan en este dispositivo. Usa Exportar grupo de fotos para llevarlas a otro teléfono o PC.</p><label for="productImageBatchFiles">Seleccionar paquete de fotos</label><input id="productImageBatchFiles" type="file" accept=".json,image/png,image/jpeg,image/webp" multiple><label style="display:block;margin:12px 0"><input id="productImageBatchReplace" type="checkbox"> Reemplazar fotos existentes</label><p id="productImageBatchStatus" role="status" aria-live="polite"></p><div style="max-height:300px;overflow:auto"><table style="width:100%"><thead><tr><th>Códigos</th><th>Producto</th><th>Estado</th></tr></thead><tbody id="productImageBatchRows"></tbody></table></div></div><div class="mbtns" style="padding:0 18px 18px"><button class="mbtn mbtn-cancel" id="productImageBatchExport">Exportar grupo de fotos</button><button class="mbtn mbtn-cancel" id="productImageBatchUndo">Deshacer último grupo de fotos</button><button class="mbtn mbtn-ok" id="productImageBatchApply" style="grid-column:1/-1">Guardar fotos listas</button></div></div></div>
+<div class="modal-overlay" id="productImageBatchModal" role="dialog" aria-modal="true" aria-labelledby="productImageBatchTitle" style="display:none"><div class="modal" style="max-width:760px;width:95vw"><div class="mhead teal"><span class="mhead-title" id="productImageBatchTitle">Fotos múltiples</span><button class="btn-close-m" onclick="NuevoAmanecerImageBatch.close()">✕</button></div><div class="mbody"><p>Las fotos se guardan en este dispositivo. Usa Exportar grupo de fotos para llevarlas a otro teléfono o PC.</p><label for="productImageBatchFiles">Seleccionar paquete de fotos</label><input id="productImageBatchFiles" type="file" accept=".json,.zip,image/png,image/jpeg,image/webp" multiple><label for="productImageBatchFolder">Seleccionar carpeta</label><input id="productImageBatchFolder" type="file" webkitdirectory multiple><label style="display:block;margin:12px 0"><input id="productImageBatchReplace" type="checkbox"> Reemplazar fotos existentes</label><p id="productImageBatchStorage" role="alert" hidden style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#fef3c7;color:#92400e;font-weight:700"></p><p id="productImageBatchStatus" role="status" aria-live="polite"></p><div style="max-height:300px;overflow:auto"><table style="width:100%"><thead><tr><th>Códigos</th><th>Producto</th><th>Estado</th></tr></thead><tbody id="productImageBatchRows"></tbody></table></div></div><div class="mbtns" style="padding:0 18px 18px"><button class="mbtn mbtn-cancel" id="productImageBatchExport">Exportar grupo de fotos</button><button class="mbtn mbtn-cancel" id="productImageBatchUndo">Deshacer último grupo de fotos</button><button class="mbtn mbtn-ok" id="productImageBatchApply" style="grid-column:1/-1">Guardar fotos listas</button></div></div></div>
 <script src="js/products/image-batch.js"></script>
 <script src="js/inventory/mobile-inventory.js"></script>
 <script id="na-security-image-preview" src="js/legacy-inline/inline-13.js"></script>
@@ -1030,10 +1476,9 @@
 <script id="na-security-pos-render" src="js/legacy-inline/inline-14.js"></script>
 <script id="na-security-expense-render" src="js/legacy-inline/inline-15.js"></script>
 <script src="js/legacy-inline/inline-16.js"></script>
-<script src="js/legacy-inline/inline-17.js"></script>
-
-<script src="js/legacy-inline/inline-18.js"></script>
 <script src="js/navigation/menu-navigation.js"></script>
+<script src="js/inventory/codigos-duplicados.js"></script>
+<script src="js/modules/edicion-masiva-productos.js"></script>
 <script src="js/motion/core.js"></script>
 <script src="js/motion/page-transitions.js"></script>
 <script src="js/motion/scroll-motion.js"></script>
@@ -1042,9 +1487,15 @@
 <script src="js/motion/feedback-motion.js"></script>
 <script src="js/motion/cart-motion.js"></script>
 <script src="js/modules/client-credit-accounts-v2.js"></script>
+<script src="js/modules/clientes-reporte-deuda.js"></script>
+<script src="js/modules/clientes-deudores-caja.js"></script>
+<script src="js/modules/clonar-venta.js"></script>
+<script src="js/modules/clientes-importar.js"></script>
 <script src="js/sync/canonical-sale-view.js"></script>
 <script src="js/sync/canonical-credit-payment-bridge.js"></script>
 <script src="js/sync/canonical-payment-annul-bridge.js"></script>
+<script src="js/products/price-history.js"></script>
+<script src="js/products/price-history-ui.js"></script>
 <script src="js/sync/canonical-product-bridge.js"></script>
 <script src="js/sync/canonical-customer-bridge.js"></script>
 <script src="js/sync/canonical-customer-credit-policy-bridge.js"></script>
@@ -1057,12 +1508,34 @@
 <script src="js/app.js"></script>
 <script src="js/modules/ticket/share-receipt.js"></script>
 <script src="js/modules/ticket/share-receipt-ui.js"></script>
-<script src="js/perf/cash-perf-probe.js"></script>
+<!-- Sonda de rendimiento de caja (#432): solo bajo demanda (?perf=1|true|yes o localStorage.na_cash_perf="1"). Sin la condición no se descarga ni se ejecuta. -->
+<script>(function(){var r=window;try{var q=new URLSearchParams(r.location.search).get('perf');if(q==='1'||q==='true'||q==='yes'||(r.localStorage&&r.localStorage.getItem('na_cash_perf')==='1')){var s=document.createElement('script');s.src='js/perf/cash-perf-probe.js';(document.body||document.documentElement).appendChild(s);return;}}catch(_){}r.NA_CASH_PERF=Object.freeze({active:false,reason:'gate_off'});})();</script>
 <script src="js/canon-pos-reference-ui.js"></script>
 <script src="js/canon-phone-sale.js"></script>
 <script src="js/canon-desktop-dashboard.js"></script>
 <script src="js/modules/proximamente.js"></script>
+<script src="js/modules/valorizacion-inventario.js"></script>
+<script src="js/modules/rotacion-abc.js"></script>
+<script src="js/modules/clientes-frecuencia.js"></script>
+<script src="js/modules/reporte-productos-vencer.js"></script>
+<script src="js/modules/cliente-historial-compras.js"></script>
+<script src="js/modules/kardex.js"></script>
+<script src="js/modules/cobro-qr-yape-plin.js"></script>
+<script src="js/modules/ventas-stock.js"></script>
+<script src="js/modules/reporte-arqueo.js"></script>
+<script src="js/modules/reporte-medio-pago.js"></script>
+<script src="js/modules/panel-tesoreria.js"></script>
+<script src="js/inventory/historial-compras.js"></script>
+<script src="js/products/costo-compra-ficha.js"></script>
+<script src="js/modules/etiquetas-precios.js"></script>
+<script src="js/modules/catalogo-pos.js"></script>
+<script src="js/modules/productos-sin-movimiento.js"></script>
+<script src="js/modules/sugerencia-compra.js"></script>
+<script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/precios-masivos.js"></script>
+<script src="js/modules/stock-negativo.js"></script>
 <script src="js/config/config-e2.js"></script>
+<script src="js/config/employee-perms-ui.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
 <script src="js/config/pos-annul-client.js"></script>
@@ -1089,10 +1562,18 @@
 // CANON-PWA-UPDATE-001: actualización visible, accionable y de recarga única.
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
+    var PWA_UPDATE_FAIL_MS = 120000;
     var hadController = !!navigator.serviceWorker.controller;
     var reloadingForWorkerUpdate = false;
     var updateBusy = false;
     var updateFallbackTimer = 0;
+    var updateInstallTimer = 0;
+    var watchedInstalling = null;
+    var stopInstallWatch = null;
+    var updateFailed = false;
+    var updateRetried = false;
+    var updateDismissed = false;
+    var updateAttempt = 0;
     var pwaRegistration = null;
     var prompt = document.getElementById('pwaUpdatePrompt');
     var status = document.getElementById('pwaUpdateStatus');
@@ -1178,6 +1659,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 
     function markVersionPending(message, downloading) {
       if (!hadController) return;
+      if (updateFailed || updateDismissed) return;
       if (updateBusy) return;
       versionPending = true;
       // Mientras se descarga, el botón no acepta clics: antes el primer clic esperaba la
@@ -1185,6 +1667,86 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       if (downloading) setUpdateUi(message || 'Descargando la versión nueva…', 'working', 'Descargando…', false, true);
       else { setUpdateUi(message || readyText(), 'ready', 'Recargar', true, true); }
       try { window.dispatchEvent(new CustomEvent('na:version-update-pending')); } catch (_) {}
+    }
+
+    function clearInstallWatch() {
+      window.clearTimeout(updateInstallTimer);
+      updateInstallTimer = 0;
+      if (stopInstallWatch) stopInstallWatch();
+      stopInstallWatch = null;
+      watchedInstalling = null;
+    }
+    function failPwaUpdate() {
+      if (!hadController || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
+      clearInstallWatch();
+      window.clearTimeout(updateFallbackTimer);
+      var passive = !updateBusy;
+      updateBusy = false;
+      updateFailed = true;
+      updateAttempt++;
+      if (updateRetried) {
+        // Solo se descarta en esta página: la próxima apertura vuelve a comprobar la versión.
+        updateDismissed = true;
+        versionPending = false;
+        window.clearInterval(quietTimer); quietTimer = 0;
+        if (prompt) prompt.hidden = true;
+        return;
+      }
+      versionPending = true;
+      setUpdateUi('No se pudo actualizar', 'error', 'Reintentar', true, passive);
+    }
+    function watchInstalling(registration) {
+      var installing = registration.installing;
+      if (!installing || !hadController || updateFailed || updateDismissed || watchedInstalling === installing) return;
+      clearInstallWatch();
+      watchedInstalling = installing;
+      markVersionPending('Descargando la versión nueva…', true);
+      function inspect() {
+        if (installing.state === 'installed' || installing.state === 'activated') {
+          clearInstallWatch();
+          if (installing.state === 'installed') markVersionPending();
+        } else if (installing.state === 'redundant') failPwaUpdate();
+      }
+      if (typeof installing.addEventListener === 'function') {
+        installing.addEventListener('statechange', inspect);
+        installing.addEventListener('error', failPwaUpdate);
+        stopInstallWatch = function () {
+          if (typeof installing.removeEventListener !== 'function') return;
+          installing.removeEventListener('statechange', inspect);
+          installing.removeEventListener('error', failPwaUpdate);
+        };
+      }
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
+      inspect();
+    }
+    async function checkPwaUpdate(registration) {
+      var attempt = updateAttempt;
+      try {
+        await registration.update();
+        return attempt === updateAttempt;
+      } catch (error) {
+        if (attempt === updateAttempt && (watchedInstalling || updateBusy || (updateRetried && updateInstallTimer))) failPwaUpdate();
+        return false;
+      }
+    }
+    async function retryPwaUpdate() {
+      updateFailed = false;
+      updateRetried = true;
+      updateAttempt++;
+      clearInstallWatch();
+      setUpdateUi('Descargando la versión nueva…', 'working', 'Descargando…', false);
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
+      if (!await checkPwaUpdate(pwaRegistration) || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
+      if (pwaRegistration.waiting) {
+        clearInstallWatch();
+        markVersionPending();
+      } else if (pwaRegistration.installing && pwaRegistration.installing.state !== 'redundant') {
+        watchInstalling(pwaRegistration);
+      } else {
+        clearInstallWatch();
+        versionPending = false;
+        if (prompt) prompt.hidden = true;
+      }
     }
 
     if (later) {
@@ -1224,6 +1786,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           window.clearTimeout(timer);
           if (typeof worker.removeEventListener === 'function') {
             worker.removeEventListener('statechange', inspect);
+            worker.removeEventListener('error', failed);
           }
           resolve(ok);
         }
@@ -1234,6 +1797,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
             finish(false);
           }
         }
+        function failed() { finish(false); }
 
         inspect();
         if (settled) return;
@@ -1242,7 +1806,8 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           return;
         }
         worker.addEventListener('statechange', inspect);
-        timer = window.setTimeout(function () { finish(false); }, 120000);
+        worker.addEventListener('error', failed);
+        timer = window.setTimeout(function () { finish(false); }, PWA_UPDATE_FAIL_MS);
       });
     }
 
@@ -1261,6 +1826,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       return false;
     }
     function scheduleReload() {
+      clearInstallWatch();
       enableManualUpdateMode();
       if (!hadController || reloadingForWorkerUpdate) return;
       reloadingForWorkerUpdate = true;
@@ -1301,6 +1867,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     var pwaUpdateQueued = false;
     async function runPwaUpdate() {
         if (updateBusy) return;
+        if (updateDismissed) return;
         if (saleInProgress()) {
           setUpdateUi('Termina o vacía la venta en curso: la app se actualizará sola después.', 'working', 'Esperando la venta…', false);
           afterSaleFinishes(runPwaUpdate);
@@ -1312,13 +1879,15 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           setUpdateUi('Preparando la actualización…', 'working', 'Actualizando…', false);
           return;
         }
+        if (updateFailed) { retryPwaUpdate(); return; }
         updateBusy = true;
+        var attempt = updateAttempt;
         window.clearTimeout(updateFallbackTimer);
         setUpdateUi('Buscando la versión nueva…', 'working', 'Actualizando…', false);
 
         try {
           if (!pwaRegistration.waiting && !pwaRegistration.installing && typeof pwaRegistration.update === 'function') {
-            await pwaRegistration.update();
+            if (!await checkPwaUpdate(pwaRegistration)) return;
           }
 
           var worker = pwaRegistration.waiting || pwaRegistration.installing || null;
@@ -1339,12 +1908,9 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
             return;
           }
 
-          updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
+          if (attempt === updateAttempt) updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
         } catch (error) {
-          updateBusy = false;
-          reloadingForWorkerUpdate = false;
-          window.clearTimeout(updateFallbackTimer);
-          setUpdateUi('No se pudo actualizar. Comprueba internet y vuelve a intentar.', 'error', 'Reintentar', true);
+          if (attempt === updateAttempt) failPwaUpdate();
           console.warn('No se pudo aplicar la nueva versión del POS.', error);
         }
     }
@@ -1380,32 +1946,31 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       if (pwaUpdateQueued) { pwaUpdateQueued = false; runPwaUpdate(); }
 
       if (registration.waiting) markVersionPending();
+      if (registration.installing) watchInstalling(registration);
       if (typeof registration.addEventListener === 'function') {
         registration.addEventListener('updatefound', function () {
-          if (!registration.installing || !hadController) return;
-          markVersionPending('Descargando la versión nueva…', true);
-          var installing = registration.installing;
-          if (typeof installing.addEventListener === 'function') {
-            installing.addEventListener('statechange', function () {
-              if (installing.state === 'installed') markVersionPending();
-            });
-          }
+          watchInstalling(registration);
         });
+        registration.addEventListener('error', failPwaUpdate);
       }
 
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') registration.update().catch(function () {});
+        if (document.visibilityState === 'visible') checkPwaUpdate(registration);
       });
       window.addEventListener('online', function () {
-        registration.update().catch(function () {});
+        checkPwaUpdate(registration);
       });
 
-      return registration.update().catch(function () {});
+      return checkPwaUpdate(registration);
     }).catch(function (error) {
       console.warn('No se pudo registrar el shell PWA.', error);
     }); });
   });
 }
 </script>
+<!-- Asistente: el servidor decide; se apaga por aparato en Configuración (solo Admin) o con ?asistente=0 -->
+<script src="js/modules/asistente/asistente-loader.js" defer></script>
+<!-- WORK: isolated optional interface on the canonical POS. -->
+<script src="js/work-host.js" defer></script>
 </body>
 </html>

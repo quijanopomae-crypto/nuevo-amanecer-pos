@@ -4,7 +4,7 @@
 | Ruta | Contenido |
 |---|---|
 | `POS/` | App web (vanilla JS, sin bundler). Entrada `POS/index.html`, service worker `POS/sw.js`. |
-| `POS/js/legacy-inline/inline-01.js … inline-18.js` | Lógica histórica extraída del HTML: venta (`posRender`), inventario, clientes (`cliRender`), caja (`cajRender`, `abrirCaja`, `cerrarCaja`), ventas (`ventasRender`), respaldo/snapshot. Se sobreescriben funciones por capas: el orden de los `<script>` en `index.html` importa. |
+| `POS/js/legacy-inline/inline-01.js … inline-16.js` (inline-17/18, el núcleo V10 dormante, fueron retirados) | Lógica histórica extraída del HTML: venta (`posRender`), inventario, clientes (`cliRender`), caja (`cajRender`, `abrirCaja`, `cerrarCaja`), ventas (`ventasRender`), respaldo/snapshot. Se sobreescriben funciones por capas: el orden de los `<script>` en `index.html` importa. |
 | `POS/js/core/` | Utilidades (`utils.js`, `state.js`, `lima-time.js`, `theme-state.js`, `lazy-assets.js`). |
 | `POS/js/navigation/menu-navigation.js` | Navegación segura en móvil, drawer del teléfono (filas filtradas por rol, logo, línea de versión). |
 | `POS/js/config/` | Permisos (`pos-permissions.js`), roles (`pos-roles-client.js`), Configuración (`config-v9.js`, `config-v9-boot.js`, `config-e2.js`, `config-g.js`), versión publicada (`build-info.js`), clientes de anulación, DNI, compras, notas y revisiones. |
@@ -23,7 +23,7 @@
 
 ## Capas de CSS
 Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.css` → `responsive.css` → hojas CANON (`canon-*.css`, `config-*.css`, `inventario-redesign.css`, `mobile-drawer.css`, `proximamente.css`, …) → `theme-dark.css` → correcciones finales (`inventory-form-polish.css`). Para cambios nuevos prefiere una hoja CANON específica y acotada por id de página.
-- `POS/css/experience-v2/pages/*.css` son **copias de laboratorio: no editar**. Se verifican con `node tools/pos-experience/promote-lab-visuals.mjs --check`.
+- `POS/css/experience-v2/pages/*.css` eran copias del laboratorio (retirado; `tools/pos-experience/` ya no existe): hoy son CSS de producción y se pueden editar cuando el cambio lo requiere.
 
 ## Backend y datos
 - Cloudflare Worker (`tools/cloudflare-lab/src/worker.js`) + base de datos **Turso** (vía `turso-d1-adapter.js`).
@@ -36,8 +36,8 @@ Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.
 
 ## Deploy (solo vía ops JSON + PR mergeado a `feature/v1.3-mobile-cloud`)
 - **Backend primero** cuando cambie código del Worker: `ops/v1.3-turso-prod-worker-hotfix-trigger.json` → workflow `.github/workflows/v1.3-turso-prod-worker-hotfix.yml` (incrementar `attempt`, `target_commit`, `rollback_ref`).
-- **Web:** `ops/v1.3-pos-web-deploy-trigger.json` → `.github/workflows/v1.3-pos-web-deploy.yml` (incrementar `retry_attempt`, `approved_base`, `requested_at_utc`, rollback en `retry_reason`). Reemplaza `__BUILD_HASH__`/`__BUILD_DATE__` en `sw.js`, `index.html` y `js/config/build-info.js`.
-- Migraciones remotas: workflows `canon-migration-00NN.yml` con su `ops/canon-migration-00NN.json`, solo con aprobación del owner y respaldo.
+- **Web:** preparar el manifiesto v2 con `node tools/release/web-release.mjs prepare` según `docs/DEVELOPMENT_RISK_POLICY.md`; un único JSON activa `.github/workflows/v1.3-pos-web-deploy.yml`. El guard exige alcance completo, target exacto, CI y rollback. No incrementar manualmente múltiples flags. Reemplaza `__BUILD_HASH__`/`__BUILD_DATE__` en `sw.js`, `index.html` y `js/config/build-info.js`.
+- Migraciones remotas: workflow `canon-migration-00NN.yml` con su `ops/canon-migration-00NN.json`, solo con aprobación del owner y respaldo. Los de 0023–0033 ya se aplicaron una vez y se retiraron del árbol; la plantilla vigente es `canon-migrations-0021-0022.yml` (o `git show bf7d74db:.github/workflows/canon-migration-0033.yml`).
 
 ## Workflows que NUNCA se ejecutan/disparan sin orden explícita del owner
 - `.github/workflows/production-release.yml`
@@ -45,5 +45,5 @@ Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.
 - `.github/workflows/v1.3-prod-browser-cors-hotfix.yml`
 - `.github/workflows/canon-whatsapp-receipts-activation.yml`
 - `.github/workflows/v1.3-live-migration-0018.yml`
-- `.github/workflows/v1.3-turso-prod-cutover.yml` y `.github/workflows/v1.3-turso-prod-direct-cutover.yml`
+- `.github/workflows/v1.3-turso-prod-cutover.yml`
 (No modificar sus `ops/*-trigger.json`.)

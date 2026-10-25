@@ -1,5 +1,8 @@
 # Informe local — Lotes, vencimiento FEFO y productos a vencer
 
+> **Nota 2026-10-24:** las rutas `evidence/lotes-local/**` que cita este informe (líneas 34, 60 y 63) no existen en la rama principal (`git ls-tree` = 0 archivos; vienen del PR #643). Se conservan aquí como registro histórico de lo que se hizo en esa sesión.
+
+
 Fecha: 2026-10-14. Implementador: CANON / pos-canon-implementer.
 Directorio: `/workspace/wt-lotes`. Rama: `feat/lotes-vencimiento-fefo-v2`.
 HEAD inicial/final: `ef32c1b465994e11c900566187f98df28c2431e2`.

@@ -8,14 +8,64 @@ const LAZY_CACHE_PREFIX = 'nuevo-amanecer-pos-lazy-';
 const LAZY_CACHE_NAME = LAZY_CACHE_PREFIX + CACHE_NAME.slice(CACHE_PREFIX.length);
 const PRECACHE_URLS = [
   './index.html',
+  './js/work-host.js', // WORK entry — precached for offline canonical startup
+  './work/index.html', // WORK Inicio offline after shell installation
+  './work/work-canon-bridge.js',
+  './js/modules/asistente/asistente-loader.js', // cargador del asistente (prototipo): nunca bloquea el arranque instalado
   './manifest.webmanifest',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
   './css/base.css',
+  './css/theme-dark.css',
+  './css/inventory-form-polish.css',
+  './js/core/theme-state.js',
+  './js/config/pos-permissions.js',
   './css/proximamente.css',
   './css/sales-reports.css',
   './js/modules/proximamente.js',
   './js/modules/proximamente-registry.js',
+  './css/valorizacion-inventario.css',
+  './js/modules/valorizacion-inventario.js',
+  './css/rotacion-abc.css',
+  './js/modules/rotacion-abc.js',
+  './css/clientes-frecuencia.css',
+  './js/modules/clientes-frecuencia.js',
+  './css/reporte-productos-vencer.css',
+  './js/modules/reporte-productos-vencer.js',
+  './css/cliente-historial-compras.css',
+  './js/modules/cliente-historial-compras.js',
+  './css/kardex.css',
+  './js/modules/kardex.js',
+  './js/modules/cobro-qr-yape-plin.js',
+  './css/cobro-qr-yape-plin.css',
+  './css/ventas-stock.css',
+  './js/modules/ventas-stock.js',
+  './css/reporte-arqueo.css',
+  './js/modules/reporte-arqueo.js',
+  './css/reporte-medio-pago.css',
+  './js/modules/reporte-medio-pago.js',
+  './js/modules/panel-tesoreria.js',
+  './css/panel-tesoreria.css',
+  './css/historial-compras.css',
+  './js/inventory/historial-compras.js',
+  './js/products/costo-compra-ficha.js',
+  './css/costo-compra-ficha.css',
+  './css/price-history.css',
+  './js/products/price-history.js',
+  './js/products/price-history-ui.js',
+  './css/etiquetas-precios.css',
+  './js/modules/etiquetas-precios.js',
+  './css/catalogo-pos.css',
+  './js/modules/catalogo-pos.js',
+  './css/productos-sin-movimiento.css',
+  './js/modules/productos-sin-movimiento.js',
+  './css/sugerencia-compra.css',
+  './js/modules/sugerencia-compra.js',
+  './css/ajustes-inventario.css',
+  './js/modules/ajustes-inventario.js',
+  './css/precios-masivos.css',
+  './js/modules/precios-masivos.js',
+  './js/modules/stock-negativo.js',
   './css/layout.css',
   './css/components.css',
   './css/responsive.css',
@@ -32,6 +82,7 @@ const PRECACHE_URLS = [
   './css/inventario-redesign.css',
   './js/inventory/mobile-inventory.js',
   './js/inventory/stock-lots.js',
+  './js/inventory/presentaciones.js',
   './js/inventory/stock-lots-ui.js',
   './css/stock-lots.css',
   './css/experience-v2/tokens.css',
@@ -68,6 +119,7 @@ const PRECACHE_URLS = [
   './css/experience-v2/animations/notifications.css',
   './js/core/utils.js',
   './js/core/lima-time.js',
+  './js/core/seller-labels.js',
   './js/sync/outbox.js',
   './js/sync/hosted-canonical-guard.js',
   './js/adapters/canonical-ui-adapter.js',
@@ -96,6 +148,7 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-02.js',
   './js/modules/ticket/overrides.js',
   './js/legacy-inline/inline-03.js',
+  './js/modules/ventas-espera.js',
   './js/core/state.js',
   './js/legacy-inline/inline-04.js',
   './js/legacy-inline/inline-05.js',
@@ -108,14 +161,17 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-11.js',
   './js/legacy-inline/inline-12.js',
   './js/products/image-batch.js',
+  './js/products/zip-reader.js',
+  './css/codigos-duplicados.css',
+  './js/inventory/codigos-duplicados.js',
+  './css/edicion-masiva-productos.css',
+  './js/modules/edicion-masiva-productos.js',
   './js/products/image-sync.js',
   './js/legacy-inline/inline-13.js',
   './js/modules/ticket/secure-print.js',
   './js/legacy-inline/inline-14.js',
   './js/legacy-inline/inline-15.js',
   './js/legacy-inline/inline-16.js',
-  './js/legacy-inline/inline-17.js',
-  './js/legacy-inline/inline-18.js',
   './js/navigation/menu-navigation.js',
   './js/ui/na-line-icons.js',
   './js/motion/core.js',
@@ -126,6 +182,14 @@ const PRECACHE_URLS = [
   './js/motion/feedback-motion.js',
   './js/motion/cart-motion.js',
   './js/modules/client-credit-accounts-v2.js',
+  './css/clientes-reporte-deuda.css',
+  './js/modules/clientes-reporte-deuda.js',
+  './css/clientes-deudores-caja.css',
+  './js/modules/clientes-deudores-caja.js',
+  './css/clonar-venta.css',
+  './js/modules/clonar-venta.js',
+  './css/clientes-importar.css',
+  './js/modules/clientes-importar.js',
   './js/compat/legacy-globals.js',
   './js/app.js',
   './js/canon-pos-reference-ui.js',
@@ -137,9 +201,14 @@ const PRECACHE_URLS = [
   './js/config/pos-annul-client.js',
   './js/modules/discount-sheet.js','./js/config/pos-sale-note-client.js','./js/config/pos-purchases-client.js','./js/config/pos-dni-lookup-client.js','./js/config/config-v9.js','./js/config/config-v9-boot.js','./css/config-v9-screen.css',
   './js/config/pos-roles-client.js',
+  './js/config/pos-employee-toggles.js',
+  './js/config/employee-perms-client.js',
+  './js/config/employee-perms-ui.js',
   './js/core/lazy-assets.js'
 ];
 const LAZY_URLS = [
+  './css/product-image-review.css',
+  './js/perf/cash-perf-probe.js', // sonda de caja: solo bajo demanda (?perf=1 / na_cash_perf), index.html la inyecta
   './js/catalog/reference-catalog-data.js',
   './js/catalog/reference-catalog.js',
   './js/ocr/ocr-extract.js',
@@ -181,6 +250,14 @@ const VENDOR_URLS_ABSOLUTE = new Set(VENDOR_URLS.map((url) => new URL(url, self.
 const LAZY_URLS_ABSOLUTE = new Set(LAZY_URLS.map((url) => new URL(url, self.registration.scope).href));
 const START_URL = new URL('./index.html', self.registration.scope).href;
 const START_PATH = new URL(START_URL).pathname;
+// En el dominio publicado la app vive en /app/ y el lanzador enlaza a «/app/» (sin index.html): esa
+// navegación también es el shell. Sin esto, recargar /app/ sin red no pasaba por la caché.
+const SCOPE_PATH = new URL(self.registration.scope).pathname;
+// index.html la carga con <script src="/runtime-config.js"> (raíz del origen, no ./). En producción se
+// sirve no-store y su contenido puede cambiar: red primero y la última copia buena solo si no hay red.
+// Sin ella, la guardia hosted (hosted-canonical-guard.js) ve config inválida y redirige /app -> /.
+const RUNTIME_CONFIG_URL = new URL('/runtime-config.js', self.registration.scope).href;
+const RUNTIME_CONFIG_NETWORK_TIMEOUT_MS = 4000;
 
 function isExcluded(request, url) {
   return request.method !== 'GET'
@@ -192,7 +269,7 @@ function isExcluded(request, url) {
     || request.headers.has('x-sync-token')
     || request.headers.has('x-read-token')
     || (request.mode === 'navigate'
-      ? url.pathname !== START_PATH
+      ? url.pathname !== START_PATH && url.pathname !== SCOPE_PATH
       : !PRECACHE_URLS_ABSOLUTE.has(url.href) && !VENDOR_URLS_ABSOLUTE.has(url.href) && !LAZY_URLS_ABSOLUTE.has(url.href));
 }
 
@@ -225,7 +302,14 @@ async function stagedShellEntry(previousCaches, url) {
 // Solo index.html es crítico (sin él no hay versión nueva). El resto se guarda de a uno, con tiempo
 // máximo: un archivo que falla o tarda ya no deja la instalación colgada (celulares viejos quedaban en
 // «installing» en 106/125). Lo que falte se pide a la red con la misma versión publicada.
-const CRITICAL_SHELL = new Set([new URL('./index.html', self.registration.scope).href]);
+// Obligatorios además de index.html: solo cuentan si están en PRECACHE_URLS (así la lista aplica sola al
+// integrar la rama que añade el archivo). cache-identity-guard.js (PR #884, fix-cache-rol) purga la caché
+// canónica restringida al cambiar de identidad: si falta sin red, otro usuario vería datos del anterior.
+// pos-permissions.js define qué ve cada rol: si falta sin red, el menú del dueño podría quedar abierto.
+// theme-state.js no es obligatorio (solo apariencia): hacerlo crítico volvería a colgar celulares viejos.
+const CRITICAL_SHELL_EXTRA = ['./js/sync/cache-identity-guard.js', './js/config/pos-permissions.js'];
+const CRITICAL_SHELL = new Set(['./index.html', ...CRITICAL_SHELL_EXTRA.filter((url) => PRECACHE_URLS.includes(url))]
+  .map((url) => new URL(url, self.registration.scope).href));
 const PRECACHE_ITEM_TIMEOUT_MS = 20000;
 function withTimeout(promise, ms) {
   let timer;
@@ -233,7 +317,8 @@ function withTimeout(promise, ms) {
     .finally(() => clearTimeout(timer));
 }
 async function stageShell(cache) {
-  const requests = [...PRECACHE_URLS_ABSOLUTE];
+  // runtime-config.js va con el shell (no crítico): sin red, la primera recarga ya tiene una copia.
+  const requests = [...PRECACHE_URLS_ABSOLUTE, RUNTIME_CONFIG_URL];
   const previousCaches = await previousShellCaches().catch(() => []);
   const results = await Promise.all(requests.map(async (url) => {
     try {
@@ -306,9 +391,37 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Red primero para runtime-config.js: respuesta 200 de la red = se usa y se guarda; respuesta no-200 de la
+// red = se respeta (no se tapa una config inválida del servidor); sin red o si tarda más de
+// RUNTIME_CONFIG_NETWORK_TIMEOUT_MS = la última copia buena guardada (si existe).
+function runtimeConfigNetworkFirst(event) {
+  const request = event.request;
+  const network = fetch(new Request(request, { cache: 'no-store' })).then(async (response) => {
+    if (response && response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(RUNTIME_CONFIG_URL, response.clone());
+    }
+    return response;
+  });
+  event.waitUntil(network.then(() => undefined, () => undefined));
+  const cachedCopy = () => caches.open(CACHE_NAME).then((cache) => cache.match(RUNTIME_CONFIG_URL));
+  let timer;
+  const slow = new Promise((resolve) => { timer = setTimeout(resolve, RUNTIME_CONFIG_NETWORK_TIMEOUT_MS); })
+    .then(() => cachedCopy())
+    .then((cached) => cached || network);
+  return Promise.race([network, slow])
+    .catch(() => cachedCopy().then((cached) => cached || Promise.reject(new TypeError('RUNTIME_CONFIG_UNAVAILABLE'))))
+    .finally(() => clearTimeout(timer));
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
+  if (request.method === 'GET' && request.mode !== 'navigate' && url.href === RUNTIME_CONFIG_URL
+    && !request.headers.has('authorization') && !request.headers.has('x-sync-token') && !request.headers.has('x-read-token')) {
+    event.respondWith(runtimeConfigNetworkFirst(event));
+    return;
+  }
   if (isExcluded(request, url)) return;
 
   if (VENDOR_URLS_ABSOLUTE.has(request.url)) {

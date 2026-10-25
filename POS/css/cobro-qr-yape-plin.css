@@ -1,0 +1,19 @@
+/* #40 QR Yape/Plin: solo añade un botón en el cobro, una ventana y una tarjeta en Configuración. */
+:root { --naqr-bg: #ffffff; --naqr-text: #0f172a; --naqr-muted: #475569; --naqr-border: #cbd5e1; --naqr-accent: #0f766e; --naqr-accent-text: #ffffff; }
+body.dark { --naqr-bg: #1e293b; --naqr-text: #f8fafc; --naqr-muted: #cbd5e1; --naqr-border: #64748b; --naqr-accent: #14b8a6; --naqr-accent-text: #042f2e; }
+.na-qr-show-btn { display: block; width: 100%; margin: 10px 0; min-height: 44px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--naqr-accent); background: transparent; color: var(--naqr-accent); font-weight: 700; font-size: 15px; cursor: pointer; }
+.na-qr-show-btn[hidden] { display: none; }
+.na-qr-overlay { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 6, 23, .78); }
+.na-qr-box { box-sizing: border-box; width: min(440px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px; border-radius: 16px; background: var(--naqr-bg); color: var(--naqr-text); border: 1px solid var(--naqr-border); text-align: center; }
+.na-qr-title { font-size: 20px; font-weight: 800; }
+.na-qr-img { display: block; width: min(340px, 78vw, 58vh); height: auto; aspect-ratio: auto; background: #fff; border-radius: 10px; padding: 8px; box-sizing: border-box; object-fit: contain; }
+.na-qr-amount-label { color: var(--naqr-muted); font-size: 14px; }
+.na-qr-amount { font-size: clamp(28px, 8vw, 40px); font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+.na-qr-close { min-height: 46px; width: 100%; border: 0; border-radius: 10px; background: var(--naqr-accent); color: var(--naqr-accent-text); font-size: 16px; font-weight: 800; cursor: pointer; }
+.na-qr-cfg-row { display: grid; grid-template-columns: 60px 72px 1fr; grid-template-areas: "name prev status" "name prev actions"; align-items: center; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--naqr-border); min-width: 0; }
+.na-qr-cfg-name { grid-area: name; } .na-qr-cfg-prev { grid-area: prev; width: 72px; height: 72px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--naqr-border); }
+.na-qr-cfg-status { grid-area: status; color: var(--naqr-muted); font-size: 13px; } .na-qr-cfg-actions { grid-area: actions; display: flex; flex-wrap: wrap; gap: 8px; }
+.na-qr-cfg-btn { min-height: 38px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--naqr-border); background: var(--naqr-bg); color: var(--naqr-text); font-weight: 700; cursor: pointer; }
+.na-qr-cfg-btn[hidden], .na-qr-cfg-prev[hidden] { display: none; }
+.na-qr-cfg { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--naqr-border); border-radius: 10px; background: var(--naqr-bg); color: var(--naqr-text); min-width: 0; }
+.na-qr-cfg-title { margin: 0 0 4px; font-size: 15px; } .na-qr-cfg-help { margin: 0 0 8px; color: var(--naqr-muted); font-size: 13px; }

@@ -213,16 +213,18 @@ test('T8 all tracked frozen files remain identical to the base', () => {
   execFileSync('git', ['diff', '--quiet', BASE, '--', ...frozen], { cwd: ROOT });
 });
 
-test('T9 V9, V10 dormancy, persistence, and finance bodies are textually unchanged', () => {
-  const original = baseInlineScripts().map(script => script.body).join('\n');
-  const moved = manifest.scripts.map(entry => externalBody(entry).toString('utf8')).join('\n');
-  for (const token of [
-    'snapshot_v9', '_naV10ConfigureRuntime', '_naV10ReadCanonical',
-    '_naV10InitializeCanonical', '_naRunCriticalOperation', 'confirmarVenta',
-  ]) {
+test('T9 V9, persistence, and finance bodies are textually unchanged; retired V10 core is gone', () => {
+  // inline-17/18 (núcleo V10 dormante) se eliminaron del repositorio: se comparan solo los cuerpos que siguen existiendo.
+  const alive = manifest.scripts.map(entry => fs.existsSync(path.join(ROOT, ...entry.externalFile.split('/'))));
+  const retired = manifest.scripts.filter((entry, index) => !alive[index]).map(entry => entry.externalFile);
+  assert.deepEqual(retired, ['POS/js/legacy-inline/inline-17.js', 'POS/js/legacy-inline/inline-18.js']);
+  const original = baseInlineScripts().filter((script, index) => alive[index]).map(script => script.body).join('\n');
+  const moved = manifest.scripts.filter((entry, index) => alive[index]).map(entry => externalBody(entry).toString('utf8')).join('\n');
+  for (const token of ['snapshot_v9', 'confirmarVenta']) {
     assert.equal(moved.split(token).length, original.split(token).length, token);
   }
-  assert.ok(moved.includes('MODULO DE CAJA V10 — GASTOS / CASH_IN / CASH_OUT (DORMANTE, NO CONECTADO A V9)'));
+  assert.equal(/_naV10|_NA_V10/.test(moved), false, 'ningún cuerpo restante referencia el núcleo V10 retirado');
+  assert.equal(moved.includes('MODULO DE CAJA V10'), false);
 });
 
 test('T10 HEAD, staging, and tracked scope remain checkpoint-ready', () => {

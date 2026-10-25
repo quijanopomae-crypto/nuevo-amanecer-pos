@@ -47,6 +47,13 @@ async function referenceTakenBy(db, guard, operationId) {
   return !!(row && row.operation_id !== operationId);
 }
 
+// Crédito importado anulado en origen (credits.source_status empieza por 'anul', sin distinguir mayúsculas):
+// no acepta abonos. Los créditos LIVE y los conciliados nunca están anulados. Solo lectura; no cambia el esquema.
+const VOIDED_IMPORT_SQL = "lower(trim(COALESCE(x.source_status,''))) LIKE 'anul%'";
+async function importCreditVoided(db, promotionId, creditId) {
+  return !!(await db.prepare(`SELECT 1 ok FROM credits x WHERE x.promotion_id=?1 AND x.credit_id=?2 AND ${VOIDED_IMPORT_SQL}`).bind(promotionId, creditId).first());
+}
+
 function validate(command, b) {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return 'invalid_body';
   if (Object.keys(b).some(k => ![...COMMON,...FIELDS[command]].includes(k))) return 'unexpected_field';
@@ -130,6 +137,9 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   if (creditId) {
     credit = await db.prepare('SELECT * FROM canonical_credit_balances WHERE promotion_id=?1 AND credit_id=?2').bind(body.promotion_id,creditId).first();
     if (!credit || credit.revision !== body.expected_credit_revision) return json({error:'stale_credit'},409);
+    // Abonar o anular un abono de un crédito importado anulado en origen: 409 sin aplicar nada. El replay idempotente
+    // (replay() más arriba) ya respondió antes. adjustment.create no tiene crédito (es un ajuste de caja), así que no aplica.
+    if ((command === 'payment.create' || command === 'compensation.create') && credit.provenance === 'IMPORT' && await importCreditVoided(db, body.promotion_id, creditId)) return json({error:'credit_voided',credit_id:creditId},409);
     const balance = credit.current_balance_cents + creditDelta;
     if (!uint(balance) || balance > credit.opening_balance_cents) return json({error:'credit_balance_conflict'},409);
     assert(`EXISTS(SELECT 1 FROM canonical_credit_balances WHERE promotion_id=?2 AND credit_id=?3 AND provenance=?4
@@ -156,7 +166,7 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   } else if (command === 'cash.close') {
     Object.assign(result,{counted_cents:body.counted_cents,difference_cents:body.counted_cents-session.expected_cents});
     effects.push(db.prepare(`INSERT INTO canonical_cash_closures(session_id,close_operation_id,expected_cents,counted_cents,difference_cents,cash_movement_watermark,closed_at${cashierReady ? ',closed_by_user_id,closed_by_name' : ''})
-      VALUES(?1,?2,?3,?4,?5,?6,?7${cashierReady ? ',?8,?9' : ''})`).bind(body.session_id,body.operation_id,session.expected_cents,body.counted_cents,result.difference_cents,session.closing_watermark,body.created_at,...(cashierReady ? [cashier.userId,cashier.name] : [])));
+      VALUES(?1,?2,?3,?4,?5,?6,?7${cashierReady ? ',?8,?9' : ''})`).bind(body.session_id,body.operation_id,session.expected_cents,body.counted_cents,result.difference_cents,session.closing_watermark,new Date().toISOString(),...(cashierReady ? [cashier.userId,cashier.name] : [])));
   } else {
     result.event_id = body.operation_id;
     result.cash_delta_cents = cashDelta;
@@ -285,8 +295,10 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
         'provenance',provenance,
         'revision',revision,
         'current_balance_cents',current_balance_cents,
-        'opening_balance_cents',opening_balance_cents
-      )),'[]') FROM canonical_credit_balances
+        'opening_balance_cents',opening_balance_cents,
+        'voided',CASE WHEN b.provenance='IMPORT' AND EXISTS(SELECT 1 FROM credits x WHERE x.promotion_id=b.promotion_id
+          AND x.credit_id=b.credit_id AND ${VOIDED_IMPORT_SQL}) THEN 1 ELSE 0 END
+      )),'[]') FROM canonical_credit_balances b
         WHERE promotion_id=?2
           AND credit_id IN (${inClause(creditIds.length,creditStart)})) AS credits_json,
       ${method === 'efectivo'
@@ -358,6 +370,7 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
     const payment = payments[index];
     const credit = creditById.get(payment.credit_id);
     if (!credit || credit.revision !== payment.expected_credit_revision) return json({error:'stale_credit',credit_id:payment.credit_id},409);
+    if (credit.voided) return json({error:'credit_voided',credit_id:payment.credit_id},409);
     const balance = credit.current_balance_cents - payment.amount_cents;
     if (!uint(balance) || balance > credit.opening_balance_cents) return json({error:'credit_balance_conflict',credit_id:payment.credit_id},409);
     const result = {

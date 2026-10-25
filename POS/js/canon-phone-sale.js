@@ -180,11 +180,29 @@
         cerrarModal('mCobro');
       }
     },true);
-    new MutationObserver(syncMenu).observe(checkout,{attributes:true,attributeFilter:['class']});
+    // Observadores que solo importan en teléfono: se conectan al entrar en modo teléfono y se
+    // desconectan (disconnect) al salir. En PC/tablet solo queda el de clase del <body> (detector de dispositivo).
+    var phoneObservers = [];
+    function connectPhoneObservers() {
+      if (phoneObservers.length) return;
+      [
+        [syncMenu, checkout, {attributes:true,attributeFilter:['class']}],
+        [syncSale, document.getElementById('cartItems'), {childList:true,subtree:true}],
+        [syncSale, document.getElementById('posTotal'), {childList:true}],
+        [function () { scheduleViewport(); if (!page.classList.contains('active')) { closeCatalog(); closeCamera(); } }, page, {attributes:true,attributeFilter:['class']}]
+      ].forEach(function (item) {
+        var observer = new MutationObserver(item[0]); observer.observe(item[1],item[2]); phoneObservers.push(observer);
+      });
+    }
+    function disconnectPhoneObservers() {
+      phoneObservers.forEach(function (observer) { observer.disconnect(); });
+      phoneObservers = [];
+    }
     function syncDevice() {
       var enabled = document.body.classList.contains('na-pos-phone-device');
       if (enabled === phone) { syncSale(); return; }
       phone = enabled;
+      if (phone) connectPhoneObservers();
       extraActions.forEach(function (item) { if (phone) dropdown.appendChild(item.el); else item.anchor.after(item.el); });
       syncMenu();
       page.classList.toggle('phone-sale',phone);
@@ -202,14 +220,12 @@
           if (original.label === null) el.removeAttribute('aria-label'); else el.setAttribute('aria-label',original.label);
           rowButtons.delete(el);
         });
+        disconnectPhoneObservers();
       }
     }
     new MutationObserver(syncDevice).observe(document.body,{attributes:true,attributeFilter:['class']});
-    new MutationObserver(syncSale).observe(document.getElementById('cartItems'),{childList:true,subtree:true});
-    new MutationObserver(syncSale).observe(document.getElementById('posTotal'),{childList:true});
     document.getElementById('mVentaCliente').addEventListener('change',syncSale);
     root.addEventListener('na:canonical-updated',syncSale);
-    new MutationObserver(function () { scheduleViewport(); if (!page.classList.contains('active')) { closeCatalog(); closeCamera(); } }).observe(page,{attributes:true,attributeFilter:['class']});
     document.addEventListener('visibilitychange',function () { if (document.hidden) closeCamera(); });
     root.addEventListener('pagehide',stopCamera); syncDevice();
   }

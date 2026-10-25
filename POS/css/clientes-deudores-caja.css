@@ -1,0 +1,25 @@
+/* «Clientes que deben» (cajero). Solo dentro de Clientes. */
+#pageClientes #naDeudoresCajaBtn.dc-entry { display:block; width:calc(100% - 24px); min-height:44px; margin:8px 12px; padding:10px 12px; white-space:normal; cursor:pointer; height:auto; flex:none; }
+#naDeudoresCajaBtn[hidden], #naDeudoresCaja[hidden] { display:none !important; }
+#naDeudoresCaja { --dc-surface:#fff; --dc-text:#172b3a; --dc-muted:#526574; --dc-border:#d9e3ea; --dc-accent:#0f766e; --dc-danger:#b42318; --dc-warn:#9a6700;
+  margin:0 12px 12px; padding:12px; border:1px solid var(--dc-border); border-radius:12px; background:var(--dc-surface); color:var(--dc-text); box-sizing:border-box; max-width:calc(100% - 24px); }
+body.dark #naDeudoresCaja { --dc-surface:#111c26; --dc-text:#e6eef4; --dc-muted:#a7b8c5; --dc-border:#2b3b49; --dc-accent:#5eead4; --dc-danger:#ff8a80; --dc-warn:#f5c26b; }
+#naDeudoresCaja * { box-sizing:border-box; }
+#naDeudoresCaja .dc-filters { display:flex; flex-wrap:wrap; gap:8px; }
+#naDeudoresCaja .dc-filter { min-height:44px; padding:8px 12px; border:1px solid var(--dc-border); border-radius:22px; background:transparent; color:var(--dc-text); font:inherit; cursor:pointer; }
+#naDeudoresCaja .dc-filter[aria-pressed="true"] { background:var(--dc-accent); border-color:var(--dc-accent); color:#fff; }
+body.dark #naDeudoresCaja .dc-filter[aria-pressed="true"] { color:#06201d; }
+#naDeudoresCaja .dc-status-msg:empty { display:none; }
+#naDeudoresCaja .dc-status-msg, #naDeudoresCaja .dc-footer { color:var(--dc-muted); margin:10px 0 0; font-size:13px; }
+#naDeudoresCaja .dc-list { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:8px; }
+#naDeudoresCaja .dc-row { width:100%; min-height:44px; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:6px 12px; padding:10px; text-align:left;
+  border:1px solid var(--dc-border); border-left:4px solid var(--dc-accent); border-radius:10px; background:transparent; color:var(--dc-text); font:inherit; cursor:pointer; }
+#naDeudoresCaja .dc-row.dc-vencidas { border-left-color:var(--dc-danger); }
+#naDeudoresCaja .dc-row.dc-por-vencer { border-left-color:var(--dc-warn); }
+#naDeudoresCaja .dc-row:focus-visible, #naDeudoresCaja .dc-filter:focus-visible, #naDeudoresCajaBtn:focus-visible { outline:3px solid var(--dc-accent); outline-offset:2px; }
+#naDeudoresCaja .dc-cell { display:flex; flex-direction:column; min-width:0; }
+#naDeudoresCaja .dc-client { grid-column:1 / -1; }
+#naDeudoresCaja .dc-label { font-size:12px; color:var(--dc-muted); }
+#naDeudoresCaja .dc-value { overflow-wrap:anywhere; }
+#naDeudoresCaja .dc-overdue .dc-value { color:var(--dc-danger); }
+@media (min-width:768px) { #naDeudoresCaja .dc-row { grid-template-columns:2fr repeat(4, minmax(0,1fr)); } #naDeudoresCaja .dc-client { grid-column:auto; } }

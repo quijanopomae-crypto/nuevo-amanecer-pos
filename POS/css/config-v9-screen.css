@@ -314,3 +314,35 @@ body.dark #naCfgV9.na9 .na9-err{color:#fca5a5}
   #naCfgV9 .na9-tab,#naCfgV9.na9 .na9-tab{flex:1 1 0;min-width:0;justify-content:center;padding:10px 4px;font-size:14px;min-height:44px;white-space:normal;text-align:center;line-height:1.15}
 }
 #naCfgV9 .na9-row-sw{cursor:pointer}
+
+/* Envío por WhatsApp (NAReceiptUI.settingsHtml) dentro de Ticket y comprobantes: mismo aspecto que .na9-sub/.na9-row. */
+#naCfgV9 .na9-wa .cfg-panel{border:1px solid var(--ln,var(--border));border-radius:10px;padding:14px 16px;background:var(--card,var(--white));color:var(--txt,var(--dark));display:flex;flex-direction:column;gap:10px;box-shadow:none;margin:0;min-width:0}
+#naCfgV9 .na9-wa .cfg-panel-title{margin:0;font-size:15px;font-weight:700;color:var(--navy,var(--dark))}
+#naCfgV9 .na9-wa .na-receipt-settings-note{color:var(--gr,var(--slate));font-size:13.5px}
+#naCfgV9 .na9-wa .cfg-setting-list{display:flex;flex-direction:column;gap:8px}
+#naCfgV9 .na9-wa .cfg-setting{display:flex;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;min-height:0;height:auto;text-align:left;border:1px solid var(--ln,var(--border));border-radius:9px;padding:10px 14px;background:var(--rowbg,var(--white));color:var(--txt,var(--dark));min-width:0}
+#naCfgV9 .na9-wa .cfg-setting label{font-size:15px;font-weight:500;color:var(--lab,var(--dark));flex:1 1 220px;min-width:0}
+#naCfgV9 .na9-wa .cfg-setting select{flex:0 1 auto;min-width:0;max-width:100%;margin:0;width:auto}
+#naCfgV9 .na9-wa .cfg-setting small{flex-basis:100%;color:var(--gr,var(--slate));font-size:13px}
+#naCfgV9 .na9-wa .cfg-setting input[type=checkbox]{width:22px;height:22px;flex:0 0 auto;accent-color:var(--te,var(--teal))}
+#naCfgV9 .na9-wa select:disabled,#naCfgV9 .na9-wa input:disabled{opacity:.6;cursor:not-allowed}
+#naCfgV9 .na9-wa .na-receipt-help{font-size:13.5px;color:var(--gr,var(--slate))}
+#naCfgV9 .na9-wa .na-receipt-help summary{cursor:pointer;font-weight:600;color:var(--lab,var(--dark))}
+#naCfgV9 .na9-wa .na-receipt-help p{margin:6px 0 0}
+@media (max-width:700px){#naCfgV9 .na9-wa .cfg-setting{flex-direction:column;align-items:stretch;gap:8px}#naCfgV9 .na9-wa .cfg-setting label{flex:0 0 auto}#naCfgV9 .na9-wa .cfg-setting select{flex:0 0 auto;width:100%}#naCfgV9 .na9-wa .cfg-setting:has(input[type=checkbox]){flex-direction:row;align-items:center}#naCfgV9 .na9-wa .cfg-setting:has(input[type=checkbox]) label{flex:1 1 0}}
+
+/* Pulido de Configuración (solo CSS). */
+/* «Abrir con» y Formato terminan en el mismo borde derecho aunque la fila se parta (tableta, 768). */
+@media (min-width:701px){#naCfgV9 .na9-wa .cfg-setting select{margin-left:auto}}
+/* «Preguntar» de solo lectura: sin la opacidad .6 de los controles deshabilitados (estilo en receipt-share.css). */
+#naCfgV9 .na9-wa .na-receipt-settings input[type=checkbox]:disabled{opacity:1}
+/* Aviso de estado en modo claro: «Guardando…» y el error, más oscuros sobre su fondo (≥ 4.5:1). */
+#naCfgV9.na9:not(.na9-dk) .na9-saved.wait{color:#4b5563}
+#naCfgV9.na9:not(.na9-dk) .na9-saved.err{color:#b91c1c}
+/* Toast dentro de Configuración: sube por encima del aviso de estado (abajo a la derecha) para no taparse,
+   y el rojo de error en modo claro pasa a ≥ 4.5:1 con texto blanco. Solo con Configuración abierta. */
+body:has(#pageConfig.active #naCfgV9) .toast{bottom:calc(env(safe-area-inset-bottom,0px) + 54px)}
+body:not(.dark):has(#pageConfig.active #naCfgV9) .toast.error{background:#b91c1c}
+/* Tableta (701–1100): el menú se estira con el contenido y «Reseteo» quedaba al fondo, fuera de la vista.
+   Va justo debajo de los demás ítems, como en el teléfono; los otros ítems no se mueven. */
+@media (min-width:701px) and (max-width:1100px){#naCfgV9.na9 .na9-reset{margin-top:10px}}

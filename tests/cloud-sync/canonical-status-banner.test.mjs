@@ -137,3 +137,47 @@ test('Bot 2 P2: un cierre de caja con 500 NUNCA se reenvía solo (ni al reconect
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_cash_closures").n, 0, 'la caja sigue abierta');
   assert.equal(d.api.pendingSnapshot().command, 'cash.close', 'queda esperando que el cajero vuelva a confirmar');
 });
+
+// Rendimiento (2026-10-23): la franja no debe copiar toda la réplica cada 5 s.
+test('compute() usa cashSessionsSnapshot y NO snapshot() completo; la caja de otro día se sigue avisando', async (t) => {
+  const f = await activeCanon(t, { migrations: MIGS });
+  const d = await device(f, { token: 'b9', deviceId: 'b9', scripts: SCRIPTS, globals: { obtenerHoy: () => new Date().toISOString().slice(0, 10) } });
+  const banner = d.context.NuevoAmanecerStatusBanner;
+  assert.equal(typeof d.context.NuevoAmanecerCanonical.cashSessionsSnapshot, 'function');
+  assert.ok(Array.isArray(d.context.NuevoAmanecerCanonical.cashSessionsSnapshot()));
+  const real = d.context.NuevoAmanecerCanonical;
+  let full = 0, light = 0;
+  const spy = Object.assign({}, real, { snapshot: () => { full++; return real.snapshot(); }, cashSessionsSnapshot: () => { light++; return real.cashSessionsSnapshot(); } });
+  const orig = d.context.NuevoAmanecerCanonical;
+  d.context.NuevoAmanecerCanonical = spy;
+  try { banner.compute(); } finally { d.context.NuevoAmanecerCanonical = orig; }
+  assert.equal(full, 0, 'sin copia completa'); assert.equal(light, 1);
+});
+
+test('con la lectura liviana la caja abierta de otro día SIGUE avisándose (otherDay) y sin copia completa', async (t) => {
+  const f = await activeCanon(t, { migrations: MIGS });
+  const d = await device(f, { token: 'b10', deviceId: 'b10', scripts: SCRIPTS, globals: { obtenerHoy: () => '2099-01-01' } });
+  await d.api.openCash({ session_id: 'S-old2', opening_cents: 0 }); await d.api.refresh();
+  const real = d.context.NuevoAmanecerCanonical; let full = 0;
+  d.context.NuevoAmanecerCanonical = Object.assign({}, real, { snapshot: () => { full++; return real.snapshot(); } });
+  let st; try { st = d.context.NuevoAmanecerStatusBanner.compute(); } finally { d.context.NuevoAmanecerCanonical = real; }
+  assert.match(String(st.otherDay), /^\d{4}-\d{2}-\d{2}$/); assert.equal(full, 0);
+});
+
+test('pestaña oculta: el tick de 5 s NO calcula ni dibuja; al volver visible sí dibuja', async () => {
+  const src = read('POS/js/sync/canonical-status-banner.js');
+  let calls = 0, tickFn = null; const handlers = {}; const docHandlers = {};
+  const doc = { hidden: true, body: undefined, readyState: 'complete', addEventListener(n, fn) { docHandlers[n] = fn; }, getElementById() { return null; } };
+  const sb = { document: doc, setInterval(fn) { tickFn = fn; return 1; }, clearInterval() {}, addEventListener(n, fn) { handlers[n] = fn; }, setTimeout() {},
+    NuevoAmanecerCanonical: { enabled() { return true; }, cashSessionsSnapshot() { calls++; return []; }, pendingSnapshot() { return null; } } };
+  sb.globalThis = sb;
+  new Function('globalThis', 'setInterval', 'setTimeout', src)(sb, sb.setInterval, sb.setTimeout); // sin temporizadores reales
+  sb.NuevoAmanecerStatusBanner.start();
+  const arranque = calls; // start() dibuja una vez
+  for (let i = 0; i < 10; i++) tickFn();
+  assert.equal(calls, arranque, 'oculta: ningún cálculo en 10 ticks');
+  doc.hidden = false; for (let i = 0; i < 5; i++) tickFn();
+  assert.equal(calls, arranque + 1, 'visible: dibuja en el quinto tick');
+  doc.hidden = true; const antes = calls; doc.hidden = false; docHandlers.visibilitychange();
+  assert.equal(calls, antes + 1, 'al volver visible redibuja');
+});

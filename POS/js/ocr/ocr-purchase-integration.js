@@ -371,6 +371,8 @@
             : messageFrom(firstError, 'No se pudo aplicar la compra. El inventario fue restaurado.'));
           return result;
         }
+        // Misión 2: en modo local el dueño actualiza el costo con el de la compra y lo anota en el historial.
+        if (!canonicalOn) { try { if (root && root.NA_COSTO_COMPRA_FICHA && typeof root.NA_COSTO_COMPRA_FICHA.afterLocalPurchase === 'function') await root.NA_COSTO_COMPRA_FICHA.afterLocalPurchase(currentBatch.operationId, result); } catch (_) {} }
         var appliedCount = Array.isArray(result.applied) ? result.applied.length : 0;
         var duplicateCount = Array.isArray(result.skipped) ? result.skipped.filter(function (row) {
           return row && row.reason === 'ALREADY_APPLIED';

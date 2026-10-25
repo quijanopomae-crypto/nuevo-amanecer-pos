@@ -93,7 +93,7 @@ export function allProductJsFiles() {
     'js/core/state.js',
     'js/core/utils.js',
   ];
-  for (let i = 1; i <= 18; i += 1) {
+  for (let i = 1; i <= 16; i += 1) {
     files.push(`js/legacy-inline/inline-${String(i).padStart(2, '0')}.js`);
   }
   files.push('js/modules/ticket/legacy.js');

@@ -1,0 +1,41 @@
+/* Generar catálogo desde el POS (#172). */
+.cat-overlay{position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.55);display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:16px}
+.cat-overlay[hidden]{display:none}
+.cat-box{background:var(--bg2,#fff);color:var(--text,#0f172a);border-radius:12px;width:min(100%,960px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.cat-toolbar{position:sticky;top:0;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border,#e2e8f0);background:inherit;border-radius:12px 12px 0 0}
+.cat-title{font-size:16px;margin-right:auto}
+.cat-field,.cat-check{font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.cat-field select{padding:6px 8px;border-radius:8px;border:1px solid var(--border,#cbd5e1);background:var(--bg,#fff);color:inherit;max-width:180px}
+.cat-count{font-size:12px;opacity:.8}
+.cat-btn{padding:8px 12px;border-radius:8px;border:1px solid var(--border,#cbd5e1);background:transparent;color:inherit;font-weight:600;cursor:pointer}
+.cat-btn.primary{background:var(--teal,#0d9488);border-color:var(--teal,#0d9488);color:#fff}
+.cat-btn:disabled{opacity:.5;cursor:not-allowed}
+.cat-sheet{background:#fff;color:#0f172a;margin:14px;padding:18px;border-radius:8px}
+.cat-sheet-head{text-align:center;margin-bottom:12px}
+.cat-sheet-head h2{margin:0;font-size:20px}
+.cat-sheet-head p{margin:2px 0 0;font-size:12px;color:#475569}
+.cat-group{margin-top:14px}
+.cat-group-title{font-size:15px;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #0d9488;color:#0f766e}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.cat-card{border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center;break-inside:avoid;page-break-inside:avoid}
+.cat-photo{height:90px;display:flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:6px}
+.cat-photo img{max-width:100%;max-height:90px;object-fit:contain}
+.cat-name{font-size:12px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.cat-price{font-size:15px;font-weight:800;color:#0f766e;margin-top:4px}
+.cat-wholesale{font-size:11px;color:#475569;margin-top:2px}
+.cat-empty{text-align:center;color:#475569}
+body.dark .cat-box{background:#1e293b;color:#e2e8f0}
+body.dark .cat-toolbar{border-color:#334155}
+body.dark .cat-field select,body.dark .cat-btn:not(.primary){border-color:#475569;background:#0f172a;color:#e2e8f0}
+@media (max-width:600px){.cat-overlay{padding:0}.cat-box{border-radius:0;min-height:100%}.cat-sheet{margin:8px;padding:10px}.cat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media print{
+  @page{size:A4;margin:12mm}
+  /* :not() doble: sube la especificidad sobre las reglas móviles de .page activa. */
+  html body.cat-printing>*:not(#naCatalogoPos):not(#naCatalogoPosX){display:none!important}
+  body.cat-printing #naCatalogoPos{position:static;display:block;background:none;padding:0;overflow:visible}
+  body.cat-printing .cat-box{box-shadow:none;width:auto;background:#fff}
+  body.cat-printing .cat-toolbar{display:none}
+  body.cat-printing .cat-sheet{margin:0;padding:0}
+  body.cat-printing .cat-grid{grid-template-columns:repeat(4,1fr)}
+  body.cat-printing *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}

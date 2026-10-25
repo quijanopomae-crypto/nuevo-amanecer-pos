@@ -2,11 +2,26 @@
 (function(root){
   'use strict';
   const FORMATS=['image','text','pdf'];
+  // Aplicación de envío (solo texto, solo Android): auto = wa.me como siempre.
+  const APPS=['auto','whatsapp','business'];
+  const APP_PACKAGES={whatsapp:'com.whatsapp',business:'com.whatsapp.w4b'};
+  const APP_LABELS={auto:'Automático',whatsapp:'WhatsApp',business:'WhatsApp Business'};
   let active=null,version=0,busy=false,returnFocus=null;
   const copy=value=>JSON.parse(JSON.stringify(value));
   function config(){try{if(typeof appConfig!=='undefined')return appConfig;}catch(_){}return root.appConfig||{};}
-  function settings(){const t=config().ticket||{};return{format:FORMATS.includes(t.shareFormat)?t.shareFormat:'image',ask:t.shareAsk!==false};}
-  function setSettings(value){if(!FORMATS.includes(value.format))throw new Error('Formato inválido');const c=config();c.ticket=c.ticket||{};c.ticket.shareFormat=value.format;c.ticket.shareAsk=value.ask!==false;}
+  // 'Abrir con' es de cada aparato (localStorage), no del negocio: nunca viaja en pos.ticket.
+  // Si este aparato aún no eligió, se usa el valor viejo de pos.ticket.shareApp (#826) para no perderlo;
+  // leerlo no escribe nada (sin escrituras de fondo). Formato y «Preguntar» siguen en pos.ticket.
+  const APP_KEY='na_pos_share_app_v1';
+  function storage(){try{return root.localStorage||null;}catch(_){return null;}}
+  function localApp(){try{const v=storage()?.getItem(APP_KEY);return APPS.includes(v)?v:null;}catch(_){return null;}}
+  function app(){const local=localApp();if(local)return local;const legacy=(config().ticket||{}).shareApp;return APPS.includes(legacy)?legacy:'auto';}
+  function setApp(value){if(!APPS.includes(value))throw new Error('Aplicación inválida');const s=storage();if(!s)throw new Error('Sin almacenamiento local');s.setItem(APP_KEY,value);}
+  function settings(){const t=config().ticket||{};return{format:FORMATS.includes(t.shareFormat)?t.shareFormat:'image',ask:t.shareAsk!==false,app:app()};}
+  // `app` es opcional y se guarda solo en este aparato; formato y «Preguntar» van a pos.ticket.
+  function setSettings(value){if(!FORMATS.includes(value.format))throw new Error('Formato inválido');if(value.app!==undefined&&!APPS.includes(value.app))throw new Error('Aplicación inválida');const c=config();c.ticket=c.ticket||{};c.ticket.shareFormat=value.format;c.ticket.shareAsk=value.ask!==false;if(value.app!==undefined)setApp(value.app);}
+  function userAgent(){try{return String(root.navigator?.userAgent||'');}catch(_){return'';}}
+  function isAndroid(ua=userAgent()){return/\bAndroid\b/i.test(String(ua||''));}
   function normalizePhone(value){
     const raw=String(value||'').trim();if(!/^[+\d\s().-]+$/.test(raw))return'';
     let n=raw.replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);
@@ -14,8 +29,27 @@
     if(n.startsWith('51'))return /^519\d{8}$/.test(n)?n:'';
     return (raw.startsWith('+')||raw.startsWith('00'))&&/^[1-9]\d{8,14}$/.test(n)?n:'';
   }
-  function textUrl(phone,text){const number=normalizePhone(phone);if(!number)throw new Error('Ingresa un número de WhatsApp válido, con código de país');return 'https://wa.me/'+number+'?text='+encodeURIComponent(text);}
-  function money(value){return'S/ '+Number(value).toFixed(2);}
+  function textUrl(phone,text){const number=normalizePhone(phone);if(!number)throw new Error('Escribe el número del cliente, por ejemplo 987 654 321');return 'https://wa.me/'+number+'?text='+encodeURIComponent(text);}
+  // Enlace de envío según la app elegida. Solo Android usa intent://; iOS/escritorio y
+  // 'auto' conservan wa.me. El intent lleva S.browser_fallback_url a wa.me por si la app no está instalada.
+  function intentUrl(phone,text,app){
+    const pkg=APP_PACKAGES[app];if(!pkg)throw new Error('Aplicación inválida');
+    const number=normalizePhone(phone);if(!number)throw new Error('Escribe el número del cliente, por ejemplo 987 654 321');
+    return 'intent://send?phone='+number+'&text='+encodeURIComponent(text)+'#Intent;scheme=whatsapp;package='+pkg+';S.browser_fallback_url='+encodeURIComponent(textUrl(number,text))+';end';
+  }
+  function sendUrl(phone,text,app='auto',ua=userAgent()){
+    if(!APPS.includes(app))throw new Error('Aplicación inválida');
+    return app!=='auto'&&isAndroid(ua)?intentUrl(phone,text,app):textUrl(phone,text);
+  }
+  // Mensaje de WhatsApp: saludo corto + comprobante en monoespaciado (```), para que las columnas
+  // del ticket no se desalineen con la fuente proporcional de WhatsApp. Solo presentacion.
+  function whatsappText(receipt){
+    // Un abono es un pago, no una compra: el saludo lo dice así.
+    const what=receipt.kind==='payment'?'pago':'compra';
+    const name=String(receipt.customerName||'').trim(),greet=name&&name!=='Sin cliente'&&!GENERIC_CUSTOMER.test(name)?'Hola '+name+', gracias por tu '+what+'.':'Gracias por tu '+what+'.';
+    return greet+'\n\n```\n'+String(receipt.text).replace(/```/g,"'''")+'\n```';
+  }
+  function money(value){return'S/ '+Number(value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
   function known(value){return value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));}
   function dateFields(timestamp){if(!timestamp)return{fecha:'',hora:''};const d=new Date(timestamp);if(!Number.isFinite(d.getTime()))return{fecha:'',hora:''};const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Lima',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);const part=k=>parts.find(p=>p.type===k).value;return{fecha:part('year')+'-'+part('month')+'-'+part('day'),hora:d.toLocaleTimeString('es-PE',{timeZone:'America/Lima',hour12:true})};}
   function itemsFromCredit(cr){return(Array.isArray(cr.items)?cr.items:[]).map(i=>({...i,name:i.name||i.nombre||'Concepto',qty:Number(i.qty??i.cantidad??1),precio:Number(i.precio??i.precioUnitario??0)}));}
@@ -230,20 +264,44 @@
     const label=el('label','fl','WhatsApp del cliente'),phone=el('input','fi');phone.id='naReceiptPhone';phone.type='tel';phone.placeholder='+51 987 654 321';phone.maxLength=32;label.htmlFor=phone.id;
     const formatLabel=el('label','fl','Formato'),format=el('select','fs');format.id='naReceiptFormat';formatLabel.htmlFor=format.id;
     [['image','Imagen PNG'],['text','Texto'],['pdf','PDF']].forEach(([value,text])=>{const opt=el('option','',text);opt.value=value;format.append(opt);});format.onchange=prepare;
+    const appRow=el('div','na-receipt-app'),appLabel=el('label','fl','Abrir con'),app=el('select','fs');app.id='naReceiptApp';appLabel.htmlFor=app.id;
+    APPS.forEach(value=>{const opt=el('option','',value==='auto'?'Automático (la app que tenga el celular)':APP_LABELS[value]);opt.value=value;app.append(opt);});app.onchange=changeApp;
+    const appNote=el('p','na-receipt-status');appNote.id='naReceiptAppNote';appRow.append(appLabel,app,appNote);
     const details=el('details','na-receipt-preview'),summary=el('summary','','Vista previa del comprobante'),pre=el('pre','');pre.id='naReceiptText';details.append(summary,pre);
     const status=el('p','na-receipt-status');status.id='naReceiptStatus';status.setAttribute('role','status');
     const buttons=el('div','mbtns'),cancel=el('button','mbtn mbtn-cancel','Cancelar'),send=el('button','mbtn mbtn-ok','Compartir');send.id='naReceiptSend';cancel.type=send.type='button';cancel.onclick=close;send.onclick=share;buttons.append(cancel,send);
-    const download=el('button','na-receipt-download','Descargar comprobante');download.type='button';download.onclick=()=>{if(active?.file)downloadFile(active.file);};
-    body.append(name,label,phone,formatLabel,format,details,status,buttons,download);modal.append(head,body);overlay.append(modal);root.document.body.append(overlay);
+    const download=el('button','na-receipt-download','Descargar comprobante');download.id='naReceiptDownload';download.type='button';download.disabled=true;download.onclick=()=>{if(active?.file&&!download.disabled)downloadFile(active.file);};const downloadHint=el('small','na-receipt-status','Úsalo si WhatsApp no abre');downloadHint.id='naReceiptDownloadHint';downloadHint.hidden=true;
+    body.append(name,label,phone,formatLabel,format,appRow,details,status,buttons,download,downloadHint);modal.append(head,body);overlay.append(modal);root.document.body.append(overlay);
     overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+    // Un clic / Enter: con el numero escrito, Enter en el campo envia igual que el boton.
+    phone.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();if(!send.disabled)share();}});
     overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){const focusable=Array.from(modal.querySelectorAll('button,input,select,summary')).filter(n=>!n.disabled&&!n.hidden);const first=focusable[0],last=focusable[focusable.length-1];if(e.shiftKey&&root.document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&root.document.activeElement===last){e.preventDefault();first.focus();}}});return overlay;
   }
+  // Selector 'Abrir con': solo aplica al texto. En Android elige la app; en iOS/escritorio
+  // queda deshabilitado (siempre wa.me). La elección es de este aparato (na_pos_share_app_v1).
+  function syncApp(format){
+    const row=root.document.querySelector('#naReceiptShare .na-receipt-app'),select=root.document.getElementById('naReceiptApp'),note=root.document.getElementById('naReceiptAppNote');if(!row||!select)return;
+    const android=isAndroid();row.hidden=format!=='text';select.value=settings().app;select.disabled=!android;
+    note.textContent=android?'':'Solo disponible en Android; aquí se abre WhatsApp con wa.me.';note.hidden=android;
+  }
+  async function changeApp(){
+    const select=root.document.getElementById('naReceiptApp'),previous=settings();if(select.disabled)return;
+    // Solo este aparato: no llama a guardarConfig (no hay POST de pos.ticket) y sirve también al cajero.
+    try{setApp(select.value);}catch(_){select.value=previous.app;notice('No se guardó la preferencia de aplicación');return;}
+    if(active)statusFor('text');
+  }
+  function statusFor(format){
+    const status=root.document.getElementById('naReceiptStatus');if(!status)return;const app=isAndroid()?settings().app:'auto';
+    status.textContent=format==='text'?(app==='auto'?'Se abrirá el chat del número indicado. Confirma el envío en WhatsApp.':'Se abrirá el chat del número indicado en '+APP_LABELS[app]+'. Confirma el envío.'):'Elige WhatsApp y el contacto en el menú de compartir. Si no está disponible, descarga el archivo.';
+  }
+  // Descargar solo se habilita cuando el archivo ya existe; la pista aparece solo con texto.
+  function setDownload(ready){const button=root.document.getElementById('naReceiptDownload'),hint=root.document.getElementById('naReceiptDownloadHint');if(button)button.disabled=!ready;if(hint)hint.hidden=!(active&&active.format==='text');}
   async function prepare(){
     if(!active)return;const state=active,token=++version,format=root.document.getElementById('naReceiptFormat').value;state.format=format;state.file=null;
-    const status=root.document.getElementById('naReceiptStatus'),send=root.document.getElementById('naReceiptSend');send.disabled=true;status.textContent='Preparando comprobante…';
+    const status=root.document.getElementById('naReceiptStatus'),send=root.document.getElementById('naReceiptSend');send.disabled=true;setDownload(false);status.textContent='Preparando comprobante…';syncApp(format);
     try{state.file=await fileFor(state.receipt,format);if(token!==version||active!==state)return;
-      status.textContent=format==='text'?'Se abrirá el chat del número indicado. Confirma el envío en WhatsApp.':'Elige WhatsApp y el contacto en el menú de compartir. Si no está disponible, descarga el archivo.';
-      send.textContent=format==='text'?'Enviar por WhatsApp':'Compartir';send.disabled=false;
+      statusFor(format);
+      send.textContent=format==='text'?'Abrir WhatsApp':'Compartir';send.disabled=false;setDownload(true);
     }catch(error){if(token!==version||active!==state)return;status.textContent=error.message+' Puedes elegir texto.';}
   }
   function open(input,automatic=false){
@@ -257,18 +315,19 @@
     overlay.classList.add('open');prepare();
     // P1-D (mobile): focus the dialog title, never the phone input, so the
     // on-screen keyboard does not pop up after every sale.
-    const title=root.document.getElementById('naReceiptTitle');if(title){title.setAttribute('tabindex','-1');title.focus({preventScroll:true});}return true;
+    // Without a saved number the cashier must type it, so focus the field; with one, a single click sends.
+    const missing=active.format==='text'&&!receipt.phone,target=missing?root.document.getElementById('naReceiptPhone'):root.document.getElementById('naReceiptTitle');if(target){if(!missing)target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}return true;
   }
-  function downloadFile(file){const url=root.URL.createObjectURL(file),a=el('a');a.href=url;a.download=file.name;root.document.body.append(a);a.click();a.remove();root.setTimeout(()=>root.URL.revokeObjectURL(url),30000);notify('Comprobante descargado. Puedes adjuntarlo en WhatsApp.','success');}
+  function downloadFile(file){const url=root.URL.createObjectURL(file),a=el('a');a.href=url;a.download=file.name;a.rel='noopener';a.style.display='none';root.document.body.append(a);a.click();a.remove();root.setTimeout(()=>root.URL.revokeObjectURL(url),120000);notify(/\.txt$/.test(file.name)?'Comprobante descargado.':'Comprobante descargado. Puedes adjuntarlo en WhatsApp.','success');}
   async function share(){
     if(!active||busy||!active.file)return;const state=active;
     const phone=root.document.getElementById('naReceiptPhone');
-    if(state.format==='text'&&!normalizePhone(phone.value)){notify('Ingresa un número de WhatsApp válido, con código de país');phone.focus();return;}
+    if(state.format==='text'&&!normalizePhone(phone.value)){notify('Escribe el número del cliente, por ejemplo 987 654 321');phone.focus();return;}
     busy=true;
     const send=root.document.getElementById('naReceiptSend');send.disabled=true;
     try{
       if(state.format==='text'){
-        const url=textUrl(root.document.getElementById('naReceiptPhone').value,state.receipt.text);
+        const url=sendUrl(root.document.getElementById('naReceiptPhone').value,whatsappText(state.receipt),settings().app);
         const chat=root.open(url,'_blank');if(chat)chat.opener=null;else root.location.assign(url);
       }else if(root.navigator?.share&&root.navigator.canShare?.({files:[state.file]})){
         await root.navigator.share({title:'Comprobante Nuevo Amanecer',files:[state.file]});
@@ -327,5 +386,5 @@
     wrapped._naAccountSummary=true;root._naBuildThermalTicket=wrapped;return true;
   }
   installPrintedAccountSummary();
-  root.NAReceiptShare=Object.freeze({formatAsOf:nowLabel,placeLabel,accountSummary:(input)=>{const data=copy(input);return accountSummary(data,data.sale||{},data.credit||{});},accountLines,ticketExtrasForSale,installPrintedAccountSummary,onPayments,installTicketButton,settings,setSettings,normalizePhone,textUrl,build,pdf,fileFor,open,close,onSale,onPayment,onStoredPayment:(cr,pay)=>safely({kind:'payment',credit:cr,payment:pay,sale:sales().find(s=>String(s.id)===String(cr.ventaId)),customer:customerFor(cr.cliId||cr.clienteId)}),onCredit:cr=>safely({kind:'credit',credit:cr,customer:customerFor(cr.cliId||cr.clienteId),fresh:true}),shareSale,shareCredit,sharePayment});
+  root.NAReceiptShare=Object.freeze({formatAsOf:nowLabel,placeLabel,accountSummary:(input)=>{const data=copy(input);return accountSummary(data,data.sale||{},data.credit||{});},accountLines,ticketExtrasForSale,installPrintedAccountSummary,onPayments,installTicketButton,settings,setSettings,setApp,appStorageKey:APP_KEY,isAndroid,intentUrl,sendUrl,normalizePhone,textUrl,whatsappText,build,pdf,fileFor,open,close,onSale,onPayment,onStoredPayment:(cr,pay)=>safely({kind:'payment',credit:cr,payment:pay,sale:sales().find(s=>String(s.id)===String(cr.ventaId)),customer:customerFor(cr.cliId||cr.clienteId)}),onCredit:cr=>safely({kind:'credit',credit:cr,customer:customerFor(cr.cliId||cr.clienteId),fresh:true}),shareSale,shareCredit,sharePayment});
 })(globalThis);

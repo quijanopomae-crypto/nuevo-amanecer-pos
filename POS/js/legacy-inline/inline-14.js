@@ -1,4 +1,9 @@
 
+// Formato exclusivo de PRESENTACIÓN de precios POS. No modifica fmt global,
+// valores numéricos almacenados, cobro, tickets ni payloads de sincronización.
+// Miles sobre toFixed(2): mismos dígitos y redondeo que fmt(), solo agrega comas.
+function _naPosDisplayMoney(value){ const s=_naNumber(value).toFixed(2); return 'S/ ' + s.replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
 // Seguridad: tarjetas y carrito del POS usan data-* y fuentes de imagen validadas por un resolver único.
 function _naSecProductVisibleInPos(product){
   return !_naTracksStock(product)||_naNumber(product.stock)>0;
@@ -7,17 +12,23 @@ function _naSecRenderProductImage(visual,product,safeImage,size){
   const placeholder=()=>{if(window.NA_ICON&&NA_ICON_IS_DEFAULT_PRODUCT(product?.icon)){visual.textContent='';visual.classList.add('na-noimg');}else visual.textContent=product?.icon||'📦';};
   if(!safeImage){placeholder();return;}
   const image=document.createElement('img');
+  image.loading='lazy';image.decoding='async';
+  // Measure the existing slot once mounted: responsive CSS remains the authority.
+  const dimensions=()=>{const box=visual.getBoundingClientRect();image.width=size||Math.round(box.width)||70;image.height=size||Math.round(box.height)||70;};
+  image.style.width='100%';image.style.height='100%';
   image.src=safeImage;
   image.alt=String(product?.name||'Producto');
-  if(size)image.style.cssText=`width:${size}px;height:${size}px;object-fit:cover;border-radius:6px`;
+  if(size)image.style.cssText=`width:${size}px;height:${size}px;object-fit:contain;border-radius:inherit`;
+  image.style.setProperty('object-fit','contain','important');
   image.addEventListener('error',()=>{
     image.remove();
     placeholder();
   },{once:true});
-  visual.appendChild(image);
+  visual.appendChild(image);dimensions();
+  if(!size)requestAnimationFrame(dimensions);
 }
 function _naSecProductCard(parent,product,allowNoStock){
-  const box=modoMayorista&&!_naCanonSaleMode()&&product.precioCaja>0&&product.unidCaja>0,price=box?product.precioCaja:product.precio,label=box?`Caja x${product.unidCaja} · S/ ${_naNumber(price).toFixed(2)}`:`S/ ${_naNumber(price).toFixed(2)}`;
+  const box=modoMayorista&&!_naCanonSaleMode()&&product.precioCaja>0&&product.unidCaja>0,price=box?product.precioCaja:product.precio,label=box?`Caja x${product.unidCaja} · ${_naPosDisplayMoney(price)}`:_naPosDisplayMoney(price);
   const tracked=_naTracksStock(product),hasStock=!tracked||product.stock>0,available=hasStock||allowNoStock,stockTone=!tracked?'ok':product.stock<=0?'out':product.stock<=product.stockMin?'low':'ok';
   const stockLabel=!tracked?'Sin control':(product._canonicalPendingStock&&Number.isFinite(product._canonicalRemoteStock)?`CANON ${product._canonicalRemoteStock} (−${Number(product._canonicalPendingDelta||Math.max(0,product._canonicalRemoteStock-product.stock))} pend.)`:product.stock<0?`Faltante: ${Math.abs(product.stock)}`:product.stock===0?(allowNoStock?'Sin stock · permitido':'Sin stock'):`${stockTone==='low'?'⚠ ':''}Stock: ${product.stock}`);
   const card=_naSecAppend(parent,'div',`product-card${!hasStock?' no-stock':''}${!hasStock&&allowNoStock?' sale-allowed':''}${box?' box-mode':''}`);
@@ -65,19 +76,19 @@ function _naSecCartItem(parent,item){
   }
   if(item.ventaLibre)_naSecAppend(name,'span','cart-item-flag free','VARIOS');
   else if(item.ventaSinStock)_naSecAppend(name,'span','cart-item-flag shortage','SIN STOCK');
-  const price=_naSecAppend(info,'div','ci-price',`${fmt(item.precio)} ${box?'por caja':'c/u'} `);
+  const price=_naSecAppend(info,'div','ci-price',`${_naPosDisplayMoney(item.precio)} ${box?'por caja':'c/u'} `);
   if(box)_naSecAppend(price,'span','line-mode',`Caja x${_naUnitsPerQty(item)}`);
   const quantity=_naSecAppend(row,'div','ci-qty');
   quantity.appendChild(_naSecCartButton('−','decrease',item._lineKey));
   _naSecAppend(quantity,'span','qty-num',item.qty);
   quantity.appendChild(_naSecCartButton('+','increase',item._lineKey));
-  _naSecAppend(row,'div','ci-sub',fmt(_naNumber(item.precio)*_naNumber(item.qty)));
+  _naSecAppend(row,'div','ci-sub',_naPosDisplayMoney(_naNumber(item.precio)*_naNumber(item.qty)));
   {const rm=_naSecCartButton('','remove',item._lineKey);rm.innerHTML='<i class="na-ic na-ic-trash" aria-hidden="true"></i>';rm.setAttribute('aria-label','Quitar');row.appendChild(rm);}
 }
 posUpdateCart=function(){
   const parts=_naTaxBreakdownForSaleItems(cart,!!appConfig.igvActive),count=cart.reduce((sum,item)=>sum+_naNumber(item.qty),0),units=cart.reduce((sum,item)=>sum+_naUnitsSold(item),0),badge=document.getElementById('cartBadge');
   if(badge){badge.style.display=count>0?'flex':'none';badge.textContent=String(count);badge.title=`${units} unidades físicas`;}
-  [['posSubtotal',fmt(parts.subtotal)],['posIgv',fmt(parts.totalIGV)],['posTotal',fmt(parts.totalVenta)]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=value;});
+  [['posSubtotal',_naPosDisplayMoney(parts.subtotal)],['posIgv',_naPosDisplayMoney(parts.totalIGV)],['posTotal',_naPosDisplayMoney(parts.totalVenta)]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=value;});
   const quick=document.getElementById('btnRapido'),pay=document.getElementById('btnPagar');
   if(quick)quick.disabled=!cart.length;
   if(pay)pay.disabled=!cart.length;

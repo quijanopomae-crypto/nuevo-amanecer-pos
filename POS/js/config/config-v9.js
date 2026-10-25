@@ -76,7 +76,7 @@
     saveTimer = setTimeout(async function () {
       try {
         var g = root.NA_CONFIG_G;
-        if (shared && g && typeof g.flush === 'function') { var r = await g.flush(); if (r && r.ok === false) { if (onFail) try { onFail(r); } catch (_) {} badge(r.reason === 'owner_only' ? 'No se guardó: solo el dueño puede cambiar este ajuste' : 'No se guardó en el servidor: revisa internet', 'err'); return; } }
+        if (shared && g && typeof g.flush === 'function') { var r = await g.flush(); if (r && r.ok === false) { if (onFail && r.reason !== 'revision_conflict') try { onFail(r); } catch (_) {} badge(r.reason === 'owner_only' ? 'No se guardó: solo el dueño puede cambiar este ajuste' : r.reason === 'revision_conflict' ? 'No se guardó: otro equipo cambió la configuración' : 'No se guardó en el servidor: revisa internet', 'err'); if (r.reason === 'revision_conflict') render(); return; } }
         else if (typeof root.saveAppState === 'function') await root.saveAppState();
         badge(shared ? 'Guardado ✓' : 'Guardado ✓ (este aparato)');
       } catch (_) { if (onFail) try { onFail(null); } catch (__) {} badge('No se pudo guardar', 'err'); }
@@ -124,7 +124,7 @@
     add.push(center((type === 'boleta' ? 'BOLETA DE VENTA' : 'FACTURA') + ' ' + f.serie + '-' + String((sale && sale.id) || '000000'), w));
     add.push(center('Formato de impresion. No es', w)); add.push(center('comprobante electronico SUNAT', w));
     if (f.showClient) add.push(('Cliente: ' + (cust ? (cust.nombre || cust.name || '') : 'Cliente general')).slice(0, w));
-    if (f.showDoc) add.push((cust && cust.dni ? docLabel(cust.dni) + ': ' + cust.dni : (type === 'factura' ? 'RUC: ---' : 'DNI: ---')).slice(0, w));
+    if (f.showDoc) add.push((cust && _naDocumentValue(cust.dni) ? docLabel(cust.dni) + ': ' + cust.dni : (type === 'factura' ? 'RUC: ---' : 'DNI: ---')).slice(0, w));
     add.push('-'.repeat(w));
     var at = lines.indexOf(''); if (at < 0) at = 0;
     lines.splice(at + 1, 0, add.join('\n'));
@@ -247,6 +247,48 @@
     if (box) { box.setAttribute('data-na9-theme', d.theme); box.classList.toggle('na9-dk', dark); box.classList.toggle('na9-lt', !dark); }
   }
 
+  // API del chat: usa los mismos controles y persistencia; ninguna ruta arbitraria.
+  function assistantSnapshot() {
+    if (!canEdit()) return {};
+    var c=C()||{}, scanner=sc(), out={modo:root.NA_THEME.mode(),tema:ap().theme,tamano:zoom()};
+    if(typeof scanner.enabled==='boolean') out.lector_activo=scanner.enabled;
+    if(typeof scanner.sound==='boolean') out.lector_sonido=scanner.sound;
+    if(typeof scanner.maxIntervalMs==='number') out.lector_intervalo=scanner.maxIntervalMs;
+    if(typeof scanner.minLength==='number') out.lector_minimo=scanner.minLength;
+    if(typeof c.stockMin==='number') out.stock_minimo=c.stockMin;
+    if(typeof c.stockAlertActive==='boolean') out.stock_avisos=c.stockAlertActive;
+    if(typeof c.printAuto==='boolean') out.impresion_automatica=c.printAuto;
+    return out;
+  }
+  async function assistantApply(p) {
+    if(!canEdit()) return {ok:false,msg:'Solo el Admin puede cambiar la configuración.'};
+    if(root.navigator.onLine===false) return {ok:false,msg:'Revisa internet antes de cambiar la configuración.'};
+    var key=p.ajuste, value=p.valor, before=assistantSnapshot()[key];
+    var bools=['lector_activo','lector_sonido','stock_avisos','impresion_automatica'];
+    var valid=key==='modo'?['claro','noche','auto'].indexOf(value)>=0:key==='tema'?THEMES.some(function(t){return t[0]===value;}):key==='tamano'?typeof value==='number'&&value>=85&&value<=125&&value%5===0:key==='stock_minimo'?Number.isInteger(value)&&value>=0&&value<=100000:key==='lector_intervalo'?Number.isInteger(value)&&value>=20&&value<=150:key==='lector_minimo'?Number.isInteger(value)&&value>=1&&value<=32:bools.indexOf(key)>=0&&typeof value==='boolean';
+    if(!valid||before===undefined) return {ok:false,msg:'Ese ajuste o valor no está disponible.'};
+    if(before!==p.antes&&before!==value) return {ok:false,msg:'Ese ajuste cambió después de preparar la tarjeta. Pídelo de nuevo.'};
+    var shared={stock_minimo:'stockMin',stock_avisos:'stockAlertActive',impresion_automatica:'printAuto'};
+    if(shared[key]) {
+      var g=root.NA_CONFIG_G;
+      return g&&g.setAssistantFlag?g.setAssistantFlag(shared[key],value,p.antes):{ok:false,msg:'No se pudo conectar con la configuración del negocio.'};
+    }
+    if(before!==value) {
+      if(key==='modo') root.NA_THEME.setMode(value);
+      else if(key==='tema') setAp('theme',value);
+      else if(key==='tamano') setZoom(value);
+      else {
+        var fn=key==='lector_activo'||key==='lector_sonido'?'scannerToggleSetting':'scannerSetNumber';
+        if(typeof root[fn]!=='function') return {ok:false,msg:'El lector no está disponible.'};
+        var field={lector_activo:'enabled',lector_sonido:'sound',lector_intervalo:'maxIntervalMs',lector_minimo:'minLength'}[key];
+        if(fn==='scannerToggleSetting') await call(fn,field);else await call(fn,field,value);
+      }
+    }
+    if(assistantSnapshot()[key]!==value) return {ok:false,msg:'No se pudo guardar el ajuste. Revisa Configuración.'};
+    applyAppearance(); if(doc.getElementById('pageConfig')&&doc.getElementById('pageConfig').classList.contains('active')) render();
+    return {ok:true,msg:'Guardado en este aparato.'};
+  }
+
   // ---------- pantallas ----------
   function body(id) {
     var c = C() || {}, t = c.ticket || {};
@@ -345,7 +387,15 @@
     return note('<b>Solo formatos de impresión.</b> Boleta y Factura no son comprobantes electrónicos SUNAT; la app no emite comprobantes fiscales.', 'warn')
       + '<div class="na9-tkbar"><div class="na9-seg">' + ['ticket', 'boleta', 'factura'].map(function (x) { return '<button type="button" class="' + (x === ty ? 'on' : '') + '" data-act="tkty" data-t="' + x + '">' + TN[x] + '</button>'; }).join('') + '</div>'
       + '<div class="na9-stabs">' + [['enc', 'Datos y textos'], ['campos', 'Qué se muestra'], ['papel', 'Papel e impresión']].map(function (x) { return '<button type="button" class="' + (x[0] === sb ? 'on' : '') + '" data-act="tksub" data-t="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>'
-      + '<div class="na9-split"><div>' + L + '</div><div><div class="na9-pvh">Vista previa: ' + TN[ty] + '</div><div class="na9-pvbox"><pre class="na9-ticket" id="na9Tk">' + esc(previewText(ty)) + '</pre></div></div></div>';
+      + '<div class="na9-split"><div>' + L + '</div><div><div class="na9-pvh">Vista previa: ' + TN[ty] + '</div><div class="na9-pvbox"><pre class="na9-ticket" id="na9Tk">' + esc(previewText(ty)) + '</pre></div></div></div>'
+      + waPanel();
+  }
+  // Envío por WhatsApp: el mismo panel de la vista vieja (NAReceiptUI.settingsHtml) y sus mismos guardados
+  // (formato y «Preguntar» en pos.ticket con guardarConfig; «Abrir con» solo en este aparato).
+  function waPanel() {
+    var ui = root.NAReceiptUI; if (!ui || typeof ui.settingsHtml !== 'function') return '';
+    var html = ''; try { html = ui.settingsHtml({ canEdit: canEdit() }); } catch (_) { return ''; }
+    return html ? '<div class="na9-wa" data-na9-wa="1">' + html + '</div>' : '';
   }
   function aparBody() {
     var d = ap(), z = zoom(), zn = 'Personalizado';
@@ -416,6 +466,8 @@
     var host = main.querySelector('.na9-legacy-host');
     if (host) mountLegacy(host, host.dataset.legacy, host.dataset.only ? new RegExp(host.dataset.only) : null);
     if (main.querySelector('#naDevList') && root.NA_CONFIG_G && root.NA_CONFIG_G.loadDevices) Promise.resolve(root.NA_CONFIG_G.loadDevices()).then(function () { relabel(doc.getElementById('na9Main')); });
+    var permHost = main.querySelector('.na9-bd[data-sec="pin"]');
+    if (permHost && root.NA_EMPLOYEE_PERMS_UI) try { root.NA_EMPLOYEE_PERMS_UI.mount(permHost); } catch (_) {}
     if (main.querySelector('#na9Ver')) version();
     relabel(main); fitPreview();
   }
@@ -553,5 +605,5 @@
   function wrapDark() { /* toggleDark already persists through NA_THEME. */ }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', function () { install(); wrapDark(); }); else { install(); wrapDark(); }
   root.addEventListener('load', function () { install(); wrapDark(); applyAppearance(); });
-  root.NA_CONFIG_V9 = { render: render, wide: wide, canEdit: canEdit, previewText: previewText, setPrintFormat: function (f) { printFormat = f; }, appearance: ap, applyAppearance: applyAppearance };
+  root.NA_CONFIG_V9 = { assistantSnapshot:assistantSnapshot, assistantApply:assistantApply, render: render, wide: wide, canEdit: canEdit, previewText: previewText, setPrintFormat: function (f) { printFormat = f; }, appearance: ap, applyAppearance: applyAppearance };
 })(window);

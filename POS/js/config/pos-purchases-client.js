@@ -11,6 +11,8 @@
   function cloud() { try { return !!(root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()); } catch (_) { return false; } }
   function toast(m, k) { try { root.toast(m, k || 'error'); } catch (_) {} }
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // Costos y proveedor: dueño confirmado (NA_ROLES.isOwner) y permiso purchases.costs.view. Un rol en caché sin confirmar ya no basta.
+  function ownerAllowed() { try { var R = root.NA_ROLES; return !!(R && typeof R.isOwner === 'function' && R.isOwner() === true && root.NA_PERMISSIONS.canDo(R.role, 'purchases.costs.view')); } catch (_) { return false; } }
   function money(c) { var n = Number(c || 0) / 100; try { return root.fmt(n); } catch (_) { return 'S/ ' + n.toFixed(2); } }
   function products() { try { return Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   var ERR = {
@@ -37,8 +39,17 @@
       client_contract: ctx.client_contract, created_at: ctx.created_at, lines: lines };
     if (meta && meta.supplier) body.supplier = String(meta.supplier).slice(0, 120);
     if (meta && meta.documentRef) body.document_ref = String(meta.documentRef).slice(0, 80);
-    var out = await R.api('/auth/purchases', body, 'POST', headers);
+    var out;
+    try {
+      out = await R.api('/auth/purchases', body, 'POST', headers);
+    } catch (err) {
+      try { if (root.NA_PRICE_HISTORY && err && err.data) root.NA_PRICE_HISTORY.recordPurchase(operationId, lines, err.data); } catch (_) {}
+      throw err;
+    }
+    try { if (root.NA_PRICE_HISTORY) root.NA_PRICE_HISTORY.recordPurchase(operationId, lines, out); } catch (_) {}
     try { await api.refresh(); } catch (_) {}
+    // Misión 2: el dueño actualiza el costo del producto con el de la compra (product.update, solo dueño).
+    try { if (root.NA_COSTO_COMPRA_FICHA && typeof root.NA_COSTO_COMPRA_FICHA.afterCanonPurchase === 'function') await root.NA_COSTO_COMPRA_FICHA.afterCanonPurchase(operationId, lines, out); } catch (_) {}
     try { if (typeof root.invRender === 'function') root.invRender(); } catch (_) {}
     return out;
   }
@@ -129,8 +140,8 @@
           var desc = function (a) { return a.map(function (l) { return nameOf(l.product_id) + ' +' + l.quantity; }).join(', ') || 'ninguna'; };
           return { stop: 'La compra anterior quedó a medias. Ya sumaron stock: ' + desc(done) + '. Faltan: ' + desc(miss) +
             '. Para no duplicar, termínala con «Terminar compra anterior» (solo suma lo que falta). Esta compra NO se registró.',
-            finish: { id: id, lines: old.map(function (l) { return { line: Number(l.line_number), product_id: String(l.product_id), quantity: Number(l.quantity), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents),...(l.lots&&l.lots.length?{lots:l.lots}:{}) }; }),
-              meta: { supplier: (st.purchase && st.purchase.supplier) || '', documentRef: (st.purchase && st.purchase.document_ref) || '' } } };
+            finish: { id: id, lines: old.map(function (l) { return { line: Number(l.line_number), product_id: String(l.product_id), quantity: Number(l.quantity), ...('unit_cost_cents' in l ? { unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents) } : {}),...(l.lots&&l.lots.length?{lots:l.lots}:{}) }; }),
+              meta: { ...(st.purchase && 'supplier' in st.purchase ? { supplier: st.purchase.supplier || '' } : {}), documentRef: (st.purchase && st.purchase.document_ref) || '' } } };
         }
         half++; m[id].noted = true;
       }
@@ -197,6 +208,19 @@
       busy = true; var btn = this; btn.disabled = true; btn.textContent = 'Registrando…';
       try {
         var meta = { supplier: w.querySelector('#naPurSupplier').value.trim(), documentRef: w.querySelector('#naPurDoc').value.trim() };
+        var dupKey = normDoc(meta.supplier) + '|' + normDoc(meta.documentRef);
+        if (dupCheckUnlocked() && normDoc(meta.documentRef) && w.__naDupAck !== dupKey) {
+          var prior = null, truncated = false;
+          try { var list = await root.NA_ROLES.api('/auth/purchases'); truncated = !!(list && list.truncated); prior = findDuplicatePurchase(list && list.purchases, meta); } catch (_) { prior = null; }
+          // Si el servidor cortó la lista y no hubo coincidencia, se avisa que la revisión fue parcial (no bloquea).
+          if (!prior && truncated) toast('Solo se revisaron las compras más recientes para ver si la factura se repite.', 'info');
+          if (prior) {
+            w.__naDupAck = dupKey;
+            fail('Ya hay una compra registrada con el documento «' + (prior.document_ref || meta.documentRef) + '» (' + limaDay(prior.created_at) + ', hora de Lima). Revisa que no sea la misma factura. Si es otra, pulsa «Registrar compra» otra vez.' + (truncated ? ' (Solo se revisaron las compras más recientes.)' : ''));
+            errBox.classList.add('info');
+            return;
+          }
+        }
         var pick = await opFor(r.lines, meta);
         if (pick.stop) { fail(pick.stop); if (pick.info) errBox.classList.add('info'); if (pick.finish) finishButton(pick.finish); return; }
         curId = pick.id;
@@ -217,8 +241,8 @@
   // Terminar una compra incompleta desde el Historial: MISMO id y mismas líneas guardadas en el servidor;
   // el servidor salta las líneas que ya sumaron stock (idempotente).
   function historyFinishArgs(row) {
-    return { id: String(row.purchase_id), lines: (row.lines || []).map(function (l) { return { line: Number(l.line_number), product_id: String(l.product_id), quantity: Number(l.quantity), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents),...(l.lots&&l.lots.length?{lots:l.lots}:{}) }; }),
-      meta: { supplier: row.supplier || '', documentRef: row.document_ref || '' } };
+    return { id: String(row.purchase_id), lines: (row.lines || []).map(function (l) { return { line: Number(l.line_number), product_id: String(l.product_id), quantity: Number(l.quantity), ...('unit_cost_cents' in l ? { unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents) } : {}),...(l.lots&&l.lots.length?{lots:l.lots}:{}) }; }),
+      meta: { ...('supplier' in row ? { supplier: row.supplier || '' } : {}), documentRef: row.document_ref || '' } };
   }
   async function finishPurchase(row) {
     var a = historyFinishArgs(row);
@@ -237,6 +261,34 @@
     });
     return ok ? done : null;
   }
+  // Aviso de factura repetida (sin migración): compara el documento y, si el servidor lo envía (solo dueño),
+  // también el proveedor, contra las compras ya registradas. Solo avisa; un segundo clic registra igual.
+  function normDoc(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s.\-_/]+/g, '').toUpperCase(); }
+  // Falla cerrado: sin permisos cargados o con el candado en true, no se consulta ni se avisa.
+  function dupCheckUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('aviso-factura-duplicada') === false); }
+    catch (_) { return false; }
+  }
+  // Compra anulada/cancelada: no cuenta como duplicado. Conservador: solo estados explícitos o banderas en true.
+  // (Hoy el Worker solo usa 'en_curso', 'aplicada' y 'cerrada_parcial'; estas siguen contando.)
+  var ANNULLED_RE = /^(anulad[ao]|cancelad[ao]|annulled|cancell?ed|void(ed)?)$/i;
+  function isAnnulledPurchase(p) {
+    var st = [p.status, p.estado].some(function (v) { return typeof v === 'string' && ANNULLED_RE.test(v.trim()); });
+    return st || p.anulado === true || p.anulada === true || p.voided === true || p.cancelled === true;
+  }
+  function findDuplicatePurchase(rows, meta) {
+    var d = normDoc(meta && meta.documentRef); if (!d) return null;
+    var sup = normDoc(meta && meta.supplier);
+    return (Array.isArray(rows) ? rows : []).find(function (p) {
+      if (!p || isAnnulledPurchase(p) || normDoc(p.document_ref) !== d) return false;
+      if ('supplier' in p && sup && normDoc(p.supplier) && normDoc(p.supplier) !== sup) return false;
+      return true;
+    }) || null;
+  }
+  function limaDay(iso) {
+    var ms = Date.parse(String(iso || '')); if (!Number.isFinite(ms)) return 'fecha no registrada';
+    return new Date(ms - 5 * 3600000).toISOString().slice(0, 10).split('-').reverse().join('/');
+  }
   async function openHistory() {
     var w = overlay('naPurchaseHistory', '<h3>Compras registradas</h3><div class="na-pur-list">Cargando…</div><div class="na-review-actions" style="justify-content:space-between"><button type="button" class="na-pur-new">Nueva compra</button><button type="button" class="na-pur-close" style="background:#64748b">Cerrar</button></div>');
     w.querySelector('.na-pur-close').onclick = function () { w.remove(); };
@@ -245,15 +297,15 @@
     try {
       var out = await root.NA_ROLES.api('/auth/purchases');
       var byId = {}; products().forEach(function (p) { byId[String(p.id)] = p.nombre || p.name || p.id; });
-      var rows = out.purchases || [];
+      var rows = out.purchases || [], costs = ownerAllowed();
       var lock = '<i class="na-ic na-ic-lock" aria-hidden="true"></i>';
-      var detail = function (p) { return (p.lines || []).map(function (l) { return '<div class="na-pur-row"><span>' + esc(byId[l.product_id] || l.product_id) + (l.lots?l.lots.map(function(r){return '<small>Lote '+esc(r.lot_code)+' · vence '+esc(root.NA_STOCK_LOTS.displayDate(r.expiry_date))+' · '+esc(r.quantity)+'</small>';}).join(''):'') + '</span><span>' + esc(l.quantity) + ' × ' + (l.unit_cost_cents == null ? 'sin costo' : money(l.unit_cost_cents)) + '</span></div>'; }).join(''); };
+      var detail = function (p) { return (p.lines || []).map(function (l) { return '<div class="na-pur-row"><span>' + esc(byId[l.product_id] || l.product_id) + (l.lots?l.lots.map(function(r){return '<small>Lote '+esc(r.lot_code)+' · vence '+esc(root.NA_STOCK_LOTS.displayDate(r.expiry_date))+' · '+esc(r.quantity)+'</small>';}).join(''):'') + '</span><span>' + (costs ? esc(l.quantity) + ' × ' + (l.unit_cost_cents == null ? 'sin costo' : money(l.unit_cost_cents)) : 'x ' + esc(l.quantity)) + '</span></div>'; }).join(''); };
       list.innerHTML = rows.length ? rows.map(function (p) {
-        var head = '<strong>' + esc(p.supplier || 'Sin proveedor') + '</strong> · ' + esc((p.created_at || '').slice(0, 10)) + ' · ' + money(p.total_cost_cents);
+        var head = '<strong>' + esc(costs ? p.supplier || 'Sin proveedor' : 'Compra') + '</strong> · ' + esc((p.created_at || '').slice(0, 10)) + (costs ? ' · ' + money(p.total_cost_cents) : '');
         if (p.status === 'en_curso') {
           // Incompleta: fila ámbar con los botones SIEMPRE visibles (fuera del detalle plegado).
-          return '<div class="na-pur-item na-pur-open" data-id="' + esc(p.purchase_id) + '"><div class="na-pur-open-head"><strong>' + esc(p.supplier || 'Sin proveedor') + '</strong>' + (p.document_ref ? ' <small>' + esc(p.document_ref) + '</small>' : '') + '</div>' +
-            '<div class="na-pur-open-sub">' + money(p.total_cost_cents) + ' · ' + esc((p.created_at || '').slice(0, 10)) + ' · <em>Incompleta</em></div>' +
+          return '<div class="na-pur-item na-pur-open" data-id="' + esc(p.purchase_id) + '"><div class="na-pur-open-head"><strong>' + esc(costs ? p.supplier || 'Sin proveedor' : 'Compra') + '</strong>' + (p.document_ref ? ' <small>' + esc(p.document_ref) + '</small>' : '') + '</div>' +
+            '<div class="na-pur-open-sub">' + (costs ? money(p.total_cost_cents) + ' · ' : '') + esc((p.created_at || '').slice(0, 10)) + ' · <em>Incompleta</em></div>' +
             '<div class="na-pur-open-actions"><button type="button" class="na-pur-finish-h">Terminar compra</button><button type="button" class="na-pur-partial-h">' + lock + ' Cerrar como parcial</button></div>' +
             '<input class="na-pur-reason" type="text" maxlength="300" placeholder="Motivo (obligatorio)" hidden><div class="na-pur-err" role="status" hidden></div>' +
             '<details><summary>Ver líneas</summary>' + detail(p) + '</details></div>';
@@ -305,6 +357,6 @@
       src.appendChild(c);
     }
   }
-  root.NA_PURCHASES = { open: openNew, history: openHistory, submit: submit, _opFor: opFor, pendingOps: pendingOps, _submit: submit, _finish: finishPurchase, _closePartial: closePartial, _historyFinishArgs: historyFinishArgs };
+  root.NA_PURCHASES = { open: openNew, history: openHistory, submit: submit, _opFor: opFor, pendingOps: pendingOps, _submit: submit, _finish: finishPurchase, _closePartial: closePartial, _historyFinishArgs: historyFinishArgs, _findDuplicate: findDuplicatePurchase };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', installButtons); else installButtons();
 })(window);

@@ -12,6 +12,7 @@ Fuentes rápidas:
 
 - Estado V1.3 actual: [docs/V1.3_STATUS.md](docs/V1.3_STATUS.md)
 - Mapa corto del repositorio: [REPO_MAP.yaml](REPO_MAP.yaml)
+- Cambio rápido (CSS/texto): [docs/GUIA_CAMBIO_RAPIDO.md](docs/GUIA_CAMBIO_RAPIDO.md)
 - Reglas de trabajo y zonas: [AGENTS.md](AGENTS.md)
 - Reglas funcionales del producto: [AGENTS_Nuevo_Amanecer.md](AGENTS_Nuevo_Amanecer.md)
 - Roles OpenCode: [.opencode/ROLE_MAP.md](.opencode/ROLE_MAP.md)
@@ -23,7 +24,7 @@ Fuentes rápidas:
 | Zona | Rol |
 | --- | --- |
 | `POS/` | CANON del producto |
-| `laboratorio/pos-lab/` | histórico/read-only; POS-LAB retirado del flujo activo |
+| `laboratorio/pos-lab/` | eliminado (2026-10-24); recuperable desde `backup/pre-limpieza-20261024` |
 | `tools/cloudflare-lab/` | backend/harnesses con nombre histórico; no borrar por el retiro de POS-LAB |
 | `tools/cloudflare-backup/` | backup/recovery |
 | `tests/` | regresiones de producto, cloud-sync, infraestructura y seguridad |
@@ -73,7 +74,7 @@ node --test tests/cloud-sync/canonical-credit-payment-e2e.test.mjs tests/cloud-s
 
 POS-LAB permanente está retirado. Todo cambio nuevo nace desde el HEAD CANON vigente en una rama aislada, pasa Draft PR + CI + revisión independiente y, cuando corresponde, un preview temporal del mismo SHA.
 
-No existe promoción LAB -> CANON para trabajo nuevo. Los artefactos históricos bajo `laboratorio/pos-lab/` se conservan únicamente como referencia hasta su limpieza documental controlada.
+No existe promoción LAB -> CANON para trabajo nuevo. El directorio `laboratorio/` fue eliminado por orden del dueño (2026-10-24); sigue recuperable desde el historial de git y desde la rama `backup/pre-limpieza-20261024`.
 
 El directorio `tools/cloudflare-lab/` mantiene un nombre histórico pero contiene piezas de backend/harnesses usadas por CANON; no debe borrarse ni renombrarse como parte del retiro de POS-LAB.
 

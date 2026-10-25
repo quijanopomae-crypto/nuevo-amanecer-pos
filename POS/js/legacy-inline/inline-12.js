@@ -26,9 +26,9 @@ function _naSecCreditEvaluation(parent,evaluation){
 function _naSecCreditCard(parent,credit){
   _naSyncCreditStatus(credit);
   const pct=credit.monto>0?Math.min(100,_naNumber(credit.pagado)/_naNumber(credit.monto)*100):0,days=diasHasta(credit.vence),pending=_naCreditOutstanding(credit);
-  const dateLabel=credit.status==='cancelado'?'Pagado completamente':credit.status==='anulado'?'Crédito anulado':days===null?'—':days<0?`Venció hace ${Math.abs(days)}d`:days===0?'Vence hoy':days<=7?`Vence en ${days}d`:credit.vence;
-  const dateColor=credit.status==='cancelado'?'#15803d':credit.status==='anulado'||days!==null&&days<0?'var(--red)':days!==null&&days<=7?'var(--amber)':'var(--slate)';
-  const statusClass=credit.status==='cancelado'?'cs-c':credit.status==='vencido'||credit.status==='anulado'?'cs-m':'cs-v',payments=Array.isArray(credit.pagos)?credit.pagos.filter(pay=>pay?.status!=='REVERTED').length:0;
+  const dateLabel=_naIsCreditVoided(credit)?'Crédito anulado':credit.status==='cancelado'?'Pagado completamente':days===null?'—':days<0?`Venció hace ${Math.abs(days)}d`:days===0?'Vence hoy':days<=7?`Vence en ${days}d`:credit.vence;
+  const dateColor=_naIsCreditVoided(credit)?'var(--red)':credit.status==='cancelado'?'#15803d':days!==null&&days<0?'var(--red)':days!==null&&days<=7?'var(--amber)':'var(--slate)';
+  const statusClass=_naIsCreditVoided(credit)?'cs-m':credit.status==='cancelado'?'cs-c':credit.status==='vencido'?'cs-m':'cs-v',payments=Array.isArray(credit.pagos)?credit.pagos.filter(pay=>pay?.status!=='REVERTED').length:0;
   const card=_naSecAppend(parent,'div','cr-item'),top=_naSecAppend(card,'div','cr-top'),copy=_naSecAppend(top,'div');
   _naSecAppend(copy,'div','cr-desc',`${credit.tipo==='contrato_privado'?'📋':'🛒'} ${credit.desc||'Crédito'}`);
   const date=_naSecAppend(copy,'div','cr-date',dateLabel);
@@ -44,7 +44,7 @@ function _naSecCreditCard(parent,credit){
   const progress=_naSecAppend(card,'div','cr-prog'),fill=_naSecAppend(progress,'div','cr-prog-fill');
   fill.style.width=`${Math.max(0,pct).toFixed(0)}%`;
   const actions=_naSecAppend(card,'div','cr-acts');
-  if(!credit.anulado&&credit.status!=='cancelado'&&pending>0)actions.appendChild(_naSecCreditAction('btn-cr btn-pago-cr','💵 Registrar pago','pay',credit.id));
+  if(!_naIsCreditVoided(credit)&&credit.status!=='cancelado'&&pending>0)actions.appendChild(_naSecCreditAction('btn-cr btn-pago-cr','💵 Registrar pago','pay',credit.id));
   const history=_naSecCreditAction('btn-cr','📄 Ver historial','detail',credit.id);
   history.style.cssText='background:#f1f5f9;color:var(--slate)';
   actions.appendChild(history);
@@ -57,11 +57,11 @@ function _naSecClientCard(parent,client){
   credits.forEach(_naSyncCreditStatus);
 
   const activeCredits=credits
-    .filter(credit=>!credit.anulado&&credit.status!=='cancelado'&&_naCreditOutstanding(credit)>0)
+    .filter(credit=>!_naIsCreditVoided(credit)&&credit.status!=='cancelado'&&_naCreditOutstanding(credit)>0)
     .sort((a,b)=>String(a.vence||'9999-12-31').localeCompare(String(b.vence||'9999-12-31')));
 
   const pastCredits=credits
-    .filter(credit=>credit.anulado||credit.status==='cancelado'||_naCreditOutstanding(credit)<=0)
+    .filter(credit=>_naIsCreditVoided(credit)||credit.status==='cancelado'||_naCreditOutstanding(credit)<=0)
     .sort((a,b)=>new Date(b.timestamp||b.fecha||0)-new Date(a.timestamp||a.fecha||0));
 
   const card=_naSecAppend(parent,'div',`client-card ${cardClass}`);
@@ -75,7 +75,7 @@ function _naSecClientCard(parent,client){
 
   const info=_naSecAppend(header,'div','c-info');
   _naSecAppend(info,'div','c-name',client.nombre);
-  _naSecAppend(info,'div','c-meta',`${client.dni?`\u{1F4CB} ${client.dni}`:''} ${client.tel?`\u{1F4F1} ${client.tel}`:''} ${credits.length?`\u00b7 ${credits.length} cr\u00e9dito(s)`:''}`.trim());
+  _naSecAppend(info,'div','c-meta',`${_naDocumentValue(client.dni)?`\u{1F4CB} ${client.dni}`:''} ${client.tel?`\u{1F4F1} ${client.tel}`:''} ${credits.length?`\u00b7 ${credits.length} cr\u00e9dito(s)`:''}`.trim());
 
   const right=_naSecAppend(header,'div','c-right');
   _naSecAppend(right,'div',`c-deuda ${debtClass}`,fmt(debt));
@@ -120,9 +120,11 @@ _baseCliRender=function(){
   [['cliB0',clientes.length],['cliB1',expired],['cliB2',soon],['cliB3',current],['cliS0',clientes.length],['cliS1',`S/${clientes.reduce((sum,client)=>sum+_naClientDebtFast(client),0).toFixed(0)}`],['cliS2',expired],['cliS3',`S/${cobradoHoy.toFixed(2)}`]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=String(value);});{const _naPaidLbl=document.getElementById('cliS3')?.parentElement?.querySelector('.ss-lbl');if(_naPaidLbl)_naPaidLbl.textContent='Cobrado hoy (todos los medios)';}
   const search=sinTildes((document.getElementById('cliSearch')?.value||'').toLowerCase()),sort=document.getElementById('cliSort')?.value||'';
   let rows=clientes.filter(client=>{
-    const matches=sinTildes((client.nombre||'').toLowerCase()).includes(search)||(client.dni||'').includes(search),status=statusCli(client);
+    const matches=sinTildes((client.nombre||'').toLowerCase()).includes(search)||_naDocumentValue(client.dni).includes(search),status=statusCli(client);
     return cliTab==='vencidos'?matches&&status==='vencido':cliTab==='proximos'?matches&&status==='proximo':cliTab==='vigentes'?matches&&status==='vigente':matches;
   });
+  // La tarjeta «Clientes» cuenta la lista filtrada (pestaña + búsqueda); V2 la ajusta tras su filtro de deuda.
+  {const shown=document.getElementById('cliS0');if(shown)shown.textContent=String(rows.length);}
   if(sort==='deuda')rows.sort((a,b)=>_naClientDebtFast(b)-_naClientDebtFast(a));else rows.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
   const list=document.getElementById('cliList');
   if(!list)return;
@@ -231,18 +233,19 @@ abrirDetalleCredito=function(creditId){
   container.replaceChildren();
 
   const summary=_naSecAppend(container,'div','credit-detail-summary');
+  const voidedCredit=_naIsCreditVoided(credit);
 
   [
     ['Cliente',client?.nombre||credit.clienteNombre||'Cliente'],
     ['Estado',_naCreditStatusLabel(credit)],
     ['Monto original',fmt(credit.monto)],
     ['Total abonado',fmt(credit.pagado)],
-    ['Saldo pendiente',fmt(pending)],
+    [voidedCredit?'Saldo anulado':'Saldo pendiente',fmt(pending),voidedCredit?'credit-saldo-anulado':''],
     ['\u00daltimo abono',latestPayment?fmt(latestPayment.monto):'Sin pagos']
-  ].forEach(([label,value])=>{
+  ].forEach(([label,value,cls])=>{
     const box=_naSecAppend(summary,'div','credit-detail-box');
     _naSecAppend(box,'span','',label);
-    _naSecAppend(box,'strong','',value);
+    _naSecAppend(box,'strong',cls||'',value);
   });
 
   const meta=_naSecAppend(container,'div','credit-pay-meta');
@@ -348,7 +351,7 @@ abrirDetalleCredito=function(creditId){
           ? `\u21a9\ufe0f ANULADO${payment.reversalFecha?` el ${String(payment.reversalFecha).split('-').reverse().join('/')}${payment.reversalHora?` ${payment.reversalHora}`:''}`:''} \u00b7 no suma al saldo${payment.reversalReason?` \u00b7 Motivo: ${payment.reversalReason}`:''}`
           : `\u21a9\ufe0f REVERTIDO${payment.reversalId?` \u00b7 Reversi\u00f3n ${payment.reversalId}`:''}${payment.reversalReason?` \u00b7 Motivo: ${payment.reversalReason}`:''}`
       ).style.cssText='color:var(--red);font-weight:800';
-    }else if(!credit.anulado&&!(payment.canonical&&!payment.canonicalLive)){
+    }else if(!_naIsCreditVoided(credit)&&!(payment.canonical&&!payment.canonicalLive)){
       // CANON: only LIVE payments (canonical events) can be annulled; imported history cannot.
       const revert=_naSecCreditAction('btn-cr',payment.canonical?'\u21a9\ufe0f Anular abono':'\u21a9\ufe0f Revertir pago','revert-payment',credit.id);
       revert.dataset.paymentId=String(payment.pagoId||payment.id||'');
@@ -367,7 +370,7 @@ abrirDetalleCredito=function(creditId){
     }
   });
 
-  if(!credit.anulado&&credit.status!=='cancelado'&&pending>0){
+  if(!_naIsCreditVoided(credit)&&credit.status!=='cancelado'&&pending>0){
     const actions=_naSecAppend(container,'div','mbtns');
     actions.style.marginTop='12px';
 

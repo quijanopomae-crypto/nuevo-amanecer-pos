@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { docHelpers } from '../../helpers/doc-helpers.mjs';
 
 const SHARE = 'POS/js/modules/ticket/share-receipt.js';
 const read = p => readFileSync(p, 'utf8');
@@ -26,7 +27,7 @@ function previousCredits() {
 const V094 = { id: 'V-094', fecha: '2026-10-11', hora: '08:25:00 p. m.', metodo: 'credito', clienteId: 'C-DALILA', clienteNombre: 'DALILA @', cajero: 'Frank', items: [{ name: 'Arroz', qty: 1, precio: 102.5 }] };
 
 function realTicket(extra = {}) {
-  const ctx = vm.createContext({ console, Blob, TextEncoder, Uint8Array, atob, Intl, navigator: {}, document: { addEventListener() {} }, _naDefaults: { ticket: {} }, appConfig: { ticket: {} },
+  const ctx = vm.createContext({ ...docHelpers, console, Blob, TextEncoder, Uint8Array, atob, Intl, navigator: {}, document: { addEventListener() {} }, _naDefaults: { ticket: {} }, appConfig: { ticket: {} },
     _naGetBusiness: () => ({ nombre: 'Nuevo Amanecer', cajero: 'Frank' }), totalV: s => (s.items || []).reduce((sum, i) => sum + i.qty * i.precio, 0),
     desglosarIGV: total => ({ subtotal: total, igv: 0, total }), obtenerHoy: () => '2026-10-11', nowT: () => '20:25', _naHydrateTicket() {}, _naSaveTicketSettings() {}, ...extra });
   for (const p of ['POS/js/modules/ticket/legacy.js', 'POS/js/modules/ticket/zones.js', SHARE]) vm.runInContext(read(p), ctx);
@@ -41,11 +42,11 @@ test('fresh credit sale pending sync: debt is accurate while the technical state
   const r = ctx.NAReceiptShare.build({ kind: 'sale', sale: V094, customer: DALILA, fresh: true, pendingSync: true, due: '2026-10-25' });
   const b = block(r.text);
   assert.match(r.text, /Saldo pendiente: S\/ 102\.50/);
-  assert.match(b, /Deuda anterior: S\/ 1251\.40/);
+  assert.match(b, /Deuda anterior: S\/ 1,251\.40/);
   assert.match(b, /Esta venta: S\/ 102\.50/);
-  assert.match(b, /Deuda total: S\/ 1353\.90/);
+  assert.match(b, /Deuda total: S\/ 1,353\.90/);
   assert.match(b, /Créditos abiertos: 91\b/);
-  assert.match(b, /Línea de crédito: S\/ 1500\.00/);
+  assert.match(b, /Línea de crédito: S\/ 1,500\.00/);
   assert.match(b, /Línea disponible: S\/ 146\.10/);
   assert.doesNotMatch(r.text, /pendiente de sincronizar|guardado local|puerto sungaro\)/i);
   assert.equal(ctx.NAReceiptShare.accountSummary({kind:'sale',sale:V094,customer:DALILA,pendingSync:true}).thisPending,true,'pending sync state still exists internally');
@@ -61,9 +62,9 @@ test('after sync the same sale is counted once (no double counting with the repl
   ctx.ventas = [V094];
   const r = ctx.NAReceiptShare.build({ kind: 'sale', sale: V094, credit: synced.at(-1), customer: DALILA, fresh: false });
   const b = block(r.text);
-  assert.match(b, /Deuda anterior: S\/ 1251\.40/);
+  assert.match(b, /Deuda anterior: S\/ 1,251\.40/);
   assert.match(b, /Esta venta: S\/ 102\.50/);
-  assert.match(b, /Deuda total: S\/ 1353\.90/);
+  assert.match(b, /Deuda total: S\/ 1,353\.90/);
   assert.match(b, /Créditos abiertos: 91\b/);
   assert.doesNotMatch(b, /pendiente de sincronizar/);
 });
@@ -94,7 +95,7 @@ test('no block for cash sales, generic customer, or a customer without id; no li
   assert.doesNotMatch(anonymous.text, /ESTADO DE CUENTA/);
   const noLine = realTicket({ clientes: [{ ...DALILA, lineaCreditoManualActiva: false }], creditos: previousCredits() });
   const t = noLine.NAReceiptShare.build({ kind: 'sale', sale: V094, customer: { ...DALILA, lineaCreditoManualActiva: false }, fresh: true, pendingSync: true }).text;
-  assert.match(t, /Deuda total: S\/ 1353\.90/);
+  assert.match(t, /Deuda total: S\/ 1,353\.90/);
   assert.doesNotMatch(t, /Línea/);
 });
 
@@ -111,8 +112,8 @@ test('printed ticket (Ver ticket / imprimir / ESC-POS) gets the same block once,
   const printed = ctx._naBuildThermalTicket(V094, false);
   const b = block(printed.text);
   assert.equal((printed.text.match(/ESTADO DE CUENTA DEL CLIENTE/g) || []).length, 1);
-  assert.match(b, /Deuda anterior: S\/ 1251\.40/);
-  assert.match(b, /Deuda total: S\/ 1353\.90/);
+  assert.match(b, /Deuda anterior: S\/ 1,251\.40/);
+  assert.match(b, /Deuda total: S\/ 1,353\.90/);
   assert.match(b, /Creditos abiertos: 91\b/);
   assert.match(b, /Linea disponible: S\/ 146\.10/);
   assert.ok(printed.lines.every(l => /^[\x20-\x7E]*$/.test(l)), 'printer lines are ASCII');

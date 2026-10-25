@@ -40,7 +40,6 @@ test('REPO_MAP canonical navigation paths exist', () => {
 
 test('REPO_MAP preserves unrelated historical artifacts while retiring active POS-LAB', () => {
   for (const path of [
-    'CVV1.1.html',
     'CVV2.4_backup_antes_demo-1.html',
     'nuevo-amanecer-pos-engineer.zip',
     'POS/js/legacy-inline',
@@ -61,7 +60,7 @@ test('REPO_MAP records conservative branch hygiene', () => {
 
 test('REPO_MAP declares branch-preview as active development model and POS-LAB as historical', () => {
   assert.match(map, /retired_pos_lab:/);
-  assert.match(map, /authority: historical_read_only/);
+  assert.match(map, /authority: removed_2026_10_24_recoverable_from_git_history/);
   assert.match(map, /branch_preview:/);
   assert.match(map, /source: exact_pr_sha/);
   assert.match(map, /preview_must_match_pr_sha: true/);

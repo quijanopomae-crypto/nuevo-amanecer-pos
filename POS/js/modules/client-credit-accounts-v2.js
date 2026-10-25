@@ -16,6 +16,9 @@
   var naClientListMotionTimer = 0;
   var naClientListMotionReady = false;
   var naClientListMotionEpoch = 0;
+  var naClientDebtFilter = 'todos';
+  var naClientDebtFilterRows = null;
+  var naClientDebtFilterCards = new Map();
   var naClientWorkspaceCleanupTimer = 0;
   var naClientWorkspaceEpoch = 0;
   var naClientViewTimer = 0;
@@ -55,12 +58,18 @@
     if (typeof _naSyncCreditStatus === 'function') {
       try { _naSyncCreditStatus(cr); } catch {}
     }
+    if (typeof _naIsCreditVoided === 'function' && _naIsCreditVoided(cr)) return 'anulado';
     return String((cr && (cr.status || cr.estado)) || '').toLowerCase();
+  }
+
+  // Anulado (anulado:true o status/estado/source_status «anul…»): nunca se cobra ni entra al reparto.
+  function labIsVoided(cr) {
+    return !!(cr && (cr.anulado === true || labCreditStatus(cr) === 'anulado'));
   }
 
   function labIsCanceled(cr) {
     var status = labCreditStatus(cr);
-    return !!(cr && !cr.anulado && status !== 'anulado' && (status === 'cancelado' || labCreditPending(cr) <= 0.001));
+    return !!(cr && !cr.anulado && status !== 'anulado' && !(typeof _naIsCreditVoided === 'function' && _naIsCreditVoided(cr)) && (status === 'cancelado' || labCreditPending(cr) <= 0.001));
   }
 
   function labDueDays(value) {
@@ -160,6 +169,23 @@
         return String(cr && (cr.cliId ?? cr.clienteId)) === String(clientId) && !cr.anulado && labCreditStatus(cr) !== 'anulado';
       });
     }
+    return labApplyPaymentReceiptOverlays(rows);
+  }
+
+  // Filtro de deuda: misma selección que labClientCredits (mismo índice compartido),
+  // pero sobre copias, porque el helper de estado normaliza su argumento in situ.
+  // Ruta de solo lectura: _naClientCreditsReadOnly no reconstruye el índice ni toca
+  // los créditos originales (antes _naClientCreditsFast podía normalizarlos in situ).
+  function labClientCreditsReadOnly(clientId) {
+    var rows = null;
+    if (typeof _naClientCreditsReadOnly === 'function') {
+      try { rows = _naClientCreditsReadOnly(clientId); } catch (_) { rows = null; }
+    }
+    if (!Array.isArray(rows)) rows = (Array.isArray(creditos) ? creditos : []).filter(function (cr) {
+      return String(cr && (cr.cliId ?? cr.clienteId)) === String(clientId);
+    }).map(function (cr) { return Object.assign({}, cr); }).filter(function (cr) {
+      return !cr.anulado && labCreditStatus(cr) !== 'anulado';
+    });
     return labApplyPaymentReceiptOverlays(rows);
   }
 
@@ -373,8 +399,8 @@ function labCategorySummary(client, category) {
     return pay.fecha || (pay.timestamp ? String(pay.timestamp).slice(0,10) : '—');
   }
 
-  function labClientFinancialSummary(client) {
-    var all = labClientCredits(client.id);
+  function labClientFinancialSummary(client, readOnly) {
+    var all = readOnly ? labClientCreditsReadOnly(client.id) : labClientCredits(client.id);
     var active = all.filter(function (cr) { return !labIsCanceled(cr); });
     var closed = all.filter(labIsCanceled);
     var debt = active.reduce(function (sum, cr) { return sum + labCreditPending(cr); }, 0);
@@ -382,7 +408,7 @@ function labCategorySummary(client, category) {
       return labCreditPending(cr) > 0.001 && labDueDays(cr.vence) !== null && labDueDays(cr.vence) < 0;
     }).reduce(function (sum, cr) { return sum + labCreditPending(cr); }, 0);
     var evaluation = null;
-    if (typeof _naEvaluateClientCredit === 'function') {
+    if (!readOnly && typeof _naEvaluateClientCredit === 'function') {
       try { evaluation = _naEvaluateClientCredit(client.id); } catch {}
     }
     return { all:all, active:active, closed:closed, debt:Number(debt.toFixed(2)), overdueDebt:Number(overdueDebt.toFixed(2)), evaluation:evaluation };
@@ -1050,13 +1076,13 @@ function labCategorySummary(client, category) {
     var paymentCount = s.all.reduce(function (n, cr) { return n + labEffectivePayments(cr).length; }, 0);
     var line = Number.isFinite(Number(e.assignedLine)) ? Number(e.assignedLine) : null;
     var available = Number.isFinite(Number(e.available)) ? Number(e.available) : null;
-    return '<div class="na-v2-screen">' +
+    return '<div class="na-v2-screen na-v2-client-detail">' +
       labBackButton('Clientes') +
       '<header class="na-v2-client-head na-v2-tone-' + c.tone + '">' +
         '<div class="na-v2-client-identity"><span class="na-v2-eyebrow">Ficha financiera</span>' +
           '<div class="na-v2-name-line"><h2>' + labEsc(labClientDisplayName(client)) + '</h2>' +
           '<button type="button" class="na-v2-risk na-v2-risk-' + c.tone + '" onclick="naCanonOpenClientBehavior()">● ' + labEsc(c.label) + '</button></div>' +
-          '<p>' + (client.dni ? 'DNI ' + labEsc(client.dni) : 'Sin DNI') + (client.tel ? ' · ' + labEsc(client.tel) : '') + '</p>' +
+          '<p>' + (_naDocumentValue(client.dni) ? 'DNI ' + labEsc(window.NA_DOC.displayDoc(client.dni)) : window.NA_DOC.displayDoc(client.dni)) + (client.tel ? ' · ' + labEsc(client.tel) : '') + '</p>' +
         '</div>' +
         '<div class="na-v2-head-money"><span>Deuda total</span><strong>' + labMoney(s.debt) + '</strong>' +
           '<small>Línea ' + labMoney(line) + (available !== null ? ' · ' + labMoney(available) + ' disponible' : '') + '</small></div>' +
@@ -1090,7 +1116,7 @@ function labCategorySummary(client, category) {
     credits = Array.isArray(credits) ? credits.slice() : [];
     totalCents = Number(totalCents);
     var ordered = credits.filter(function (cr) {
-      return cr && !labIsCanceled(cr) && labCreditPending(cr) > 0.001;
+      return cr && !labIsVoided(cr) && !labIsCanceled(cr) && labCreditPending(cr) > 0.001;
     }).sort(function (a,b) {
       var dateCompare = labBatchCreditDate(a).localeCompare(labBatchCreditDate(b));
       return dateCompare || String(a.id || '').localeCompare(String(b.id || ''));
@@ -1154,7 +1180,7 @@ function labCategorySummary(client, category) {
     var client = labClientById(labClientScreenState.clientId);
     if (!client || labClientScreenState.route !== 'category') return [];
     return labCreditsForCategory(client.id, labClientScreenState.categoryId).filter(function (cr) {
-      return cr && !labIsCanceled(cr) && labCreditPending(cr) > 0.001;
+      return cr && !labIsVoided(cr) && !labIsCanceled(cr) && labCreditPending(cr) > 0.001;
     });
   }
 
@@ -1596,7 +1622,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
         : '') +
       '<div class="na-v2-credit-actions">' +
         '<button type="button" class="na-receipt-history" data-share-credit="' + labEsc(String(cr.id)) + '">Compartir comprobante</button>' +
-        (!labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="na-v2-pay" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
+        (!labIsVoided(cr) && !labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="na-v2-pay" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
       '</div>' +
     '</div>';
   }
@@ -1643,7 +1669,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
       '<section class="na-v2-section na-v2-schedule-section"><div class="na-v2-section-title"><span>CRONOGRAMA DE CUOTAS</span><small>' + ins.plan.length + ' cuotas en total</small></div>' +
         labPendingInstallmentsHtml(ins) + '</section>' +
       '<div class="na-v2-credit-actions">' +
-        (!labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="na-v2-pay" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
+        (!labIsVoided(cr) && !labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="na-v2-pay" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
         '<button type="button" class="na-v2-info-btn" aria-label="Información del crédito" onclick="naCanonToggleCreditInfo()">ⓘ</button>' +
       '</div>' +
       labCreditInfoHtml(cr, account) +
@@ -1696,7 +1722,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
         return '<div class="na-v2-paid-row"><span>✓</span><div><strong>Cuota ' + item.number + '</strong><small>' + labEsc(pay ? labFormatPaymentMoment(pay) : (item.paidAt || 'Pago histórico sin hora canónica')) + '</small></div></div>';
       }).join('') : '<div class="na-v2-empty">Todavía no hay cuotas pagadas.</div>') +
       '</section><section class="na-v2-section"><h3>COMPROBANTES DE ABONOS</h3>' +
-      labEffectivePayments(cr).map(function(pay){return '<div class="na-receipt-payment-row"><span><strong>'+labMoney(pay.monto||pay.montoPagado||0)+'</strong><small>'+labEsc(labFormatPaymentMoment(pay))+'</small>'+((pay.cajeroNombre&&pay.cajeroNombre!=='Histórico')||pay.numeroOperacion||pay.comentario?'<small class="na-pay-meta">'+labEsc([pay.cajeroNombre&&pay.cajeroNombre!=='Histórico'?'Atendió: '+pay.cajeroNombre:'',pay.numeroOperacion?'N.º '+pay.numeroOperacion:'',pay.comentario||''].filter(Boolean).join(' · '))+'</small>':'')+'</span><button type="button" class="na-receipt-history" data-share-payment="'+labEsc(String(pay.id||pay.pagoId))+'" data-share-credit-id="'+labEsc(String(cr.id))+'">Compartir</button></div>';}).join('') + '</section></div>';
+      labEffectivePayments(cr).map(function(pay){return '<div class="na-receipt-payment-row"><span><strong>'+labMoney(pay.monto||pay.montoPagado||0)+'</strong><small>'+labEsc(labFormatPaymentMoment(pay))+'</small>'+((pay.cajeroNombre&&pay.cajeroNombre!=='Histórico')||pay.numeroOperacion||pay.comentario?'<small class="na-pay-meta">'+labEsc([pay.cajeroNombre&&pay.cajeroNombre!=='Histórico'?'Atendió: '+pay.cajeroNombre+(globalThis.NA_SELLER_LABELS&&globalThis.NA_SELLER_LABELS.cashierIdSuffix(pay.cajeroId,pay.cajeroNombre)||''):'',pay.numeroOperacion?'N.º '+pay.numeroOperacion:'',pay.comentario||''].filter(Boolean).join(' · '))+'</small>':'')+'</span><button type="button" class="na-receipt-history" data-share-payment="'+labEsc(String(pay.id||pay.pagoId))+'" data-share-credit-id="'+labEsc(String(cr.id))+'">Compartir</button></div>';}).join('') + '</section></div>';
   }
 
   function labPaymentGroups(client) {
@@ -1859,6 +1885,110 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     return labClientFinancialSummary(client).debt;
   }
 
+  // Read-only list projection. The existing summary owns the balance; only
+  // durable, unconfirmed payment intents are deducted here, in integer cents.
+  function naEffectiveClientBalance(summary, pending) {
+    var debt = Number(summary && summary.debt);
+    var balance = Number.isFinite(debt) ? Math.max(0, Math.round(debt * 100)) : 0;
+    var all = summary && Array.isArray(summary.all) ? summary.all : [];
+    var active = summary && Array.isArray(summary.active) ? summary.active : all;
+    var creditIds = new Set(active.map(function (credit) {
+      return String((credit && (credit.credit_id ?? credit.id)) ?? '');
+    }).filter(Boolean));
+    var included = new Set();
+    all.forEach(function (credit) {
+      (Array.isArray(credit && credit.pagos) ? credit.pagos : []).forEach(function (payment) {
+        var id = labPaymentIdentity(payment);
+        if (id) included.add(id);
+      });
+    });
+    var records = Array.isArray(pending) ? pending : [pending];
+    records.forEach(function (record) {
+      if (!record || record.invalid || record.last_error ||
+          (record.state && record.state !== 'PENDING')) return;
+      var payload = record.payload;
+      var payments = record.command === 'payment.create' ? [payload] :
+        record.command === 'payment.batch' && payload && Array.isArray(payload.payments) ? payload.payments : [];
+      payments.forEach(function (payment) {
+        var operationId = String(payment && payment.operation_id || '');
+        var creditId = String(payment && payment.credit_id || '');
+        var amount = payment && payment.amount_cents;
+        if (!operationId || included.has(operationId) || !creditIds.has(creditId) ||
+            !Number.isSafeInteger(amount) || amount <= 0) return;
+        included.add(operationId);
+        balance = Math.max(0, balance - amount);
+      });
+    });
+    return balance / 100;
+  }
+
+  // Each row carries a summary produced by labClientFinancialSummary; no
+  // sales, paid amounts or ledger totals are recalculated by this filter.
+  function naFilterClientsByDebt(rows, mode, pending) {
+    return (Array.isArray(rows) ? rows : []).filter(function (row) {
+      if (mode !== 'con-deuda' && mode !== 'sin-deuda') return true;
+      var balance = naEffectiveClientBalance(row.summary, pending);
+      return mode === 'con-deuda' ? balance > 0 : balance === 0;
+    });
+  }
+
+  function naClientDebtFilterEnabled() {
+    var permissions = root.NA_PERMISSIONS;
+    try {
+      return !!(permissions && typeof permissions.featureLocked === 'function' &&
+        permissions.featureLocked('clientes-filtro-deuda') === false);
+    } catch (_) { return false; }
+  }
+
+  function naClientPendingPayments() {
+    try {
+      var canonical = root.NuevoAmanecerCanonical;
+      return canonical && typeof canonical.pendingSnapshot === 'function' ? canonical.pendingSnapshot() : null;
+    } catch (_) { return null; }
+  }
+
+  function naSelectClientDebtFilter(mode) {
+    if (!naClientDebtFilterEnabled() || !['con-deuda','sin-deuda','todos'].includes(mode)) return false;
+    naClientDebtFilter = mode;
+    naSyncClientDebtFilterUi();
+    naRefreshClientDebtFilter();
+    return true;
+  }
+
+  function naSyncClientDebtFilterUi() {
+    var page = document.getElementById('pageClientes');
+    if (!page) return;
+    var group = document.getElementById('naClientDebtFilter');
+    if (!naClientDebtFilterEnabled()) {
+      naClientDebtFilter = 'todos';
+      if (group) group.hidden = true;
+      return;
+    }
+    if (!group) {
+      var bar = page.querySelector('.filter-bar');
+      if (!bar || !bar.parentNode) return;
+      group = document.createElement('div');
+      group.id = 'naClientDebtFilter';
+      group.className = 'na-client-debt-filter';
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', 'Filtrar clientes por deuda');
+      [['con-deuda','Con deuda'],['sin-deuda','Sin deuda'],['todos','Todos']].forEach(function (option) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.debtFilter = option[0];
+        button.textContent = option[1];
+        button.setAttribute('aria-controls', 'cliList');
+        button.addEventListener('click', function () { naSelectClientDebtFilter(option[0]); });
+        group.appendChild(button);
+      });
+      bar.parentNode.insertBefore(group, bar.nextSibling);
+    }
+    group.hidden = false;
+    group.querySelectorAll('button').forEach(function (button) {
+      button.setAttribute('aria-pressed', button.dataset.debtFilter === naClientDebtFilter ? 'true' : 'false');
+    });
+  }
+
   function naClientBusinessStatus(client) {
     if (typeof statusCli === 'function') {
       try { return String(statusCli(client) || ''); } catch (_) {}
@@ -1881,7 +2011,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     return '#0f766e';
   }
 
-  function naCreateNativeClientCard(client) {
+  function naCreateNativeClientCard(client, effectiveBalance) {
     var classification = labClassifyClient(client);
     var credits = labClientCredits(client && client.id);
     var status = naClientBusinessStatus(client);
@@ -1911,18 +2041,18 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     meta.className = 'c-meta';
     var metaParts = [];
     var lineIcons = typeof window.NA_ICON === 'function';
-    if (client && client.dni) metaParts.push(lineIcons ? String(client.dni) : '📋 ' + client.dni);
+    if (client && _naDocumentValue(client.dni)) metaParts.push(lineIcons ? String(client.dni) : '📋 ' + client.dni);
     metaParts.push(credits.length + (credits.length === 1 ? ' crédito' : ' créditos'));
     if (status) metaParts.push(status.toUpperCase());
     meta.textContent = metaParts.join(' · ');
-    if (lineIcons && client && client.dni) meta.insertAdjacentHTML('afterbegin', window.NA_ICON('clip'));
+    if (lineIcons && client && _naDocumentValue(client.dni)) meta.insertAdjacentHTML('afterbegin', window.NA_ICON('clip'));
     info.append(name, meta);
 
     var right = document.createElement('span');
     right.className = 'c-right na-v2-client-list-right';
     var debt = document.createElement('strong');
     debt.className = 'c-deuda';
-    debt.textContent = labMoney(naClientDebt(client));
+    debt.textContent = labMoney(effectiveBalance === undefined ? naClientDebt(client) : effectiveBalance);
     var risk = document.createElement('span');
     risk.className = 'na-v2-risk na-v2-risk-' + classification.tone;
     risk.textContent = classification.label;
@@ -1938,7 +2068,27 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     return card;
   }
 
-  function naDrawClientList(rows, list) {
+  function naDrawClientList(rows, list, reuseCards) {
+    if (!reuseCards) naClientDebtFilterCards.clear();
+    var balances = new Map();
+    if (naClientDebtFilterEnabled()) {
+      var pending = naClientPendingPayments();
+      var summaries = rows.map(function (client) {
+        var summary = labClientFinancialSummary(client, true);
+        balances.set(client, naEffectiveClientBalance(summary, pending));
+        return { client:client, summary:summary };
+      });
+      // Cache every incoming card during the ordinary data render, including
+      // hidden matches. Switching segments only moves DOM and updates labels;
+      // it never reruns legacy classification/normalization on live credits.
+      if (!reuseCards) rows.forEach(function (client) {
+        naClientDebtFilterCards.set(client, naCreateNativeClientCard(client, balances.get(client)));
+      });
+      rows = naFilterClientsByDebt(summaries, naClientDebtFilter, pending).map(function (row) { return row.client; });
+    }
+    // La tarjeta «Clientes» del resumen cuenta exactamente las filas que se muestran.
+    var shownCount = document.getElementById('cliS0');
+    if (shownCount) shownCount.textContent = String(rows.length);
     list.replaceChildren();
     list.dataset.naV2Native = 'true';
     if (!rows.length) {
@@ -1954,13 +2104,25 @@ function labCreditDisplayMoment(cr, fallbackDate) {
       return;
     }
     var fragment = document.createDocumentFragment();
-    rows.forEach(function (client) { fragment.appendChild(naCreateNativeClientCard(client)); });
+    rows.forEach(function (client) {
+      var card = naClientDebtFilterCards.get(client);
+      if (!card) {
+        card = naCreateNativeClientCard(client, balances.get(client));
+        naClientDebtFilterCards.set(client, card);
+      } else {
+        var debt = card.querySelector('.c-deuda');
+        if (debt) debt.textContent = labMoney(balances.get(client));
+      }
+      fragment.appendChild(card);
+    });
     list.appendChild(fragment);
   }
 
   function naRenderClientList(rows, list) {
     if (!list) return false;
     rows = Array.isArray(rows) ? rows : [];
+    naClientDebtFilterRows = rows.slice();
+    naSyncClientDebtFilterUi();
     var page = document.getElementById('pageClientes');
     var motionEpoch = ++naClientListMotionEpoch;
     var draw = function () {
@@ -1982,7 +2144,8 @@ function labCreditDisplayMoment(cr, fallbackDate) {
 
     // Mientras se escribe en la búsqueda, la lista debe reflejar cada tecla al instante:
     // la animación de salida (850 ms) dejaba la lista una tecla atrás.
-    var searching = document.activeElement && document.activeElement.id === 'cliSearch';
+    var searching = !!(document.activeElement && (document.activeElement.id === 'cliSearch' ||
+      (document.activeElement.closest && document.activeElement.closest('.na-client-debt-filter'))));
     if (!page || !page.classList.contains('active') || naClientReducedMotion() || searching) {
       clearTimeout(naClientListMotionTimer);
       naClientListMotionTimer = 0;
@@ -2039,13 +2202,6 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     });
   }
 
-  function labRenderClientProfiles() {
-    labBindClientCards();
-    if (labClientScreenState.clientId && !labScreen()?.hidden) labRenderRoute();
-  }
-  function labOpenClientIds() { return []; }
-  function labRestoreClientOpenState() {}
-
   function labSaleClient() {
     var id = document.getElementById('mCreditoCliente')?.value || '';
     return labClientById(id);
@@ -2080,22 +2236,6 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     wrap.innerHTML = dates.map(function (date, index) {
       return '<label><span>Cuota ' + (index + 1) + '</span><input type="date" class="fi na-credit-installment-date" data-installment-number="' + (index + 1) + '" value="' + labEsc(date) + '"></label>';
     }).join('');
-  }
-
-  function labSaleDestinationHtml(client) {
-    if (!client) return '<div class="na-credit-destination-empty">Selecciona primero el cliente del crédito.</div>';
-    var categories = labCategoriesForClient(client), selected = labSelectedCategory(client);
-    var radios = categories.map(function (cat) {
-      return '<label class="na-credit-destination-option ' + (String(cat.id) === String(selected.id) ? 'selected' : '') + '">' +
-        '<input type="radio" name="labCreditDestination" value="' + labEsc(cat.id) + '" ' + (String(cat.id) === String(selected.id) ? 'checked' : '') + ' onchange="naCanonSelectCreditDestination(\'' + labEsc(cat.id) + '\')">' +
-        '<span><strong>' + labEsc(cat.name) + '</strong><small>' + (cat.id === NA_SMALL_ACCOUNT_ID ? 'Predeterminado' : cat.mode === 'accumulated' ? 'Cuenta acumulada' : 'Créditos separados') + '</small></span></label>';
-    }).join('');
-    var installment = selected.mode === 'separate'
-      ? '<div class="na-credit-installment-config"><label><span>Número de cuotas</span><input id="labCreditInstallmentCount" class="fi" type="number" min="1" max="60" value="' + labSaleCreditState.installmentCount + '" oninput="naCanonRefreshInstallmentDates()"></label><div id="labCreditInstallmentDates" class="na-credit-installment-dates"></div></div>'
-      : '';
-    return '<div class="na-credit-destination-title"><strong>¿Dónde registrar esta venta?</strong><small>Créditos pequeños está seleccionado por defecto.</small></div>' +
-      '<div class="na-credit-destination-options">' + radios + '</div>' +
-      '<button type="button" class="na-credit-new-category" onclick="naCanonOpenNewCreditCategory()">+ Nueva categoría</button>' + installment;
   }
 
   function labEnsureSaleDestinationUi() {
@@ -2194,6 +2334,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     splitInstallmentAmounts:labSplitInstallmentAmounts,
     classifyClient:labClassifyClient,
     summarizeClient:labClientFinancialSummary,
+    debtFilter:Object.freeze({ effectiveBalance:naEffectiveClientBalance, filter:naFilterClientsByDebt, select:naSelectClientDebtFilter }),
     productSummary:labProductSummary,
     batchAllocationPlan:labBatchAllocationPlan,
     batchSelectedTotalCents:labBatchSelectedTotalCents,
@@ -2286,11 +2427,19 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     loader.hidden=!loading; loader.setAttribute('aria-hidden',loading?'false':'true');
   }
 
-  function naRequestClientListRender() {
-    if (typeof cliRender !== 'function') return;
-    root.requestAnimationFrame(function () {
-      try { cliRender(); } catch (error) { console.warn('[Nuevo Amanecer] No se pudo refrescar Clientes V2.', error && error.message || error); }
-    });
+  function naRefreshClientDebtFilter() {
+    var page = document.getElementById('pageClientes');
+    var list = document.getElementById('cliList');
+    if (naClientDebtFilterEnabled() && naClientDebtFilterRows && list && page && page.classList.contains('active')) {
+      // An ordinary render already scheduled a new set of search/tab matches.
+      // Let it build the cards before a segment can reuse them.
+      if (naClientDebtFilterRows.some(function (client) { return !naClientDebtFilterCards.has(client); })) return;
+      clearTimeout(naClientListMotionTimer);
+      naClientListMotionTimer = 0;
+      ++naClientListMotionEpoch;
+      page.classList.remove('na-client-refresh-out','na-client-refresh-in');
+      naDrawClientList(naClientDebtFilterRows, list, true);
+    }
   }
 
   function naBindClientMotion() {
@@ -2357,6 +2506,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
   }
 
   function naBindRuntime() {
+    naSyncClientDebtFilterUi();
     naBindClientDialogs();
     if (typeof abrirCobro === 'function' && !abrirCobro.__naCreditAccountsV2) {
       var open=abrirCobro;
@@ -2384,11 +2534,13 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     // client immediately; the expensive full reconciliation remains background.
     if (labClientScreenState && labClientScreenState.clientId) labRenderRoute('replace');
     naEnhanceClientCards();
+    naRefreshClientDebtFilter();
   });
 
   root.addEventListener('na:canonical-updated',function(){setTimeout(function(){
     labReconcilePaymentReceiptOverlays();
     naBindRuntime(); naEnhanceClientCards(); naSyncClientLoadingUi();
+    naRefreshClientDebtFilter();
     if ((labBatchAwaitingReconcile || labPaymentReceiptOverlays.size) && labClientScreenState && labClientScreenState.clientId) {
       labBatchAwaitingReconcile = false;
       labRenderRoute('replace');
@@ -2411,6 +2563,12 @@ function labCreditDisplayMoment(cr, fallbackDate) {
   });
   root.addEventListener('load',naBindRuntime);
   root.addEventListener('pageshow',naBindRuntime);
+  ['online','offline','focus'].forEach(function (eventName) {
+    root.addEventListener(eventName, naRefreshClientDebtFilter);
+  });
+  root.addEventListener('storage', function (event) {
+    if (event && (!event.key || event.key === 'na_canonical_sale_journal')) naRefreshClientDebtFilter();
+  });
   if (typeof MutationObserver === 'function') {
     var list=document.getElementById('cliList');
     var naClientEnhanceFrame=0;

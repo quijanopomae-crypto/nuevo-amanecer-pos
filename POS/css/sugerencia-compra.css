@@ -1,0 +1,51 @@
+/* Sugerencia de compra: estilos limitados a #pageSugerenciaCompra y a su impresión. */
+#pageSugerenciaCompra { --sc-bg: #f8fafc; --sc-surface: #fff; --sc-text: #0f172a; --sc-muted: #475569; --sc-border: #cbd5e1; --sc-zero: #64748b;
+  min-width: 0; overflow-y: auto; padding: 16px; color: var(--sc-text); background: var(--sc-bg); font-size: 14px; line-height: 1.5; }
+body.dark #pageSugerenciaCompra { --sc-bg: #0f172a; --sc-surface: #1e293b; --sc-text: #f8fafc; --sc-muted: #cbd5e1; --sc-border: #64748b; --sc-zero: #94a3b8; color-scheme: dark; }
+#pageSugerenciaCompra *, #pageSugerenciaCompra *::before, #pageSugerenciaCompra *::after { box-sizing: border-box; }
+#pageSugerenciaCompra [hidden] { display: none !important; }
+#pageSugerenciaCompra .sc-shell { width: 100%; max-width: 1200px; margin: 0 auto; }
+#pageSugerenciaCompra h1 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 30px); line-height: 1.2; overflow-wrap: anywhere; }
+#pageSugerenciaCompra h2 { margin: 18px 0 4px; font-size: 18px; overflow-wrap: anywhere; }
+#pageSugerenciaCompra p { margin: 0 0 12px; }
+#pageSugerenciaCompra :is(.sc-description, .sc-status, .sc-subtotal) { color: var(--sc-muted); overflow-wrap: anywhere; }
+#pageSugerenciaCompra .sc-totals { font-weight: 700; overflow-wrap: anywhere; }
+#pageSugerenciaCompra .sc-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 16px 0 12px; }
+#pageSugerenciaCompra :is(button, input) { min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--sc-border); border-radius: 10px; font: inherit; color: var(--sc-text); background: var(--sc-surface); }
+#pageSugerenciaCompra button { cursor: pointer; font-weight: 700; }
+#pageSugerenciaCompra button:disabled { opacity: .55; cursor: not-allowed; }
+#pageSugerenciaCompra :is(button, input):focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+#pageSugerenciaCompra .sc-qty { width: 96px; text-align: right; }
+#pageSugerenciaCompra .sc-empty { padding: 12px 14px; border: 1px solid var(--sc-border); border-radius: 12px; background: var(--sc-surface); }
+#pageSugerenciaCompra .sc-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--sc-surface); }
+#pageSugerenciaCompra .sc-table :is(th, td) { display: table-cell; padding: 8px 6px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--sc-border); overflow-wrap: anywhere; color: var(--sc-text); }
+/* base.css pone th { white-space: nowrap }: sin esto un nombre largo se sale de su celda y tapa las columnas siguientes. */
+#pageSugerenciaCompra .sc-table :is(th, td) { white-space: normal; }
+#pageSugerenciaCompra .sc-table .sc-product { overflow-wrap: anywhere; word-break: normal; }
+#pageSugerenciaCompra .sc-table thead th { font-size: 12px; color: var(--sc-muted); }
+#pageSugerenciaCompra .sc-table thead th:first-child { width: 30%; }
+#pageSugerenciaCompra .sc-table .sc-num { text-align: right; font-variant-numeric: tabular-nums; }
+#pageSugerenciaCompra .sc-product small { display: block; font-weight: 400; color: var(--sc-muted); }
+#pageSugerenciaCompra tr[data-sc-zero] .sc-product { text-decoration: line-through; color: var(--sc-zero); }
+@media (max-width: 599px) {
+  #pageSugerenciaCompra .sc-table, #pageSugerenciaCompra .sc-table tbody { display: block; background: transparent; }
+  #pageSugerenciaCompra .sc-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #pageSugerenciaCompra .sc-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--sc-border); border-radius: 12px; background: var(--sc-surface); }
+  #pageSugerenciaCompra .sc-table :is(th, td) { display: block; padding: 0; border: 0; }
+  #pageSugerenciaCompra .sc-table th { grid-column: 1 / -1; }
+  #pageSugerenciaCompra .sc-table td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--sc-muted); }
+  #pageSugerenciaCompra .sc-table .sc-num { text-align: left; }
+  #pageSugerenciaCompra .sc-actions { align-self: end; }
+}
+@media (min-width: 600px) {
+  #pageSugerenciaCompra { padding: 24px; }
+  #pageSugerenciaCompra .sc-controls { grid-template-columns: repeat(4, auto); justify-content: start; }
+  #pageSugerenciaCompra .sc-qty { width: 100%; max-width: 96px; }
+}
+@media print {
+  body.sc-printing * { visibility: hidden !important; }
+  body.sc-printing #pageSugerenciaCompra [data-sc-content], body.sc-printing #pageSugerenciaCompra [data-sc-content] * { visibility: visible !important; }
+  body.sc-printing #pageSugerenciaCompra [data-sc-content] { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
+  body.sc-printing #pageSugerenciaCompra tr[data-sc-zero], body.sc-printing #pageSugerenciaCompra .sc-actions, body.sc-printing #pageSugerenciaCompra .sc-table thead th:last-child { display: none !important; }
+  body.sc-printing #pageSugerenciaCompra .sc-qty { border: 0; width: auto; }
+}
