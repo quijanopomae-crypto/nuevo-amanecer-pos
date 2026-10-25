@@ -16,7 +16,7 @@ Toda tarea normal del POS debe ejecutarse así:
 4. ejecutar pruebas focalizadas y regresiones;
 5. abrir Draft PR;
 6. exigir CANON Critical CI + E2E Smoke CI cuando apliquen;
-7. clasificación de riesgo y revisión independiente Reviewer/Forensic cuando cambien autenticación, permisos, datos personales, APIs, operaciones canónicas, stock, caja, crédito, sincronización, despliegue o infraestructura; en cambios exclusivamente visuales, autorrevisión documentada + CI + preview del mismo SHA pueden ser suficientes;
+7. clasificar BAJO / MEDIO / ALTO y aplicar `docs/DEVELOPMENT_RISK_POLICY.md`; ningún agente nominal ni revisor humano externo es universalmente obligatorio;
 8. preview temporal del mismo SHA cuando la validación visual o de navegador sea necesaria;
 9. completar merge/deploy cuando estén incluidos en la autorización vigente del owner;
 10. borrar la rama después del merge.
@@ -27,7 +27,7 @@ No existe promoción LAB -> CANON para trabajo nuevo.
 
 La solicitud explícita actual del propietario es la máxima autoridad para tareas normales de desarrollo del producto.
 
-Cuando el propietario diga «impleméntalo», «aplícalo a CANON» o autorice continuar una implementación, esa autorización cubre publicar la rama/PR, integrar y desplegar el cambio solicitado y aplicar las migraciones aditivas indispensables para activarlo. No se vuelve a pedir permiso para esos pasos dentro del mismo alcance. Se conservan pruebas, revisión proporcional al riesgo, respaldo previo a migraciones remotas y verificación posterior. El owner no necesita repetir autorizaciones dentro del alcance aprobado. Una petición de debatir, revisar o preparar un borrador no autoriza producción. Acciones destructivas, force-push, cambios de secrets o ampliaciones del alcance requieren autorización explícita específica. Las restricciones de la plataforma no pueden desactivarse desde este repositorio.
+Cuando el propietario diga «aprobado», «impleméntalo», «aplícalo a CANON», «corrígelo» o «continúa» en relación con una implementación concreta, esa autorización cubre publicar la rama/PR, integrar y desplegar el cambio solicitado y aplicar las migraciones aditivas indispensables para activarlo. No se vuelve a pedir permiso para esos pasos dentro del mismo alcance. Se conservan pruebas, revisión proporcional al riesgo, respaldo previo a migraciones remotas y verificación posterior. El owner no necesita repetir autorizaciones dentro del alcance aprobado. Una petición de debatir, revisar o preparar un borrador no autoriza producción. Acciones destructivas, force-push, cambios de secrets o ampliaciones del alcance requieren autorización explícita específica. Las restricciones de la plataforma no pueden desactivarse desde este repositorio.
 
 ## Zonas y agentes
 
@@ -69,8 +69,7 @@ Un candidato solo puede solicitar merge cuando:
 - el diff corresponde al alcance;
 - CANON Critical CI está verde cuando aplica;
 - E2E Smoke CI está verde cuando aplica;
-- no hay P0/P1 abiertos; cuando la modificación afecta datos, sesiones, permisos, operaciones financieras o navegación a superficies con datos sensibles, existe revisión independiente Reviewer/Forensic y Forensic confirma integridad; para cambios exclusivamente visuales sin lógica ni datos, la revisión independiente es recomendable pero no bloqueante, con autoinspección y evidencias documentadas;
-- las pruebas y la verificación de producción no se omiten por ausencia de un revisor en cambios visuales de bajo riesgo;
+- no hay P0/P1 abiertos y existe la revisión proporcional exigida por `docs/DEVELOPMENT_RISK_POLICY.md`; la revisión independiente puede ser automatizada, realmente ejecutada y registrada;
 - el preview, si se exige, ejecuta el mismo SHA revisado.
 
 Un fallo de CI se clasifica primero como **REGRESIÓN REAL** o **TEST OBSOLETO**. No se debilitan assertions sin reemplazarlas por invariantes equivalentes o más fuertes.
@@ -130,6 +129,6 @@ Reglas duras (no negociables):
 
 ## Clasificación de riesgo para evitar bloqueos innecesarios
 
-- **VISUAL-ONLY:** CSS, texto, distribución, iconos y diseño sin introducir lecturas/escrituras nuevas de negocio, sin cambios a autenticación/roles, navegación protegida, servicio offline o APIs. Owner aprueba el diseño una sola vez; se exige diff revisado, pruebas aplicables, CI verde y evidencia visual/preview del SHA candidato. Reviewer independiente recomendado, no obligatorio.
-- **SENSITIVE/INTEGRATION:** nuevos puentes a API autenticada, presentación de datos privados, cambios en sesiones/roles/permisos, service worker, inventario, caja, crédito, pagos, ventas, outbox, servidor, migraciones o despliegue: mantener Reviewer/Forensic independiente cuando corresponda y todas las pruebas/candados aplicables. WORK, al incorporar chat autenticado y datos reales, **pertenece a esta categoría**, aunque cambie principalmente la interfaz.
-- Ninguna categoría permite presentar un PR sin revisión como si fuera aprobado por un reviewer externo, omitir CI roja, saltarse permisos ni ejecutar operaciones financieras para probar.
+La política única vigente es `docs/DEVELOPMENT_RISK_POLICY.md`: BAJO (visual sin datos), MEDIO (integración sin operaciones críticas), ALTO (datos, autenticación y operaciones críticas). Tiene prioridad sobre instrucciones históricas de revisión universal en comandos o skills del repositorio. WORK exige evaluar integración, sesión, roles y caché; no se clasifica como exclusivamente visual.
+
+La ausencia de respuesta de un agente no es un bloqueo técnico: usar otro revisor automatizado independiente cuando corresponda. Si falta evidencia crítica, aislar esa parte y continuar los cambios seguros. Nunca inventar una revisión ni convertir un fallo en PASS.

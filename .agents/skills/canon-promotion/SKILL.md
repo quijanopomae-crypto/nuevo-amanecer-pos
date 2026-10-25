@@ -1,25 +1,12 @@
 ---
 name: canon-promotion
-description: "Promueve a CANON solo el parche mínimo aprobado desde un experimento LAB."
+description: "Integrar un candidato autorizado desde rama CANON; promoción LAB retirada."
 ---
 
-# CANON Promotion
+# Integración CANON
 
-Esta skill NO autoriza promoción por sí sola. Requiere aprobación explícita del owner para el candidato concreto.
+El flujo LAB histórico está retirado; no exigir CANDIDATO_A_CANON ni build/test LAB para desarrollo actual. Partir de HEAD CANON vigente y seguir `AGENTS.md`, `docs/BRANCH_PREVIEW_WORKFLOW.md` y `docs/DEVELOPMENT_RISK_POLICY.md`.
 
-Antes de escribir en `POS/**`:
-1. El experimento debe estar `CANDIDATO_A_CANON`.
-2. Build/test LAB PASS.
-3. Diff LAB revisado.
-4. Definir exactamente qué comportamiento se promueve.
-5. Crear contrato de promoción separado con archivos CANON explícitos.
-6. Definir rollback por commit/revert.
+La autorización concreta del propietario cubre pruebas, PR, merge y deploy de ese alcance, sin pedirla otra vez. Clasificar riesgo, registrar revisión proporcional, CI aplicable y rollback. Preview del SHA candidato cuando corresponde. El coordinador completa operaciones remotas; el subagente implementador conserva límites locales.
 
-Prohibido:
-- copiar `laboratorio/pos-lab/index.html` completo sobre `POS/index.html`;
-- promover archivos no usados por la función;
-- mezclar rediseños o refactors no aprobados;
-- tocar datos reales para probar;
-- declarar PASS sin regresión relevante.
-
-Promueve el cambio funcional mínimo y vuelve a validar CANON.
+No copiar una app histórica entera, mezclar cambios ajenos, tocar datos reales para probar, omitir seguridad ni declarar PASS sin pruebas ejecutadas.
