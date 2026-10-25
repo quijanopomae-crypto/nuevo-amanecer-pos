@@ -156,9 +156,15 @@
     if (raw === null) return null;
     try { return JSON.parse(raw); } catch (_) { fail('INVALID_CANONICAL_STORAGE'); }
   }
+  // QuotaExceededError (Chromium/WebKit) o NS_ERROR_DOM_QUOTA_REACHED (Firefox).
+  function storageFull(error) {
+    var name = String(error && error.name || ''), code = error && error.code;
+    return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED' || code === 22 || code === 1014;
+  }
   function durableJournal(value) {
     var raw = JSON.stringify(value);
-    root.localStorage.setItem(JOURNAL, raw);
+    try { root.localStorage.setItem(JOURNAL, raw); }
+    catch (error) { if (storageFull(error)) fail('CANONICAL_STORAGE_FULL'); throw error; }
     if (root.localStorage.getItem(JOURNAL) !== raw) fail('CANONICAL_STORAGE_NOT_DURABLE');
   }
   function journal() {
@@ -1766,7 +1772,18 @@
         ((record.command !== 'sale.create' || result.status === 'created') && (result.promotion_id !== expected.promotion_id || result.authority_epoch !== expected.authority_epoch))) fail('CANONICAL_FINANCIAL_PENDING');
     // One atomic storage replacement both saves the receipt and clears PENDING.
     var confirmed = Object.assign({}, record, { state: 'CONFIRMED', receipt: copy(result) });
-    durableJournal(confirmed);
+    try { durableJournal(confirmed); } catch (storageError) {
+      // The server ALREADY applied it (valid receipt above): this is not a lost
+      // response. The journal stays PENDING and the replay with the SAME
+      // operation_id settles it once there is room again.
+      var notStored = new Error('CANONICAL_CONFIRMED_NOT_STORED');
+      notStored.code = 'CANONICAL_CONFIRMED_NOT_STORED';
+      notStored.command = record.command;
+      notStored.operation_id = record.payload && record.payload.operation_id;
+      notStored.receipt = copy(result);
+      notStored.storage = String(storageError && (storageError.code || storageError.message) || '');
+      throw notStored;
+    }
     closeOnlyReady = false;
     rememberCommit(record.command, record.payload, baseRevision, response.status === 201 && result.status === 'created');
     // The receipt is now durable. Publish only the exact affected payment so the
