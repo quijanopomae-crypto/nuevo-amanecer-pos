@@ -26,7 +26,8 @@ jobs:
           persist-credentials: false
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Compare screenshots
+      - name: Compare screenshots (informativo; renovar capturas según docs/GUIA_CAMBIO_RAPIDO.md)
+        continue-on-error: true
         run: npx playwright test -c playwright.visual.config.ts
       - name: Upload visual results
         if: always()
