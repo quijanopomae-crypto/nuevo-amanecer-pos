@@ -20,7 +20,7 @@ Cambio BAJO (CSS, texto, iconos, sin datos): solo los puntos de «Siempre».
 
 ## Solo MEDIO / ALTO (`docs/DEVELOPMENT_RISK_POLICY.md`)
 - [ ] Permisos nuevos con denegación por defecto y pruebas de cliente y servidor.
-- [ ] Migraciones: solo aditivas, con respaldo previo.
+- [ ] Migraciones: solo aditivas, con respaldo previo y OK explícito del dueño.
 - [ ] Revisión técnica documentada (MEDIO) o independiente, humana o automatizada (ALTO).
 
 ## Si el dueño pidió publicar
