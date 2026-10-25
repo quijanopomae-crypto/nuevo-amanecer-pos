@@ -816,7 +816,7 @@ function setMovType(btn,tipo){invMovT=tipo;document.querySelectorAll('.mov-type-
 let clientes=[];
 let creditos=[];
 let cliTab='todos',cliCredId=null,pagoCredId=null,cobradoHoy=0,pagoProc=false;
-const deudaT=c=>creditos.filter(x=>String(x.cliId)===String(c.id)&&!(typeof _naIsCreditVoided==='function'?_naIsCreditVoided(x):(x.anulado))&&_naSyncCreditStatus(x)!=='cancelado').reduce((a,x)=>a+Math.max(0,_naNumber(x.monto)-_naNumber(x.pagado)),0);
+const deudaT=c=>creditos.filter(x=>String(x.cliId)===String(c.id)&&!_naIsCreditVoided(x)&&_naSyncCreditStatus(x)!=='cancelado').reduce((a,x)=>a+Math.max(0,_naNumber(x.monto)-_naNumber(x.pagado)),0);
 
 function cliSetTab(btn,tab){document.querySelectorAll('#pageClientes .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');cliTab=tab;cliRender();}
 function _baseCliRender(){
@@ -843,7 +843,7 @@ function abrirCred(cliId){cliCredId=cliId;const c=clientes.find(x=>x.id===cliId)
 
 function abrirPago(crId){
   const cr=creditos.find(x=>String(x.id)===String(crId));if(!cr){toast('No se encontró el crédito','error');return;}_naSyncCreditStatus(cr);
-  const pending=_naCreditOutstanding(cr);if((typeof _naIsCreditVoided==='function'?_naIsCreditVoided(cr):(cr.anulado||cr.status==='anulado'))){toast('No se pueden registrar pagos en un crédito anulado','error');return;}if(cr.status==='cancelado'||pending<=0){toast('Este crédito ya está pagado completamente','error');return;}
+  const pending=_naCreditOutstanding(cr);if(_naIsCreditVoided(cr)){toast('No se pueden registrar pagos en un crédito anulado','error');return;}if(cr.status==='cancelado'||pending<=0){toast('Este crédito ya está pagado completamente','error');return;}
   pagoCredId=cr.id;const client=clientes.find(x=>String(x.id)===String(cr.cliId)),cashier=_naCashierSnapshot(cajEstado?.cajeroId||cajEstado?.cajero||appConfig.activeCashierId),now=new Date();
   document.getElementById('pagoInfoBox').innerHTML=`<div class="pi-row"><span>Cliente</span><span style="font-weight:800">${_naEsc(client?.nombre||cr.clienteNombre||'Cliente')}</span></div><div class="pi-row"><span>Crédito</span><span>${_naEsc(cr.desc)}</span></div><div class="pi-row"><span>Pagado</span><span style="color:#15803d">${fmt(cr.pagado)}</span></div><div class="pi-row main"><span>Pendiente</span><span style="color:var(--red)">${fmt(pending)}</span></div>`;
   const amount=document.getElementById('pagoMonto');amount.value='';amount.max=String(pending.toFixed(2));document.getElementById('pagoMetodo').value='efectivo';document.getElementById('pagoOperacion').value='';document.getElementById('abonoSaldo').textContent=fmt(pending);document.getElementById('pagoHorario').textContent=`${_naCreditSchedule(now)} · ${_naTime24(now)}`;document.getElementById('pagoCajero').textContent=`${cashier.nombre} · ${cashier.id}`;pagoProc=false;const btn=document.getElementById('pagoConfirmBtn');if(btn){btn.disabled=false;btn.textContent='✅ Confirmar';}_naCreditPaymentMethodChanged();_naUpdateCreditPaymentPreview();document.getElementById('mPagoCred').classList.add('open');setTimeout(()=>amount.focus(),60);
