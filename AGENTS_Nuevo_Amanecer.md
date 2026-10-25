@@ -174,7 +174,7 @@ Cuando una captura sea referencia exacta:
 
 ## Responsive
 
-Prueba como mínimo: 320, 360, 390, 430, 768, 1024, 1366 y 1920 px.
+Teléfono primero. Un cambio pequeño se revisa como mínimo a 390, 768 y 1366 px. Para trabajo grande (pantallas nuevas, rediseños) amplía a 320, 360, 430, 1024 y 1920 px.
 
 En teléfono: sin cortes, sin scroll horizontal innecesario, scroll vertical funcional, modales accesibles y teclado sin ocultar acciones.
 
