@@ -41,12 +41,14 @@ test('/features: sin fila es igual que hoy; la casilla abre solo su id; fuera de
   const f = await setup(t); const emp = await employee(f);
   assert.equal((await call(f, '/features/etiquetas-precios', emp)).status, 403, 'sin fila: 403 como hoy');
   assert.equal((await call(f, '/features/etiquetas-precios', 'owner-token')).status, 404, 'dueño como hoy');
-  setRow(f, JSON.stringify({ allow: { 'etiquetas-precios': true, kardex: true, 'catalogo-desde-pos': true } }));
+  setRow(f, JSON.stringify({ allow: { 'etiquetas-precios': true, kardex: true, 'catalogo-desde-pos': true, 'venta-por-presentacion': true } }));
   assert.equal((await call(f, '/features/etiquetas-precios', emp)).status, 404, 'casilla prendida: pasa el rol');
   assert.equal((await call(f, '/features/productos-sin-movimiento', emp)).status, 403, 'otra casilla apagada');
   assert.equal((await call(f, '/features/kardex', emp)).body.error, 'forbidden_role', 'fuera de la lista: nunca');
-  assert.equal((await call(f, '/features/catalogo-desde-pos', emp)).status, 403, 'candado gana: sigue cerrado aunque la casilla esté prendida');
-  assert.equal((await call(f, '/features/catalogo-desde-pos', 'owner-token')).body.error, 'feature_locked');
+  // catalogo-desde-pos está abierto (dueño 2026-10-23); el candado que sigue cerrado es venta-por-presentacion.
+  assert.equal((await call(f, '/features/catalogo-desde-pos', emp)).status, 404, 'candado abierto + casilla prendida: pasa');
+  assert.equal((await call(f, '/features/venta-por-presentacion', emp)).status, 403, 'candado gana: sigue cerrado aunque la casilla esté prendida');
+  assert.equal((await call(f, '/features/venta-por-presentacion', 'owner-token')).body.error, 'feature_locked');
   setRow(f, JSON.stringify({ allow: { 'etiquetas-precios': false } }));
   assert.equal((await call(f, '/features/etiquetas-precios', emp)).status, 403, 'sin caché');
 });
@@ -66,7 +68,7 @@ test('employeeFeatureGrant: candado gana y solo rutas /features', async () => {
   const db = { prepare: () => ({ bind: () => ({ first: async () => ({ value_json: JSON.stringify({ allow: { 'ventas-espera': true } }) }) }) }) };
   assert.equal(await employeeFeatureGrant(db, '/features/ventas-espera', { locked: () => false }), true);
   assert.equal(await employeeFeatureGrant(db, '/features/ventas-espera', { locked: () => true }), false);
-  assert.equal(await employeeFeatureGrant(db, '/features/ventas-espera'), false, 'hoy está con candado');
+  assert.equal(await employeeFeatureGrant(db, '/features/ventas-espera'), true, 'candado abierto: la casilla decide');
   assert.equal(await employeeFeatureGrant(db, '/settings', { locked: () => false }), false);
   assert.equal(await employeeFeatureGrant(db, '/auth/devices', { locked: () => false }), false);
 });

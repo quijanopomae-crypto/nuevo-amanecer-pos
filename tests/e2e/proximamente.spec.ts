@@ -60,7 +60,8 @@ test('every registry entry: server lock exists; locked ones show the lock and pr
   for (const e of entries) {
     expect(locks, `server lock for ${e.id}`).toContain(e.id);
     expect(e.unlocked, e.id).toBe(e.id in unlockedPages);
-    expect(e.locked, e.id).toBe(!(e.id in unlockedPages));
+    // Dueño 2026-10-23 'Enciende todas igual': solo venta-por-presentacion conserva candado; sin página la tarjeta sigue en vista previa.
+    expect(e.locked, e.id).toBe(e.id === 'venta-por-presentacion');
   }
   await expect(page.locator('#pageProximamente .na-prox-card')).toHaveCount(entries.length);
   const unlocked = entries.filter(e => e.unlocked);
@@ -124,7 +125,7 @@ test('Asistente virtual is visible for owner and locked; clicking only opens a d
   expect(await page.evaluate(() => {
     const api = (window as any).NA_PROXIMAMENTE, feature = api.get('asistente-virtual');
     return { locked: (window as any).NA_PERMISSIONS.featureLocked(feature.id), enabled: api.isEnabled(feature.id), page: feature.page, roles: feature.roles };
-  })).toEqual({ locked: true, enabled: false, page: null, roles: ['owner'] });
+  })).toEqual({ locked: false, enabled: false, page: null, roles: ['owner'] }); // candado abierto, sin página: solo vista previa
   await card.click();
   const preview = page.locator('#naProxPreview');
   await expect(preview).toBeVisible();
