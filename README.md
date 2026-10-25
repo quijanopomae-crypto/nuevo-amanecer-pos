@@ -12,6 +12,7 @@ Fuentes rápidas:
 
 - Estado V1.3 actual: [docs/V1.3_STATUS.md](docs/V1.3_STATUS.md)
 - Mapa corto del repositorio: [REPO_MAP.yaml](REPO_MAP.yaml)
+- Cambio rápido (CSS/texto): [docs/GUIA_CAMBIO_RAPIDO.md](docs/GUIA_CAMBIO_RAPIDO.md)
 - Reglas de trabajo y zonas: [AGENTS.md](AGENTS.md)
 - Reglas funcionales del producto: [AGENTS_Nuevo_Amanecer.md](AGENTS_Nuevo_Amanecer.md)
 - Roles OpenCode: [.opencode/ROLE_MAP.md](.opencode/ROLE_MAP.md)

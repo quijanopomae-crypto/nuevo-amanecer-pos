@@ -15,7 +15,7 @@ test.after(() => { globalThis.fetch = realFetch; });
 
 const enc = new TextEncoder();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const KEY = 'sk-NO-DEBE-SALIR-1234567890';
+const KEY = 'fixture-no-debe-salir-1234567890'; // Valor inventado para pruebas; no debe parecer un token real.
 const IMG = 'data:image/jpeg;base64,' + 'A'.repeat(200);
 const jsonR = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { 'content-type': 'application/json' } });
 // Respuesta en partes de mentira. hang: no termina nunca (para probar el corte); cancel queda anotado.

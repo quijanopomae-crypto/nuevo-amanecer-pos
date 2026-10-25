@@ -28,30 +28,43 @@ function _naSecSaleMethod(value){
 // y se calculan después del primer pintado, en tiempo libre, sobre TODAS las ventas del período.
 let _naSecKpiMemo=null,_naSecKpiJob=0;
 function _naSecIdle(fn,timeout){if(typeof requestIdleCallback==='function')return requestIdleCallback(fn,{timeout:timeout||300});return setTimeout(()=>fn({timeRemaining:()=>8,didTimeout:true}),16);}
-function _naSecKpiKey(){return [ventasTab,_naF8RangeFromPeriod('today').from,ventas.length,(typeof gastos!=='undefined'&&gastos)?gastos.length:0,(typeof cajMovs!=='undefined'&&cajMovs)?cajMovs.length:0].join('|');}
+function _naSecKpiKey(){return [ventasTab,_naF8RangeFromPeriod('today').from,ventas.length,(typeof gastos!=='undefined'&&gastos)?gastos.length:0,(typeof cajMovs!=='undefined'&&cajMovs)?cajMovs.length:0,_naSecOwnerSession()?'o':'e'].join('|');}
 function _naSecComputeKpis(){
   const range=ventasTab==='hoy'?_naF8RangeFromPeriod('today'):ventasTab==='semana'?_naF8RangeFromPeriod('week'):{from:'0000-01-01',to:'9999-12-31'};
   const sales=_naF8SaleRows(range),expenses=_naF8UnifiedExpenses(range),metrics=_naF8SaleMetrics(sales);
   const operating=_naF8Money(expenses.filter(e=>!_naF8IsInvestment(e)).reduce((a,e)=>a+_naNumber(e.monto),0));
-  return [metrics.revenue,metrics.gross,operating,_naF8Money(metrics.gross-operating)];
+  // Costo ausente (#884/#886): sin costo no hay ganancia; gross null => «—», nunca ganancia = ventas ni S/ 0.00.
+  // M1 (#892): mixto (algunas líneas sin costo) => para el dueño, ganancia solo sobre líneas con costo conocido,
+  // marcada con «*» y «N sin costo» en el rótulo existente; para el empleado sigue «—». Todas sin costo => «—».
+  const values=[metrics.revenue,metrics.gross,operating,metrics.gross==null?null:_naF8Money(metrics.gross-operating)];
+  if(metrics.gross==null&&metrics.knownCostLines>0&&_naSecOwnerSession()){
+    const gross=_naF8Money(metrics.revenue-metrics.noCostRevenue-metrics.cost);
+    values[1]={partial:gross};values[3]={partial:_naF8Money(gross-operating)};
+  }
+  values.noCost=metrics.gross==null&&metrics.knownCostLines>0?metrics.noCostProducts:0;
+  return values;
 }
+function _naSecOwnerSession(){try{return window.NA_ROLES?.isOwner?.()===true;}catch(_){return false;}}
+function _naSecKpiText(value){return value==null?NA_COST_ABSENT:value&&typeof value==='object'?fmt(value.partial)+'*':fmt(value);}
+function _naSecKpiLabel(label,i,values){return i===1&&values&&values.noCost&&values[1]&&typeof values[1]==='object'?`${values.noCost} sin costo`:label;}
 function _naSecRenderSaleKpis(){
   const container=document.getElementById('ventasKPI');
   if(!container)return;
   const key=_naSecKpiKey(),memo=_naSecKpiMemo&&_naSecKpiMemo.key===key&&_naSecKpiMemo.ventas===ventas?_naSecKpiMemo.values:null;
   container.replaceChildren();
-  const vals=[];
+  const vals=[],lbls=[],names=['Ventas','Ganancia bruta','Gastos operativos','Ganancia neta'];
   [['teal','Ventas'],['green','Ganancia bruta'],['amber','Gastos operativos'],['purple','Ganancia neta']].forEach(([tone,label],i)=>{
     const card=_naSecAppend(container,'div',`vkpi ${tone}`);
-    vals.push(_naSecAppend(card,'div','vkpi-val',memo?fmt(memo[i]):'—'));
-    _naSecAppend(card,'div','vkpi-lbl',label);
+    vals.push(_naSecAppend(card,'div','vkpi-val',memo?_naSecKpiText(memo[i]):'—'));
+    lbls.push(_naSecAppend(card,'div','vkpi-lbl',memo?_naSecKpiLabel(label,i,memo):label));
   });
   if(memo)return;
   const job=++_naSecKpiJob;
   requestAnimationFrame(()=>_naSecIdle(()=>{
     if(job!==_naSecKpiJob||!container.isConnected)return;
     const values=_naSecComputeKpis();_naSecKpiMemo={key,ventas,values};
-    vals.forEach((el,i)=>{if(el.isConnected)el.textContent=fmt(values[i]);});
+    vals.forEach((el,i)=>{if(el.isConnected)el.textContent=_naSecKpiText(values[i]);});
+    lbls.forEach((el,i)=>{if(el.isConnected)el.textContent=_naSecKpiLabel(names[i],i,values);});
   },400));
 }
 function _naSecRenderTopProducts(container){

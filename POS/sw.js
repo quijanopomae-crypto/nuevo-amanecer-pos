@@ -8,6 +8,9 @@ const LAZY_CACHE_PREFIX = 'nuevo-amanecer-pos-lazy-';
 const LAZY_CACHE_NAME = LAZY_CACHE_PREFIX + CACHE_NAME.slice(CACHE_PREFIX.length);
 const PRECACHE_URLS = [
   './index.html',
+  './js/work-host.js', // WORK entry — precached for offline canonical startup
+  './work/index.html', // WORK Inicio offline after shell installation
+  './work/work-canon-bridge.js',
   './js/modules/asistente/asistente-loader.js', // cargador del asistente (prototipo): nunca bloquea el arranque instalado
   './manifest.webmanifest',
   './assets/icons/icon-192.png',
