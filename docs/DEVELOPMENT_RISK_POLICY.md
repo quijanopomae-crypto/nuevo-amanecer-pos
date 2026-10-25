@@ -24,7 +24,7 @@ Conservar default-deny, aislamiento de entornos, secretos fuera de Git, validaci
 
 Un deploy publica todo el árbol POS del target, no solo el último PR. Antes de preparar la publicación, comparar el **SHA observado en producción** con el target y revisar todos los commits y archivos, incluidos eliminados. Si hay cambios ajenos no autorizados, no incorporarlos por conveniencia: aislarlos o resolver la dependencia.
 
-1. Completar PR de código y CI. Leer el SHA de producción desde `/app/sw.js` o build-info. Guardar un JSON externo con la lista exacta de archivos revisados del diff completo producción..target.
+1. Completar PR de código y CI. Leer el SHA de producción desde `/app/sw.js` o build-info. Guardar un JSON externo con la lista exacta de archivos revisados del diff producción..target **limitado a lo que se publica**: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/`package-lock.json` de `tools/cloudflare-lab` (wrangler fijado) y los 3 workflows de CI que definen los checks exigidos (`canon-critical-ci.yml`, `e2e-smoke-ci.yml`, `opencode-config-ci.yml`) (tests, docs y archivos fuera de esas rutas no cambian la web y no se listan; cualquier archivo publicado no listado sigue bloqueando). Las migraciones y el Worker de datos no se publican con este deploy: siguen su flujo propio (autorización del propietario + respaldo). El diff posterior a la revisión independiente se sigue comprobando completo, sin filtrar.
 2. Desde checkout limpio del target ejecutar:
 
 ```bash
