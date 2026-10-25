@@ -46,3 +46,8 @@ test('second turn returns exact signed server history and new conversation clear
  send({type:'na-work:reset'});send({type:'na-work:chat',id:'three',text:'nuevo'});await new Promise(setImmediate);
  assert.equal(calls[2].history.length,0);
 });
+test('confirmed identity change discards the previous WORK frame and private conversation',()=>{
+ const f=fixture(true,true);assert.equal(f.frames.length,1);
+ f.root.NA_ROLES.role='empleado';f.root.NA_ROLES.isOwner=()=>false;
+ f.listeners['na:role']();assert.equal(f.frames.length,2);
+});

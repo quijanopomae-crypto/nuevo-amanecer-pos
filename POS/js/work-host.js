@@ -28,7 +28,12 @@
     try { return sessionReady() && !!(root.NA_ROLES && root.NA_ROLES.isOwner() === true); } catch (_) { return false; }
   }
   function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || !featureEnabled || !temporarilyLegacy; }
+  var identity = null;
   function syncView() {
+    var roles = root.NA_ROLES;
+    var nextIdentity = sessionReady() && roles ? String(roles.role || 'unknown') + ':' + String(roles.deviceId || '') : null;
+    if (identity !== nextIdentity) { identity = nextIdentity; close(); }
+
     if (!sessionReady() || !isHome()) {
       temporarilyLegacy = false;
       if (overlay) close();
