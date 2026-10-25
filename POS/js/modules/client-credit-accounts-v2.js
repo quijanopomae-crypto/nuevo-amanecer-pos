@@ -827,6 +827,20 @@ function labCategorySummary(client, category) {
   function naV2StoredRead(cid) { try { var d = JSON.parse(root.localStorage.getItem(naV2DraftKey(cid)) || 'null'); return d && d.clientId && d.values ? d : null; } catch (_) { return null; } }
   function naV2StoredWrite(d, cid) { try { var k = naV2DraftKey(d ? d.clientId : cid); if (d) root.localStorage.setItem(k, JSON.stringify(d)); else root.localStorage.removeItem(k); } catch (_) {} }
   // Migración: el borrador único anterior pasa a la ranura de su cliente (sin pisar uno más nuevo).
+  // Borra los borradores ya enviados de ese lote (op vacío = todos los enviados); true si afectó a la ficha abierta.
+  function naV2DropSubmittedDrafts(op) {
+    var touched = false;
+    try {
+      for (var i = root.localStorage.length - 1; i >= 0; i--) {
+        var k = root.localStorage.key(i); if (!k || k.indexOf(NA_V2_DRAFT_KEY + ':') !== 0) continue;
+        var d = null; try { d = JSON.parse(root.localStorage.getItem(k) || 'null'); } catch (_) {}
+        if (d && d.submitted && (!op || !d.batch || (d.batch.payload && d.batch.payload.operation_id) === op)) {
+          root.localStorage.removeItem(k); if (labClientScreenState && String(d.clientId) === String(labClientScreenState.clientId)) touched = true;
+        }
+      }
+    } catch (_) {}
+    return touched;
+  }
   (function naV2MigrateDraft() { try { var raw = root.localStorage.getItem(NA_V2_DRAFT_KEY); if (!raw) return; var d = JSON.parse(raw);
     if (d && d.clientId && d.values) { var k = NA_V2_DRAFT_KEY + ':' + String(d.clientId); if (!root.localStorage.getItem(k)) root.localStorage.setItem(k, raw); }
     root.localStorage.removeItem(NA_V2_DRAFT_KEY); } catch (_) {} })();
@@ -2549,16 +2563,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
   // Abono pendiente resuelto por el reintento automático: se borran los borradores enviados de ese lote
   // (sin lote pendiente ya no hay nada que reenviar) y se redibuja la ficha abierta para que Confirmar no quede activo.
   root.addEventListener('na:payment-batch-resolved', function (e) {
-    var op = e && e.detail && e.detail.operation_id, touched = false;
-    try {
-      for (var i = root.localStorage.length - 1; i >= 0; i--) {
-        var k = root.localStorage.key(i); if (!k || k.indexOf(NA_V2_DRAFT_KEY + ':') !== 0) continue;
-        var d = null; try { d = JSON.parse(root.localStorage.getItem(k) || 'null'); } catch (_) {}
-        if (d && d.submitted && (!op || !d.batch || (d.batch.payload && d.batch.payload.operation_id) === op)) {
-          root.localStorage.removeItem(k); if (labClientScreenState && String(d.clientId) === String(labClientScreenState.clientId)) touched = true;
-        }
-      }
-    } catch (_) {}
+    var op = e && e.detail && e.detail.operation_id, touched = naV2DropSubmittedDrafts(op);
     if (touched && !labBatchSubmitInFlight) { naV2DraftSkip = true; try { labRenderRoute('replace'); } finally { root.setTimeout(function () { naV2DraftSkip = false; }, 0); } }
   });
   root.addEventListener('load',naBindRuntime);
