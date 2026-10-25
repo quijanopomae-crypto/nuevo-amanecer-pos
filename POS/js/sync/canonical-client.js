@@ -1046,7 +1046,9 @@
     var codes=[sku,barcode].concat(alternate).filter(Boolean).map(function(value){return value.toLowerCase();});
     if(new Set(codes).size!==codes.length) fail('INVALID_CANONICAL_PRODUCT');
     var hasBox=input.box_price_cents!=null;
-    if(!uint(input.cost_cents)||!Number.isSafeInteger(input.price_cents)||input.price_cents<=0||
+    // Costo ausente (#884/#886): un rol sin costo omite cost_cents en vez de enviar 0.
+    var omitCost=input.cost_cents===undefined&&(product.cost_cents===undefined||product.cost_cents===null);
+    if(!omitCost&&!uint(input.cost_cents)||!Number.isSafeInteger(input.price_cents)||input.price_cents<=0||
        hasBox!==(input.units_per_box!=null)||
        hasBox&&(!Number.isSafeInteger(input.box_price_cents)||input.box_price_cents<=0||typeof input.units_per_box!=='number'||!Number.isFinite(input.units_per_box)||input.units_per_box<=0)||
        typeof input.stock_min_quantity!=='number'||!Number.isFinite(input.stock_min_quantity)||input.stock_min_quantity<0||
@@ -1054,7 +1056,7 @@
     var tracks=Number(product.tracks_inventory)===1;
     var expected=input.expected_metadata_revision===undefined?(Number(product.metadata_revision)||0):Number(input.expected_metadata_revision);
     if(!uint(expected)) fail('INVALID_CANONICAL_PRODUCT');
-    return Object.assign(commonPayload(),{
+    var updatePayload=Object.assign(commonPayload(),{
       product_id:product.product_id,expected_metadata_revision:expected,
       name:text(input.name,240,true),sku:sku,barcode:barcode,alternate_codes:alternate,
       category:text(input.category,120,false),brand:text(input.brand,160,false),description:text(input.description,2000,false),
@@ -1063,6 +1065,8 @@
       stock_min_quantity:tracks?input.stock_min_quantity:0,
       expiry_date:input.expiry_date?input.expiry_date:null
     });
+    if(omitCost) delete updatePayload.cost_cents;
+    return updatePayload;
   }
 
   function pendingSaleUnits(productId,physical) {
@@ -1347,7 +1351,7 @@
     if (command === 'product.update') {
       return validId(payload.product_id) && uint(payload.expected_metadata_revision) &&
         typeof payload.name==='string' && payload.name.trim().length>0 && payload.name.length<=240 &&
-        uint(payload.cost_cents) && Number.isSafeInteger(payload.price_cents) && payload.price_cents>0 &&
+        (!Object.prototype.hasOwnProperty.call(payload,'cost_cents') || uint(payload.cost_cents)) && Number.isSafeInteger(payload.price_cents) && payload.price_cents>0 &&
         (payload.box_price_cents===null) === (payload.units_per_box===null) &&
         (payload.box_price_cents===null || Number.isSafeInteger(payload.box_price_cents) && payload.box_price_cents>0) &&
         (payload.units_per_box===null || typeof payload.units_per_box==='number' && Number.isFinite(payload.units_per_box) && payload.units_per_box>0) &&
