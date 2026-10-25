@@ -166,8 +166,6 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-14.js',
   './js/legacy-inline/inline-15.js',
   './js/legacy-inline/inline-16.js',
-  './js/legacy-inline/inline-17.js',
-  './js/legacy-inline/inline-18.js',
   './js/navigation/menu-navigation.js',
   './js/ui/na-line-icons.js',
   './js/motion/core.js',
