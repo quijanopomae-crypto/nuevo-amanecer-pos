@@ -37,7 +37,7 @@ Orden de carga en `POS/index.html`: `base.css` → `layout.css` → `components.
 ## Deploy (solo vía ops JSON + PR mergeado a `feature/v1.3-mobile-cloud`)
 - **Backend primero** cuando cambie código del Worker: `ops/v1.3-turso-prod-worker-hotfix-trigger.json` → workflow `.github/workflows/v1.3-turso-prod-worker-hotfix.yml` (incrementar `attempt`, `target_commit`, `rollback_ref`).
 - **Web:** `ops/v1.3-pos-web-deploy-trigger.json` → `.github/workflows/v1.3-pos-web-deploy.yml` (incrementar `retry_attempt`, `approved_base`, `requested_at_utc`, rollback en `retry_reason`). Reemplaza `__BUILD_HASH__`/`__BUILD_DATE__` en `sw.js`, `index.html` y `js/config/build-info.js`.
-- Migraciones remotas: workflows `canon-migration-00NN.yml` con su `ops/canon-migration-00NN.json`, solo con aprobación del owner y respaldo.
+- Migraciones remotas: workflow `canon-migration-00NN.yml` con su `ops/canon-migration-00NN.json`, solo con aprobación del owner y respaldo. Los de 0023–0033 ya se aplicaron una vez y se retiraron del árbol; la plantilla vigente es `canon-migrations-0021-0022.yml` (o `git show bf7d74db:.github/workflows/canon-migration-0033.yml`).
 
 ## Workflows que NUNCA se ejecutan/disparan sin orden explícita del owner
 - `.github/workflows/production-release.yml`

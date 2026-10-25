@@ -1,6 +1,6 @@
 # Respaldos de migraciones CANON (0031, 0032 y siguientes): cómo restaurar
 
-Cada workflow `canon-migration-00NN.yml` toma, **antes** de aplicar la migración, un respaldo lógico completo de Turso (esquema + todas las tablas, en una sola transacción de lectura). Lo cifra en el runner y lo sube a R2 (`nuevo-amanecer-prod-v2-backups`, clave `canon-migration-00NN/<fecha>-<commit>.json`). La clave R2 exacta y el sha256 quedan en el resumen del run.
+Cada workflow `canon-migration-00NN.yml` toma (los de 0023–0033 ya se aplicaron y se retiraron del árbol; su texto sigue en el historial: `git show bf7d74db:.github/workflows/canon-migration-0033.yml`), **antes** de aplicar la migración, un respaldo lógico completo de Turso (esquema + todas las tablas, en una sola transacción de lectura). Lo cifra en el runner y lo sube a R2 (`nuevo-amanecer-prod-v2-backups`, clave `canon-migration-00NN/<fecha>-<commit>.json`). La clave R2 exacta y el sha256 quedan en el resumen del run.
 
 ## Cifrado (estado actual)
 - AES-256-GCM. La clave se deriva con `sha256('nuevo-amanecer-contact-backup-v1\0' + TURSO_PROD_AUTH_TOKEN)` y se usa el AAD `nuevo-amanecer-contact-backup-v1` (ver `encryptBackup` en `tools/cloudflare-prod/scripts/turso-customer-contacts-maintenance.mjs`).
