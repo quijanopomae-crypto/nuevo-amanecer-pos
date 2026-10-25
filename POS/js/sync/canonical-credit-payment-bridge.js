@@ -163,6 +163,14 @@
   function describePendingFailure(error) {
     var pending = pendingRecord();
     var code = clean(error && error.message);
+    // T-03: abono o lote apartado por 409 operation_id_conflict: se explica qué chocó (y qué abono, si se sabe).
+    if (!pending && /_409$/.test(code)) {
+      try {
+        var c = api(), held = c && typeof c.heldOperations === 'function' ? (c.heldOperations().entries || []) : [];
+        var last = held.filter(function (e) { return e && e.status === 'HELD' && e.reason === 'operation_id_conflict' && e.record && ['payment.create','payment.batch'].indexOf(e.record.command) !== -1; }).pop();
+        if (last && typeof c.describeHeld === 'function') return c.describeHeld(last);
+      } catch (_) {}
+    }
     // Lote rechazado por un crédito anulado: mismo aviso que el pago individual.
     if (pending && pending.command === 'payment.batch' && !pending.invalid && clean(pending.last_error) === 'credit_voided') {
       return FRIENDLY_REJECTIONS.credit_voided + ' No se registró ningún abono del cobro múltiple.';
@@ -262,6 +270,11 @@
     catch (error) {
       busy = false;
       var after = pendingRecord();
+      // T-10: sesión vencida: el abono se conserva tal cual y se envía al volver a entrar; sin bucle.
+      if (after && after.last_error && after.auth_failed_identity !== undefined) {
+        showNet('rejected', 'Sesión vencida: vuelve a iniciar sesión. El abono queda guardado en este equipo y se enviará solo al volver a entrar con el mismo rol (dueño o empleado); no lo cobres de nuevo.');
+        return;
+      }
       if (after && after.last_error) {
         await releaseDefinitiveRejection(client);
         try { await refreshCanonical(); } catch (_) {}

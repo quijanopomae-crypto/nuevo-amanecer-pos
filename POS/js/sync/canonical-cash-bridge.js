@@ -378,19 +378,24 @@
     if (!doc || !outbox || typeof outbox.quarantine !== 'function') return;
     var entries = [];
     try { entries = outbox.quarantine().entries.filter(function (entry) { return entry.status === 'QUARANTINED'; }); } catch (_) { return; }
+    // SPEC-891: lo retenido que no es venta (abonos, gastos, caja) se muestra en el mismo bloque, solo como texto;
+    // NO frena el cierre (decisión pendiente del dueño).
+    var held = [], canon = root.NuevoAmanecerCanonical;
+    try { if (canon && typeof canon.heldOperations === 'function') held = (canon.heldOperations().entries || []).filter(function (e) { return e.status === 'HELD' && e.record && e.record.command !== 'sale.create'; }); } catch (_) { held = []; }
     ['cajContent', 'cajCloseStatus'].forEach(function (hostId) {
       var host = doc.getElementById(hostId);
       if (!host || typeof host.appendChild !== 'function') return;
       var old = doc.getElementById(hostId + 'Review');
       if (old && old.parentNode) old.parentNode.removeChild(old);
-      if (!entries.length) return;
+      if (!entries.length && !held.length) return;
       var box = doc.createElement('div');
       box.id = hostId + 'Review';
       box.style.cssText = 'margin:8px;padding:10px;border:1px solid #fcd34d;border-radius:10px;background:#fffbeb;color:#78350f;font-size:13px';
       var title = doc.createElement('div');
       title.style.fontWeight = '800';
       var blocking = 0; try { blocking = typeof outbox.blocking === 'function' ? outbox.blocking().length : entries.length; } catch (_) { blocking = entries.length; }
-      title.textContent = 'Ventas en revisión (' + entries.length + '). No las cobres de nuevo.' + (blocking ? ' La caja actual no se cierra hasta conciliar ' + (blocking === 1 ? 'la suya' : 'sus ' + blocking) + '.' : ' Son de una caja anterior: no impiden cerrar la caja actual.');
+      if (!entries.length) title.textContent = 'Otras operaciones en revisión (' + held.length + '). No las cobres de nuevo; no impiden cerrar la caja.';
+      else title.textContent = 'Ventas en revisión (' + entries.length + '). No las cobres de nuevo.' + (blocking ? ' La caja actual no se cierra hasta conciliar ' + (blocking === 1 ? 'la suya' : 'sus ' + blocking) + '.' : ' Son de una caja anterior: no impiden cerrar la caja actual.');
       box.appendChild(title);
       entries.forEach(function (entry) {
         var intent = entry.intent, row = doc.createElement('div');
@@ -400,7 +405,7 @@
         var when = ses && ses.opened_at ? new Date(ses.opened_at) : null;
         var cajaTxt = when && !isNaN(when) ? 'Caja del ' + when.toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit' }) + ', ' + when.toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false }) + (ses.status === 'CLOSED' ? ' (cerrada)' : '') + ' · ' : '';
         info.textContent = cajaTxt + clean(intent.sale_id) + ' · S/ ' + ((Number(intent.total_cents) || 0) / 100).toFixed(2) + ' · ' + clean(intent.payment_method) +
-          ' · motivo: ' + (entry.reason === 'credit_limit_exceeded' ? 'el crédito supera la línea disponible del cliente (cobre un abono o amplíe la línea y reintente)' : typeof outbox.reasonText === 'function' ? outbox.reasonText(entry.reason) : 'el servidor no la aceptó') + ' · estado: ' + (entry.verified_absent_at ? 'no registrada en el servidor' : 'sin confirmar en el servidor');
+          ' · motivo: ' + (entry.reason === 'credit_limit_exceeded' ? 'el crédito supera la línea disponible del cliente (cobre un abono o amplíe la línea y reintente)' : typeof outbox.reasonText === 'function' ? outbox.reasonText(entry.reason, entry) : 'el servidor no la aceptó') + ' · estado: ' + (entry.verified_absent_at ? 'no registrada en el servidor' : 'sin confirmar en el servidor');
         row.appendChild(info);
         function action(label, kind, run) {
           var el = doc.createElement('button');
@@ -415,6 +420,7 @@
         }
         action('Verificar en servidor', 'verify', async function () {
           var done = await outbox.resolveQuarantined(intent.operation_id, 'verify');
+          if (done.status === 'CONFLICT') return 'Venta ' + clean(intent.sale_id) + ': el servidor tiene OTRA venta con el mismo identificador (' + clean(done.remote_sale_id) + '). No la cobres de nuevo; queda en revisión para el dueño.';
           return done.status === 'CONFIRMED_REMOTE' ? 'Venta ' + clean(intent.sale_id) + ' ya está registrada en el servidor. Conciliada.'
             : 'Venta ' + clean(intent.sale_id) + ' NO está registrada en el servidor. No la cobres de nuevo sin hablar con el cliente.';
         });
@@ -431,6 +437,17 @@
             meta = { targetSessionId: target.session_id, by: root.cajEstado && (root.cajEstado.cajero || root.cajEstado.cashier_id) || null };
             moved = ' Pasó de la ' + from + ' a la ' + to + '.';
             if (typeof root._naAudit === 'function') root._naAudit('Venta pasada a otra caja', clean(intent.sale_id) + ' · ' + from + ' → ' + to);
+          }
+          // T-47: venta de otra sesión de este aparato. Solo el dueño la registra con la sesión actual:
+          // dueño confirmado aquí, o su PIN (aprobación del servidor). La venta se reenvía sin cambios.
+          if (typeof outbox.identityHeld === 'function' && outbox.identityHeld(entry.reason)) {
+            var owner = false; try { owner = !!(root.NA_ROLES && root.NA_ROLES.confirmed && root.NA_ROLES.isOwner()); } catch (_) {}
+            if (!owner) {
+              if (!root.NA_ROLES || typeof root.NA_ROLES.approve !== 'function') return 'Se necesita conexión y el PIN del dueño para registrar ' + clean(intent.sale_id) + '.';
+              var ownerApproval = await root.NA_ROLES.approve('discount', intent.operation_id, 'Autorización del dueño', 'La venta ' + clean(intent.sale_id) + ' la registró otra sesión de este aparato con otro rol. Ingresa el PIN del dueño para enviarla con la sesión actual.');
+              if (!ownerApproval) return 'Reintento cancelado: el dueño no autorizó. ' + clean(intent.sale_id) + ' sigue en revisión.';
+              meta = Object.assign({}, meta || {}, { ownerApproval: ownerApproval });
+            }
           }
           if (entry.reason === 'expired_lots_not_allowed' || entry.reason === 'expired_lot_approval_required') {
             if (!root.NA_ROLES || typeof root.NA_ROLES.approve !== 'function') return 'Se necesita conexión y el PIN del dueño para registrar ' + clean(intent.sale_id) + '.';
@@ -450,7 +467,24 @@
           if (typeof root._naAudit === 'function') root._naAudit('Anulación de venta no registrada', clean(intent.sale_id) + ' · ' + clean(intent.operation_id));
           return 'Venta ' + clean(intent.sale_id) + ' anulada como no registrada (registro conservado).';
         });
+        // SPEC-885: venta cuyo id ya existe en otro registro del servidor (409 operation_id_conflict). Nunca se
+        // aplicó allá y Reintentar volvería a chocar: el dueño la descarta (queda archivada) y la caja se puede cerrar.
+        // Sin PIN: solo el dueño confirmado ve el botón; mismo aviso de confirmación que «Anular venta no registrada».
+        var ownerHere = false; try { ownerHere = !!(root.NA_ROLES && root.NA_ROLES.confirmed && root.NA_ROLES.isOwner()); } catch (_) {}
+        if (ownerHere && typeof outbox.quarantineDiscardable === 'function' && outbox.quarantineDiscardable(entry)) action('Descartar venta no registrada', 'discard', async function () {
+          if (typeof root.confirm !== 'function' || !root.confirm('¿Descartar ' + clean(intent.sale_id) + '? Su identificador ya existe en otro registro del servidor y la venta no se registró. El registro se conserva archivado. Si la cobraste, vuélvela a registrar.')) return 'Descarte cancelado.';
+          var who = root.cajEstado && (root.cajEstado.cajero || root.cajEstado.cashier_id) || null;
+          var out = await outbox.resolveQuarantined(intent.operation_id, 'discard', { by: who });
+          if (out.status === 'CONFIRMED_REMOTE') return 'Venta ' + clean(intent.sale_id) + ' ya está registrada en el servidor. Conciliada.';
+          if (typeof root._naAudit === 'function') root._naAudit('Venta descartada por conflicto de identificador', clean(intent.sale_id) + ' · ' + clean(intent.operation_id));
+          return 'Venta ' + clean(intent.sale_id) + ' descartada: no estaba registrada en el servidor (registro conservado). Si la cobraste, vuélvela a registrar; si no, su efectivo saldrá como sobrante al cerrar. Ya puedes cerrar la caja.';
+        });
         box.appendChild(row);
+      });
+      held.forEach(function (entry) {
+        var line = doc.createElement('div'); line.style.marginTop = '6px';
+        try { line.textContent = typeof canon.describeHeld === 'function' ? canon.describeHeld(entry) : String(entry.reason); } catch (_) { line.textContent = String(entry.reason); }
+        box.appendChild(line);
       });
       host.insertBefore && host.firstChild ? host.insertBefore(box, host.firstChild) : host.appendChild(box);
     });
