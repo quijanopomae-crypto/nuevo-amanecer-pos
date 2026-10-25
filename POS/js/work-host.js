@@ -9,7 +9,11 @@
     'pageProximamente':true,'pageConfig':true
   });
   function isHome() { var p=doc.getElementById('pageMenu'); return !!(p && p.classList.contains('active')); }
-  function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay; }
+  // Until the design baseline and E2E are approved, WORK is preview-only (?work=1).
+  var featureEnabled = false;
+  try { featureEnabled = new URLSearchParams(root.location.search).get('work')==='1'; } catch (_) {}
+
+  function syncButton() { if (launcher) launcher.hidden = !featureEnabled || !isHome() || !!overlay; }
   function realMetrics() {
     var items = Array.from(doc.querySelectorAll('#pageMenu .quick-stats .qs-card'));
     return items.map(function (card) {
@@ -89,7 +93,7 @@
     var home=doc.getElementById('pageMenu');
     if (home && root.MutationObserver) new root.MutationObserver(syncButton).observe(home,{attributes:true,attributeFilter:['class']});
     syncButton();
-    try { if (new URLSearchParams(root.location.search).get('work')==='1') open(); } catch (_) {}
+    if (featureEnabled) open();
   }
   root.NA_WORK_HOST={open:open,close:close};
   if (doc.readyState==='loading') doc.addEventListener('DOMContentLoaded',mount,{once:true}); else mount();
