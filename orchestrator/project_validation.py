@@ -26,18 +26,24 @@ SHADOW_SKILLS = frozenset(
 CURRENT_AGENTS = frozenset(
     {
         "pos-canon-implementer",
-        "pos-lab-implementer",
         "pos-implementer",
         "pos-planner",
         "pos-reviewer",
         "pos-tester",
     }
 )
-CURRENT_COMMANDS = SHADOW_COMMANDS | frozenset(
-    {"lab-preflight", "lab-validate", "canon-preflight", "canon-validate"}
-)
+# POS-LAB was retired (2026-10-24): its agent, commands and skills no longer exist.
+CURRENT_COMMANDS = SHADOW_COMMANDS | frozenset({"canon-preflight", "canon-validate"})
 CURRENT_SKILLS = SHADOW_SKILLS | frozenset(
-    {"canon-promotion", "lab-animation-edit", "lab-feature-edit", "lab-scope-guard", "lab-ui-edit"}
+    {
+        "canon-promotion",
+        "add-migration",
+        "add-permission",
+        "add-screen",
+        "pre-publish-verification",
+        "unlock-proximamente-feature",
+        "write-e2e-test",
+    }
 )
 
 # Backward-compatible exports used by the existing infrastructure tests.

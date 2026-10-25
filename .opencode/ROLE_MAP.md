@@ -6,7 +6,7 @@ Referencia corta para elegir agente y zona. `AGENTS.md` gobierna el flujo vigent
 
 `CANON_DEFAULT = true`
 `POS_LAB_RETIRED = true`
-`BRANCH_PREVIEW_REQUIRED = true`
+`BRANCH_PREVIEW = solo cambios visuales (ver docs/DEVELOPMENT_RISK_POLICY.md)`
 
 | Zona / rol | Agente | Escritura | Regla principal |
 |---|---|---|---|
