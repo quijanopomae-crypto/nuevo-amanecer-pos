@@ -24,7 +24,7 @@ BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, 
 
 - Layouts de Venta (`#pagePOS`) e Inicio (`#pageMenu`): se cambian cuando el dueño lo pide para esa pantalla; ese pedido basta.
 - Permisos y candados: `POS/js/config/pos-permissions.js` (tabla única, denegación por defecto, `FEATURE_LOCKS`). Costos, totales y proveedores son solo del dueño. Todo cambio de permiso lleva prueba de cliente y de servidor. No abrir candados en bloque.
-- Datos de producción: migraciones solo aditivas y con respaldo previo; nunca borrar datos; nunca alterar ventas ni abonos pendientes (outbox).
+- Datos de producción: migraciones solo aditivas, con respaldo previo y OK explícito del dueño; nunca borrar datos; nunca alterar ventas ni abonos pendientes (outbox).
 - Secretos: nunca escribir tokens, claves ni datos de clientes en código, docs, logs o prompts. Los cambios de secrets requieren orden explícita.
 - Worker de producción y backend: `tools/cloudflare-lab/**` (nombre histórico, es producción), `tools/cloudflare-prod/**`, `tools/cloudflare-backup/**`. No se borra ni se renombra por nombre.
 - Publicación: la web se publica con el manifiesto de `tools/release/web-release.mjs` (rollback, SHA de producción y CI exacta). Nada de force-push ni de workflows de cutover/migración sin orden del dueño.
@@ -32,6 +32,8 @@ BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, 
 - No editar `POS/css/experience-v2/pages/*.css`. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si los sobrescribió la suite (restaurar con `git checkout`).
 
 ## Diseño
+
+Siempre: hora de Lima (`America/Lima`), nunca `innerHTML` con datos (usa `textContent`), no uses el puerto 4173 (E2E en otro puerto libre) y dinero, costos y TOTAL son solo del dueño: no cambian sin él.
 
 Teléfono primero (390 px). Revisa como mínimo 390, 768 y 1366 px cuando el cambio es visual. Los 8 anchos de `AGENTS_Nuevo_Amanecer.md` son referencia para trabajo grande, no requisito de un cambio de 1 línea.
 
