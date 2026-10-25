@@ -9,7 +9,7 @@
  * Excluidas deliberadamente (dominio unico): familia ticket (_naTk, _naTicket),
  * familia reportes (_naF8, _naF9), importacion/productos (_naImport, alt-codes,
  * category), impresion-UI (_naEsAndroid, _naEsMovil), seguridad (_naSecHash),
- * _naNewUuid (reside dentro del script V10 dormante) y un-consumidor
+ * _naNewUuid (vivia en el script V10, ya retirado) y un-consumidor
  * (_naTime24, _naParseTime24, _naUnitsPerQty, _naUnitsSold, _naLineKey,
  * _naDatePlus, _naCashierIdNumber, _naCsvCell).
  *
