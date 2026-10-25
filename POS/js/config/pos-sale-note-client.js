@@ -56,6 +56,17 @@
     var r = root.NA_ROLES; if (!r) throw new Error('sin sesión');
     return r.api('/auth/sale-notes', { sale_id: saleId, note: note });
   }
+  // T-47: cada nota pendiente guarda la identidad de la sesión que la escribió y solo esa sesión la envía.
+  // Las de otra sesión (o antiguas sin identidad, si no se puede probar que es la misma) se quedan en la
+  // cola sin enviarse ni borrarse (se siguen viendo en este aparato).
+  function who() { var c = root.NuevoAmanecerCanonical; try { return c && typeof c.sessionIdentity === 'function' ? c.sessionIdentity() : null; } catch (_) { return null; } }
+  function stampNote(item) { var w = who(); if (w) { item.identity = w.key; if (w.user) item.identity_user = w.user; if (w.principal) item.identity_principal = w.principal; } return item; }
+  // Mismo aparato y mismo rol => se envía sola; otro rol (o sin poder confirmarlo aún) => se queda.
+  function mine(item) {
+    var c = root.NuevoAmanecerCanonical, w = who();
+    if (!w || !c || typeof c.identityCheck !== 'function') return true;
+    try { return c.identityCheck(item.identity ? { key: item.identity, user: item.identity_user || null } : null, { command: 'sale-note' }) === 'same'; } catch (_) { return false; }
+  }
   async function flush() {
     if (busy || !cloud() || root.navigator.onLine === false || !root.NA_ROLES) return;
     var q = lsGet(QUEUE, []); if (!q.length) return;
@@ -64,6 +75,7 @@
       var cache = lsGet(CACHE, {}), rest = [];
       for (var i = 0; i < q.length; i++) {
         var item = q[i], done = false;
+        if (!mine(item)) { rest.push(item); continue; }
         // También se buscan las llaves de la venta proyectada desde el servidor (sale_id).
         var ks = (item.keys || []).slice();
         getVentas().forEach(function (v) { var vk = keys(v); if (vk.some(function (k) { return ks.indexOf(k) >= 0; })) vk.forEach(function (k) { if (ks.indexOf(k) < 0) ks.push(k); }); });
@@ -111,7 +123,7 @@
     var q = lsGet(QUEUE, []);
     (entries || []).forEach(function (e) {
       var op = e && e.receipt && (e.receipt.operation_id || e.receipt.event_id || e.receipt.payment_id);
-      if (op) q.push({ keys: ['pay:' + String(op)], note: note, at: new Date().toISOString() });
+      if (op) q.push(stampNote({ keys: ['pay:' + String(op)], note: note, at: new Date().toISOString() }));
     });
     lsSet(QUEUE, q); setTimeout(flush, 1500);
     return note;
@@ -152,7 +164,7 @@
           captured.forEach(function (k) { if (ks.indexOf(k) < 0) ks.push(k); });
           fresh.forEach(function (v) { v.nota = note; keys(v).forEach(function (k) { if (ks.indexOf(k) < 0) ks.push(k); }); });
           if (!ks.length) return false;
-          var q = lsGet(QUEUE, []); q.push({ keys: ks, note: note, at: new Date().toISOString() });
+          var q = lsGet(QUEUE, []); q.push(stampNote({ keys: ks, note: note, at: new Date().toISOString() }));
           lsSet(QUEUE, q); lsSet(DRAFT, ''); var i = doc.getElementById('naSaleNote'); if (i) i.value = '';
           mark(); setTimeout(flush, 1500); return true;
         };

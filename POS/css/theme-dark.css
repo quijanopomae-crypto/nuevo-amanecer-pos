@@ -217,8 +217,8 @@ body.dark #pageMenu .qs-trend[data-trend="flat"] {color:var(--na-dk-text)}
 body.dark #pageMenu .qs-prev {color:var(--na-dk-text)}
 body.dark #pageMenu .menu-activity-row {color:var(--na-dk-text)}
 body.dark #pageMenu .menu-pending-row {color:var(--na-dk-text)}
-body.dark #pageMenu .menu-pending-mark.amber {background-color:var(--na-dk-surface-2)}
-body.dark #pageMenu .menu-pending-mark.red {background-color:var(--na-dk-surface-2)}
+body.dark #pageMenu .menu-pending-mark.amber {background-color:#fbbf24}
+body.dark #pageMenu .menu-pending-mark.red {background-color:#f87171}
 body.dark #pageConfig .cfg-topbar-simple .top-mod-title::after {color:var(--na-dk-text)}
 body.dark .g-topbar {background-color:var(--na-dk-surface-2)}
 body.dark .na-mobile-menu-toggle,
@@ -900,4 +900,23 @@ body.dark #pageReporteProductosVencer {
   --rpv-expired-text: #fee2e2;
   --rpv-expired-bg: #7f1d1d;
   color-scheme: dark;
+}
+
+/* #699 rehecho: refinamientos oscuros solo de color (sin geometria). Los puntos ambar/rojo de Pendientes
+   (arriba) ya no usan el color del fondo; bordes de Inicio y titulos con contraste AA. */
+body.dark #pageMenu .menu-data-panel,
+body.dark #pageMenu .menu-activity-row,
+body.dark #pageMenu .menu-pending-row,
+body.dark #pageMenu .qs-prev {
+  border-color: rgba(148, 163, 184, .25);
+}
+body.dark #pageMenu #menuActivityTitle,
+body.dark #pageMenu #menuPendingTitle,
+body.dark #posPhoneCatalog #posPhoneCatalogTitle {
+  color: var(--na-dk-text);
+}
+body.dark #pagePOS .cart-head-clear {
+  background-color: var(--na-dk-surface-2);
+  color: var(--na-dk-muted);
+  border-color: rgba(148, 163, 184, .25);
 }
