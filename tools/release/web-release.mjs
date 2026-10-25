@@ -42,6 +42,22 @@ const paths=(base,target)=>execFileSync('git',['diff','--no-renames','--name-onl
 export const DEPLOYED_PREFIXES=['POS/','tools/cloudflare-pos-web/','tools/release/','.github/workflows/v1.3-pos-web-deploy.yml','tools/cloudflare-lab/package.json','tools/cloudflare-lab/package-lock.json',...Object.values(REQUIRED_CI)];
 export const deployedOnly=list=>list.filter(p=>DEPLOYED_PREFIXES.some(x=>p===x||p.startsWith(x)));
 const releasePaths=(base,target)=>deployedOnly(paths(base,target));
+// Avisos de prepare: lo excluido del alcance se muestra (no bloquea) y el riesgo mínimo se deriva del diff, no solo de --risk.
+export const excludedFromScope=list=>list.filter(p=>!deployedOnly([p]).length);
+export const HIGH_RISK_PREFIXES=['tools/cloudflare-lab/','tools/cloudflare-prod/','tools/cloudflare-backup/','infra/database/migrations/','ops/canon-migration'];
+export const highRiskPaths=list=>list.filter(p=>HIGH_RISK_PREFIXES.some(x=>p.startsWith(x))||/\.sql$/i.test(p));
+export function requireRiskForDiff(risk,list) {
+  const hits=highRiskPaths(list);
+  if(hits.length&&risk!=='high') fail('the diff touches the Worker, backups or SQL migrations ('+hits.slice(0,5).join(', ')+(hits.length>5?', +'+(hits.length-5)+' more':'')+'): --risk high is required');
+  return hits;
+}
+export function scopeWarning(list,max=15) {
+  const out=excludedFromScope(list);
+  if(!out.length) return '';
+  const top={};for(const p of out){const k=p.split('/')[0];top[k]=(top[k]||0)+1;}
+  const summary=Object.entries(top).sort((x,y)=>y[1]-x[1]).map(([k,n])=>k+' '+n).join(', ');
+  return 'WARNING: '+out.length+' file(s) in the diff are not part of the manifest scope (not published by the web deploy): '+summary+'.\n'+out.slice(0,max).map(p=>'  - '+p).join('\n')+(out.length>max?'\n  ... and '+(out.length-max)+' more':'');
+}
 function ancestor(base,target){execFileSync('git',['merge-base','--is-ancestor',base,target]);}
 async function main(){
   const [command,...rest]=process.argv.slice(2);
@@ -54,7 +70,10 @@ async function main(){
     ancestor(base,target);ancestor(rollback,target);
     if(git('status','--porcelain'))fail('prepare requires clean worktree');
     const m={format:'nuevo-amanecer-web-release-v2',authorized:true,authorization:args.authorization,risk:args.risk,approved_base:base,target_commit:target,rollback_ref:rollback,allowed_paths:JSON.parse(readFileSync(args.scope,'utf8')),review:{kind:args['review-kind'],evidence:args.review},requested_at_utc:new Date().toISOString()};
-    validateRelease(m,{base,target,head:target,productionSha:base,paths:releasePaths(base,target),activationPaths:[trigger]});
+    const fullDiff=paths(base,target);
+    requireRiskForDiff(m.risk,fullDiff);
+    const warning=scopeWarning(fullDiff);if(warning)console.warn(warning);
+    validateRelease(m,{base,target,head:target,productionSha:base,paths:deployedOnly(fullDiff),activationPaths:[trigger]});
     writeFileSync(trigger,JSON.stringify(m,null,2)+'\n');
     console.log('Prepared exact release manifest. Commit only '+trigger+' and open PR; no deployment performed.');
   }else if(command==='verify'){
