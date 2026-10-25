@@ -20,7 +20,7 @@
     if (mode === '1') featureEnabled = true;
     if (mode === '0') featureEnabled = false;
   } catch (_) {}
-  function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || (featureEnabled && !temporarilyLegacy); }
+  function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || !featureEnabled || !temporarilyLegacy; }
   function syncView() {
     if (!isHome()) {
       temporarilyLegacy = false;
