@@ -9,20 +9,24 @@ const decorator = readFileSync(new URL('../../../POS/js/canon-desktop-dashboard.
 const sharedRuntime = readFileSync(new URL('../../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../../../POS/sw.js', import.meta.url), 'utf8');
 
-test('decorador CANON define navegación lateral sin duplicar Nueva venta', () => {
-  assert.match(decorator, /menu-desktop-sidebar/);
-  for (const target of ['pagePOS','pageVentas','pageInventario','pageClientes','pageCaja','pageGastos','pageConfig']) {
-    assert.match(decorator, new RegExp(`['"]${target}['"]`));
+test('la barra lateral del Inicio vive solo en index.html y el decorador no la duplica', () => {
+  assert.equal((html.match(/class="menu-desktop-sidebar"/g) || []).length, 1);
+  for (const target of ['pageMenu','pagePOS','pageVentas','pageInventario','pageClientes','pageCaja','pageGastos','pageConfig']) {
+    assert.match(html, new RegExp(`data-menu-target="${target}"`));
   }
-  assert.doesNotMatch(decorator, /\+ Nueva venta/);
+  assert.doesNotMatch(html, /\+ Nueva venta<\/span><span class="menu-side-chevron"/);
+  assert.doesNotMatch(decorator, /menu-desktop-sidebar|NAV_ITEMS|navigationHtml|innerHTML/);
 });
 
-test('decorador CANON incorpora KPIs comparativos, actividad y pendientes', () => {
+test('index.html trae KPIs comparativos, actividad y pendientes y el decorador los rellena', () => {
   for (const id of [
     'qsVentasTrend','qsVentasPrev',
     'menuActivity0Label','menuActivity0Amount',
     'menuPendingCredits','menuPendingStock','menuPendingCash'
-  ]) assert.match(decorator, new RegExp(id));
+  ]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ['qsVentasTrend','qsVentasPrev','menuPendingCredits','menuPendingStock','menuPendingCash']) assert.match(decorator, new RegExp(id));
+  assert.match(decorator, /'menuActivity' \+ i \+ 'Label'/);
+  assert.match(decorator, /'menuActivity' \+ i \+ 'Amount'/);
   assert.match(decorator, /ayerVentas/);
   assert.match(decorator, /Venta /);
 });
