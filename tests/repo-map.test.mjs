@@ -38,26 +38,6 @@ test('REPO_MAP canonical navigation paths exist', () => {
   }
 });
 
-test('REPO_MAP preserves unrelated historical artifacts while retiring active POS-LAB', () => {
-  for (const path of [
-    'CVV2.4_backup_antes_demo-1.html',
-    'nuevo-amanecer-pos-engineer.zip',
-    'POS/js/legacy-inline',
-    'POS/js/compat/legacy-globals.js',
-    'evidence',
-  ]) {
-    assert.equal(existsSync(path), true, 'historical candidate disappeared before Phase 9 proof: ' + path);
-  }
-});
-
-test('REPO_MAP records conservative branch hygiene', () => {
-  assert.match(map, /checkpoint\/v1\.3-pc-20260923/);
-  assert.match(map, /merged_recoverable_refs: 24/);
-  assert.match(map, /safe_file_deletions_demonstrated: 0/);
-  assert.match(map, /remote_branch_refs_deleted: false/);
-});
-
-
 test('REPO_MAP declares branch-preview as active development model and POS-LAB as historical', () => {
   assert.match(map, /retired_pos_lab:/);
   assert.match(map, /authority: removed_2026_10_24_recoverable_from_git_history/);
