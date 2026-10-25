@@ -1,20 +1,29 @@
 import { test, expect, type Page } from '@playwright/test';
 
-test.use({ hasTouch: true });
+test.use({ hasTouch: true, serviceWorkers: 'block' });
+// El candado va cerrado por defecto; la prueba lo abre solo en su copia del navegador (no cambia el archivo).
+let abierto = true;
 test.beforeEach(async ({ page }) => {
-  await page.route('**/*', route =>
-    new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+  abierto = true;
+  await page.route('**/*', async route => {
+    const url = new URL(route.request().url());
+    if (url.hostname !== '127.0.0.1') return route.abort();
+    if (abierto && url.pathname.endsWith('/js/config/pos-permissions.js')) {
+      const res = await route.fetch();
+      return route.fulfill({ response: res, body: (await res.text()).replace("'clonar-venta': true", "'clonar-venta': false") });
+    }
+    return route.continue();
+  });
 });
 
 // Datos sintéticos, solo en el navegador de la prueba. No se cobra ni se guarda nada.
 async function openVentas(page: Page, { dark = false } = {}) {
-  await page.goto('/index.html');
+  await page.goto('/index.html', { waitUntil: 'load' });
   await page.waitForFunction(() => !!(window as any).NA_CLONAR_VENTA && !!(window as any).NA_MENU_NAVIGATION);
+  await page.waitForTimeout(500); // deja terminar el arranque de la app antes de preparar la venta de prueba
   await page.evaluate(({ dark }) => {
     const w = window as any;
     document.body.classList.toggle('dark', dark);
-    // La tarjeta sigue con candado hasta que PROGRAMADOR la desbloquee; aquí se simula desbloqueada.
-    const perms = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'clonar-venta' ? false : perms.featureLocked(id) };
     w.saveAllData = async () => ({ persisted: true });
     productos = [
       { id: 501, name: 'Prueba arroz', sku: 'T501', precio: 1234.5, costo: 1, stock: 50, stockMin: 0, cat: 'abarrotes', icon: '🍚' },
@@ -88,6 +97,7 @@ test('el módulo usa solo textContent', async ({ page }) => {
 });
 
 test('con el candado puesto no aparece el botón', async ({ page }) => {
+  abierto = false;
   await page.goto('/index.html');
   await page.waitForFunction(() => !!(window as any).NA_CLONAR_VENTA && !!(window as any).NA_MENU_NAVIGATION);
   await page.evaluate(() => { ventas = [{ id: 'V-9003', fecha: '2026-10-20', hora: '1', metodo: 'efectivo', items: [{ id: 1, name: 'x', precio: 1, qty: 1 }] }]; (window as any).NA_MENU_NAVIGATION.navigate('pageVentas'); ventasTab = 'historial'; (window as any).ventasRender(); });
