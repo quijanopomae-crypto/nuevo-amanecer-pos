@@ -24,7 +24,7 @@
   // Cachés que solo existen para el dueño o contienen costos/estado completo del usuario anterior.
   // na_snapshot_v10 (+ conflictos): V10 inactivo, forma no garantizada => se borra entero (falla cerrada).
   // na_device_revoked_v1 pertenece a la sesión anterior (pos-roles-client.js:74): no debe mostrarse a la nueva.
-  var LOCAL_DROP = ['na_price_history_v1', 'na_pos_reviews_cache_v1', 'na_pre_restore_snapshot_v1', 'na_gastos', 'na_snapshot_v10', 'na_device_revoked_v1'];
+  var LOCAL_DROP = ['na_pos_reviews_cache_v1', 'na_pre_restore_snapshot_v1', 'na_gastos', 'na_snapshot_v10', 'na_device_revoked_v1'];
   var LOCAL_DROP_PREFIX = ['na_snapshot_v10_conflict_'];
   var SESSION_DROP = ['na_pre_restore_snapshot_v1_session'];
   var IDB_NAME = 'NuevoAmanecerPOS', IDB_STORE = 'state', IDB_KEY = 'snapshot_v9';
@@ -118,6 +118,20 @@
     try { store.setItem(key, JSON.stringify(snap)); out.push(where + key + ':scrubbed'); }
     catch (_) { try { store.removeItem(key); out.push(where + key + ':removed'); } catch (_) {} }
   }
+  // Historial de precios (na_price_history_v1): se conservan los cambios de venta/mayorista y se quitan SOLO los de costo
+  // (el costo es del dueño). Antes se borraba entero y el empleado perdía el historial de precios de venta.
+  function filterPriceHistory(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+    var hit = false;
+    Object.keys(data).forEach(function (id) {
+      var list = data[id];
+      if (!Array.isArray(list)) { delete data[id]; hit = true; return; }
+      var kept = list.filter(function (e) { return e && typeof e === 'object' && e.type !== 'costo' && e.type !== 'cost'; });
+      if (kept.length !== list.length) hit = true;
+      if (kept.length) data[id] = kept; else { delete data[id]; hit = true; }
+    });
+    return hit;
+  }
   function purgeStorageSync(out) {
     var l = ls(), s = ss();
     LOCAL_SNAPSHOTS.forEach(function (k) { rewrite(l, k, out, 'localStorage.'); });
@@ -126,7 +140,7 @@
     SESSION_DROP.forEach(function (k) { try { if (s && s.getItem(k) !== null) { s.removeItem(k); out.push('sessionStorage.' + k + ':removed'); } } catch (_) {} });
     try { if (l) for (var i = l.length - 1; i >= 0; i--) { var key = l.key(i); if (key && LOCAL_DROP_PREFIX.some(function (pre) { return key.indexOf(pre) === 0; })) { l.removeItem(key); out.push('localStorage.' + key + ':removed'); } } } catch (_) {}
     // Claves heredadas (pre-v9, _naLegacySnapshot inline-02.js:420): sin costos, sin gastos/ajustes de caja, sin cierre.
-    [['na_productos', strip], ['na_ventas', strip], ['na_cajMovs', filterCashMoves], ['na_cajEstado', stripClose]].forEach(function (e) {
+    [['na_productos', strip], ['na_ventas', strip], ['na_cajMovs', filterCashMoves], ['na_cajEstado', stripClose], ['na_price_history_v1', filterPriceHistory]].forEach(function (e) {
       try { var v = readJSON(l, e[0]); if (v && e[1](v)) { l.setItem(e[0], JSON.stringify(v)); out.push('localStorage.' + e[0] + ':scrubbed'); } } catch (_) { try { l.removeItem(e[0]); out.push('localStorage.' + e[0] + ':removed'); } catch (__) {} }
     });
   }
