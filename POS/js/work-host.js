@@ -121,7 +121,12 @@
   // Textos heredados del motor que hablan de «usted» o de «la compra»: aquí se dicen en «tú» y según el tipo de tarjeta.
   function tu(text, type) {
     return String(text == null ? '' : text).replace(/Vuelva a entrar/g, 'Vuelve a entrar').replace(/Ábrala/g, 'Ábrela')
-      .replace(/pida la compra de nuevo/g, type === 'compra' ? 'pide la compra de nuevo' : 'pide el cambio de nuevo');
+      .replace(/pida la compra de nuevo/g, type === 'compra' ? 'pide la compra de nuevo' : 'pide el cambio de nuevo')
+      .replace(/Toque Reintentar/g, 'Toca Reintentar').replace(/Toque «Pedir de nuevo»/g, 'Pídela otra vez')
+      .replace(/Complete los datos marcados y vuelva a confirmar/g, 'Completa los datos marcados y vuelve a confirmar')
+      .replace(/Corrija los datos en Nueva compra/g, 'Corrige los datos en Nueva compra')
+      .replace(/Escriba los 11 dígitos del RUC y vuelva a confirmar/g, 'Escribe los 11 dígitos del RUC y vuelve a confirmar')
+      .replace(/Hágalo desde su pantalla/g, 'Hazlo desde tu pantalla');
   }
   function plain(text, type) {
     var C = core(), t = String(text == null ? '' : text);
@@ -279,10 +284,10 @@
     if (!settled) return 'pending';
     return modal.classList.contains('open') ? 'open' : 'saved';
   }
-  // Relee lo que el POS tiene ahora (hasta ~2,5 s) y compara con lo pedido: «Listo» solo si de verdad coincide.
+  // Relee lo que el POS tiene ahora (hasta ~5 s) y compara con lo pedido: «Listo» solo si de verdad coincide.
   async function verifySaved(p) {
     var i, loc;
-    for (i = 0; i < 6; i++) {
+    for (i = 0; i < 10; i++) {
       loc = localProduct(p);
       if (loc) {
         if (p.type === 'precio' && near(Number(loc.precio), Number(p.precio_nuevo))) return true;
@@ -315,7 +320,7 @@
           if (myGeneration === generation) cardState(key, {state: 'failed', msg: 'No pude comprobar que el cambio quedó guardado. Revisa «' + str(p.nombre, 60) + '» en Inventario antes de repetirlo.'});
           return;
         }
-        if (res === 'pending') { cardState(key, {state: 'failed', msg: 'El guardado sigue en curso. No lo repitas: espera unos segundos y revisa «' + str(p.nombre, 60) + '» en Inventario.'}); return; }
+        if (res === 'pending') { cardState(key, {state: 'working', msg: 'Guardando… revisa en un momento «' + str(p.nombre, 60) + '» en Inventario. No lo repitas.'}); return; }
         cardState(key, {state: 'done', msg: 'Abrí la pantalla con el cambio listo. Revisa y pulsa Guardar.'});
         root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
         return;
@@ -335,7 +340,7 @@
     if (Number(r.retry_after_s) > 0 && /rate_limited|HTTP_429/.test(code)) msg = friendly(code, r.retry_after_s);
     var kind = view ? view.kind : 'other';
     if (kind === 'blocked' || kind === 'review' || kind === 'fields' || kind === 'limit') {
-      cardState(key, {state: 'blocked', msg: msg + ' Ábrela en el asistente del POS.'}); return;
+      cardState(key, {state: 'blocked', msg: msg.replace(/\s*Hazlo desde tu pantalla\.?/, '') + ' Ábrela en el asistente del POS.'}); return;
     }
     if (rec.p && e.state(key) === 'denied') { cardState(key, {state: 'failed', msg: msg}); return; }
     cardState(key, {state: 'retry', msg: msg});

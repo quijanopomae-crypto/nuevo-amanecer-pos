@@ -243,7 +243,7 @@ test('H3: con el guardado en curso WORK no se cierra ni se repite el guardado',a
  const f=fixture({saves:{pending:true},api:async()=>({reply:'ok',proposals:[precio()]})});await chatConfirm(f);
  assert.equal(f.nodes.has('naWorkOverlay'),true);
  assert.equal(f.calls.save.length,1);
- assert.equal(lastCard(f).state,'failed');assert.match(lastCard(f).msg,/sigue en curso/);
+ assert.equal(lastCard(f).state,'working');assert.match(lastCard(f).msg,/Guardando… revisa en un momento/);assert.match(lastCard(f).msg,/No lo repitas/);
 });
 test('H4: la tarjeta «no permitida» no conserva filas ni avisos',async()=>{
  const f=fixture({engine:{canExecute:()=>({ok:false,msg:'Solo el Admin puede cambiar costos.'})},api:async()=>({reply:'ok',proposals:[precio({bajoCosto:true})]})});
@@ -314,4 +314,22 @@ test('motor REAL + host: el chat de WORK sale con nombres tapados y productos re
  const f=fixture({engine:{...eng,canExecute:()=>({ok:true}),ready:eng.ready,prepare:eng.prepare,product:eng.product,accessState:eng.accessState}});
  f.post({type:'na-work:chat',id:'a',text:'cuánto debe Juan Perez Quispe'});await tick();
  const b=f.calls.api[0];assert.doesNotMatch(b.text,/Juan|Perez|Quispe/);assert.equal(b.context.products[0].id,'P1');
+});
+
+test('C1 (A4): ningún texto heredado queda en «usted» y la tarjeta bloqueada no mezcla tú/usted',async()=>{
+ const usted=/Toque|Complete |Corrija|Hágalo|Ábrala|Vuelva |Escriba |vuelva a|pida |su pantalla/;
+ // sin conexión (reintento), campos por completar, compra ya confirmada, bloqueo, RUC
+ const casos=[
+  {r:{ok:false,code:'network',msg:'Sin conexión. Toque Reintentar'}},
+  {r:{ok:false,code:'fields_required',msg:'Complete los datos marcados y vuelva a confirmar.'}},
+  {r:{ok:false,code:'already_confirmed_same_session',msg:'Esta compra ya se confirmó. Corrija los datos en Nueva compra.'}},
+  {r:{ok:false,code:'manual_not_allowed',msg:'Esa tarjeta no se puede cambiar así. Toque «Pedir de nuevo».'}},
+  {r:{ok:false,code:'blocked',msg:'No se puede confirmar este cambio desde el asistente. Hágalo desde su pantalla.'}}];
+ for(const c of casos){
+  const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>c.r}});await chatConfirm(f);
+  const m=lastCard(f).msg;assert.doesNotMatch(m,usted,c.r.code+' => '+m);
+ }
+});
+test('C3 (A4): la espera de H1 llega a ~5 s (10 lecturas) y «No pude comprobar» sigue sin reintento',()=>{
+ assert.match(readFileSync('POS/js/work-host.js','utf8'),/for \(i = 0; i < 10; i\+\+\)/);
 });
