@@ -1634,6 +1634,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       try { var cp = window.NuevoAmanecerCanonicalCreditPaymentBridge; if (cp && cp.busy && cp.busy()) return true; } catch (_) {}
       try { if (window.NAPurchaseBusy && window.NAPurchaseBusy()) return true; } catch (_) {}
       try { if (window.NAOcrBusy && window.NAOcrBusy()) return true; } catch (_) {}
+      try { if (window.NAWorkBusy && window.NAWorkBusy()) return true; } catch (_) {}
       return false;
     }
     // Cuántas cosas guardadas quedan por revisar (no impiden recargar).

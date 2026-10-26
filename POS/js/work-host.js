@@ -471,6 +471,8 @@
   }
   // ---- Varias confirmaciones seguidas: una a la vez, con espera automática si se acerca el tope por minuto del servidor ----
   var working = false, batchRunning = false, confirmStamps = [];
+  // (A3 fase 0) El POS no recarga por versión nueva mientras WORK guarda o corre «Confirmar todo» (tokens ya gastados en vuelo).
+  try { root.NAWorkBusy = function () { return !!(working || batchRunning); }; } catch (_) {}
   function sleep(ms) { return new Promise(function (r) { root.setTimeout(r, ms); }); }
   // Cuenta regresiva en la tarjeta («Espera N segundos…»). true = terminó; false = WORK se cerró o cambió de sesión.
   async function countdown(key, secs, gen, abort) {
