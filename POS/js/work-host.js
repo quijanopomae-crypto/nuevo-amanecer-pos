@@ -321,6 +321,11 @@
           return;
         }
         if (res === 'pending') { cardState(key, {state: 'working', msg: 'Guardando… revisa en un momento «' + str(p.nombre, 60) + '» en Inventario. No lo repitas.'}); return; }
+        if (res === 'none') {
+          // El token ya se gastó pero no había formulario abierto que guardar: no es un éxito. Se dice claro y WORK no se cierra.
+          cardState(key, {state: 'failed', msg: 'No se pudo abrir ni comprobar el cambio de «' + str(p.nombre, 60) + '». No lo repitas todavía: revisa en Inventario si quedó y, si no, pídelo otra vez.'});
+          return;
+        }
         cardState(key, {state: 'done', msg: 'Abrí la pantalla con el cambio listo. Revisa y pulsa Guardar.'});
         root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
         return;

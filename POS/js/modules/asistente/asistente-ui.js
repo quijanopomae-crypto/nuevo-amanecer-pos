@@ -271,7 +271,7 @@
       // (Bots 2/5 sobre 84a49517) lo escrito a mano en «Complete este dato» va en «manual», aparte de la propuesta firmada; el servidor lo exige
       var manual = C.fillValues ? C.fillValues(p) : null; if (manual) body.manual = manual; }
     var lastErr;
-    // Cada intento se corta a los ~12 s; 2 intentos y después «Sin conexión. Toque Reintentar» (mismo cuerpo, token y operation_id).
+    // Cada intento se corta a los ~12 s; 2 intentos y después «Sin conexión. Toca Reintentar» (mismo cuerpo, token y operation_id).
     for (var i = 0; i < (C.CONFIRM_ATTEMPTS || 2); i++) {
       try { if (i > 0 && opts && typeof opts.onRetry === 'function') { try { opts.onRetry(); } catch (_) {} }
         var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm);

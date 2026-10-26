@@ -117,7 +117,7 @@ test('celular (Bot 2 A / Bot 4): campo con la parte exacta de inicio; 422 fields
   assert.match(CORE, /fields_required: \['Complete los datos marcados y vuelva a confirmar\.'\]/);
 });
 
-test('celular (Bot 4): lo escrito llega a «Nueva compra» con la propuesta que devuelve /confirm (respuesta simulada); sin respuesta → «Sin conexión. Toque Reintentar», mismo cuerpo, sin editar (d72b7601)', async () => {
+test('celular (Bot 4): lo escrito llega a «Nueva compra» con la propuesta que devuelve /confirm (respuesta simulada); sin respuesta → «Sin conexión. Toca Reintentar», mismo cuerpo, sin editar (d72b7601)', async () => {
   const owner = { role: 'owner', isOwner: () => true };
   const p = { id: 'c2', type: 'compra', needsConfirm: true, confirm_token: 't', proveedor: 'Bodega Juan', documento: 'F001-', completar: ['proveedor', 'documento'], lineas: [{ nombre: 'Galleta', cantidad: 1, costo_unitario: 1 }] };
   Object.defineProperty(p, '_manual', { value: { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' }, enumerable: false });
@@ -131,7 +131,7 @@ test('celular (Bot 4): lo escrito llega a «Nueva compra» con la propuesta que 
     navigate: () => {} };
   const g = C.createGate(deps); const key = g.add(p);
   const r1 = await g.execute(key, { confirmed: true }); assert.equal(r1.ok, false); assert.equal(g.state(key) || 'pending', 'pending');
-  const v = C.confirmFailureView(r1); assert.equal(v.kind, 'network'); assert.equal(v.button, 'Reintentar'); assert.equal(v.msg, 'Sin conexión. Toque Reintentar'); assert.equal(r1.locked, true); assert.equal(g.locked(key), true); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
+  const v = C.confirmFailureView(r1); assert.equal(v.kind, 'network'); assert.equal(v.button, 'Reintentar'); assert.equal(v.msg, 'Sin conexión. Toca Reintentar'); assert.equal(r1.locked, true); assert.equal(g.locked(key), true); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
   assert.deepEqual(sentBody.manual, { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' }); assert.equal(sentBody.proposal.proveedor, 'Bodega Juan', 'la propuesta enviada es la firmada');
   await g.execute(key, { confirmed: true });
   assert.ok(filled, 'se abrió Nueva compra'); assert.deepEqual(filled, { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' });

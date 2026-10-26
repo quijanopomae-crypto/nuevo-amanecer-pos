@@ -720,7 +720,7 @@
     revision_conflict: [CONFIG_CONFLICT_MSG], config_sin_datos: ['Ese ajuste todavía no está guardado en el servidor. Ábrelo una vez en Configuración.'],
     config_invalid: ['Ese valor no es válido. Pide la tarjeta de nuevo.'], config_forbidden: [CONFIG_LOST_MSG], save_failed: [MSG.again, true]
   };
-  var NO_LINK_MSG = 'Sin conexión. Toque Reintentar', RECONNECT_MSG = 'Reconectando…', SAME_SESSION_MSG = 'Esta compra ya se confirmó. Corrija los datos en Nueva compra.', OTHER_DEVICE_DONE_MSG = 'Ya se confirmó en otro aparato.';
+  var NO_LINK_MSG = 'Sin conexión. Toca Reintentar', RECONNECT_MSG = 'Reconectando…', SAME_SESSION_MSG = 'Esta compra ya se confirmó. Corrige los datos en Nueva compra.', OTHER_DEVICE_DONE_MSG = 'Ya se confirmó en otro aparato.';
   // ¿El texto trae algo que parece código? (palabra_con_guion_bajo, «HTTP», «error 403», «Error:»). Entonces no se muestra tal cual.
   function looksTechnical(t) { return /[a-z0-9]+_[a-z0-9_]+|\berror\b|HTTP|\b(error|status|code)\b\s*:?\s*\d{3}\b|^\s*[45]\d\d\b|undefined|null|NaN|Exception|TypeError/i.test(String(t || '')); }
   function friendlyError(code, serverMsg) {
@@ -838,7 +838,7 @@
         if (c && !c.ok && Number(c.status) >= 500) { it.state = 'pending'; if (c.sentBody) it.sent = c.sentBody; return { ok: false, retry: true, locked: true, code: 'network', msg: NO_LINK_MSG }; }
         var sentNow = (c && c.sentBody) || it.sent || null; it.sent = null; // 200 o 4xx real: se puede volver a editar
         // MISMO aparato y MISMA sesión dueño, otro «manual»: el servidor devuelve la propuesta firmada (sin lo escrito); «Nueva compra» se abre
-        // con ella + lo que este celular mandó, y la nota «Esta compra ya se confirmó. Corrija los datos en Nueva compra.»
+        // con ella + lo que este celular mandó, y la nota «Esta compra ya se confirmó. Corrige los datos en Nueva compra.»
         if (c && !c.ok && c.error === 'already_confirmed_same_session') {
           if (!c.proposal || c.proposal.id !== it.p.id || c.proposal.type !== it.p.type) { it.state = 'denied'; return { ok: false, code: 'already_confirmed_same_session', msg: SAME_SESSION_MSG }; }
           it.operationId = c.operation_id; it.applied = c.proposal;
@@ -858,7 +858,7 @@
         // servidor rechaza (fields_required / ruc_invalid…) sigue editable con el aviso del servidor.
         if (c && !c.ok && isRucCard(it.p) && needNames(it.p).length && c.error !== 'manual_not_allowed' && c.status >= 400 && c.status < 500 && c.status !== 409 && c.status !== 403 && c.status !== 429 && c.status !== 410) {
           it.state = 'pending'; var rf = needNames(it.p); // un solo campo en la tarjeta: el aviso va a ese campo aunque el servidor lo nombre distinto
-          return { ok: false, code: 'fields_required', fields: rf, msg: c.message && !looksTechnical(c.message) ? c.message : 'Escriba los 11 dígitos del RUC y vuelva a confirmar.' }; }
+          return { ok: false, code: 'fields_required', fields: rf, msg: c.message && !looksTechnical(c.message) ? c.message : 'Escribe los 11 dígitos del RUC y vuelve a confirmar.' }; }
         if (c && !c.ok && isServerConfig(it.p) && ['revision_conflict', 'config_sin_datos', 'config_invalid', 'config_forbidden'].indexOf(c.error) >= 0) {
           it.state = 'denied'; if (c.error === 'revision_conflict' && deps.reloadSettings) { try { Promise.resolve(deps.reloadSettings(it.p)).catch(function () {}); } catch (_) {} }
           return { ok: false, code: c.error, msg: c.error === 'revision_conflict' ? CONFIG_CONFLICT_MSG : friendlyError(c.error, c.message).msg }; }

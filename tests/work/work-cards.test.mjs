@@ -228,7 +228,7 @@ test('H2: los avisos se recalculan con lo que el POS tiene ahora; si no se puede
   const f=fixture({local,api:async()=>({reply:'ok',proposals:[precio(extra)]})});
   f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
   const c=lastCards(f)[0];
-  if(!c){assert.ok(true);continue;}
+  assert.ok(c,name+': debe salir la tarjeta');
   assert.equal(c.oneTap,false,name);
   f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(40);
   assert.deepEqual(f.calls.save,[],name);
@@ -332,4 +332,15 @@ test('C1 (A4): ningún texto heredado queda en «usted» y la tarjeta bloqueada 
 });
 test('C3 (A4): la espera de H1 llega a ~5 s (10 lecturas) y «No pude comprobar» sigue sin reintento',()=>{
  assert.match(readFileSync('POS/js/work-host.js','utf8'),/for \(i = 0; i < 10; i\+\+\)/);
+});
+
+test('N2 (A3): si tras confirmar no hay formulario abierto es un FALLO claro, no éxito, y WORK no se cierra',async()=>{
+ const f=fixture({modals:{mProd:false,mMovInv:false},api:async()=>({reply:'ok',proposals:[precio()]})});await chatConfirm(f);
+ assert.equal(f.calls.execute.length,1);assert.equal(f.calls.save.length,0);
+ const m=lastCard(f);assert.equal(m.state,'failed');assert.match(m.msg,/No se pudo abrir ni comprobar/);
+ assert.equal(f.nodes.has('naWorkOverlay'),true);
+});
+test('N4 (A3): los textos del core ya están en «tú»',()=>{
+ assert.equal(CORE.NO_LINK_MSG,'Sin conexión. Toca Reintentar');assert.match(CORE.SAME_SESSION_MSG,/Corrige los datos/);
+ assert.doesNotMatch(readFileSync('POS/js/modules/asistente/asistente-core.js','utf8'),/Toque Reintentar|Corrija los datos en Nueva compra|Escriba los 11 dígitos del RUC y vuelva/);
 });
