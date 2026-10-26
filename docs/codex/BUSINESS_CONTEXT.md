@@ -35,9 +35,9 @@ Se guardan en el servidor (`tools/cloudflare-lab/src/pos-product-images.js`); cl
 ## Diseño
 - Debe funcionar en **1366, 768 y 390 px**, teléfono primero.
 - Referencia visual: estilo tipo CasaMarket (limpio, tarjetas, iconos de línea).
-- **No cambiar layouts de Venta (`#pagePOS`) ni Inicio (`#pageMenu`) sin aprobación explícita del owner para esa pantalla.** WORK está autorizado como rediseño de Inicio; no altera permisos, ventas, caja, créditos ni el layout de Venta. La excepción es solo de presentación y requiere las pruebas aplicables.
+- **No cambiar layouts de Venta (`#pagePOS`) ni Inicio (`#pageMenu`) salvo que el pedido del owner nombre esa pantalla.** WORK está autorizado como rediseño de Inicio; no altera permisos, ventas, caja, créditos ni el layout de Venta. La excepción es solo de presentación y requiere las pruebas aplicables.
 
 ## Datos y producción
-- CANON es la única fuente funcional. Migraciones de BD/CANON requieren aprobación del owner y respaldo previo; solo aditivas.
+- CANON es la única fuente funcional. Migraciones de BD/CANON requieren respaldo previo hecho por ti; solo aditivas. El pedido del owner que las incluye es la aprobación.
 - Nunca alterar ventas ni abonos pendientes (outbox local, operaciones sin confirmar).
 - Nunca tocar datos de producción desde pruebas; nunca pulsar «Pagar» contra producción.

@@ -20,7 +20,7 @@ CANON HEAD
   -> revisión proporcional BAJO / MEDIO / ALTO (docs/DEVELOPMENT_RISK_POLICY.md)
   -> preview temporal del mismo SHA, cuando aplique
   -> veredicto READY FOR MERGE
-  -> comprobar autorización vigente del owner
+  -> comprobar que el pedido del owner cubre el alcance (no pedir OK nuevo)
   -> merge
   -> deploy incluido en el alcance autorizado si corresponde
   -> borrar rama
@@ -72,7 +72,7 @@ Crear rama, commit y Draft PR no equivale a:
 - escritura de producción;
 - cambio de secrets.
 
-La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. Borrados, migraciones destructivas, force-push, cambios de secrets y ampliaciones requieren autorización explícita específica. Se conservan respaldo, pruebas, revisión proporcional según `docs/DEVELOPMENT_RISK_POLICY.md` y verificación posterior. Los cambios estrictamente visuales, sin exposición ni escritura de datos, pueden avanzar con aprobación de diseño del owner, pruebas y preview del mismo SHA; la clasificación y las evidencias se anotan en el PR.
+La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. El force-push está siempre prohibido. Borrados de datos de producción (solo si el dueño los pide expresamente y con respaldo previo), migraciones destructivas, cambios de secrets no incluidos en el pedido y ampliaciones de alcance requieren autorización explícita específica; un secreto que falta solo lo puede dar el dueño en su chat. Se conservan respaldo, pruebas, revisión proporcional según `docs/DEVELOPMENT_RISK_POLICY.md` y verificación posterior. Los cambios estrictamente visuales, sin exposición ni escritura de datos, pueden avanzar con aprobación de diseño del owner, pruebas y preview del mismo SHA; la clasificación y las evidencias se anotan en el PR.
 
 ## Fuente de verdad
 

@@ -2,6 +2,8 @@
 
 Para el dueño o cualquier agente (ChatGPT, Codex, OpenCode), también desde el móvil. Un cambio pequeño no necesita más que esto.
 
+**Autorización:** el objetivo o pedido del dueño ya autoriza todo ese alcance, incluida la publicación al terminar. No pidas OK por paso; respaldo, pruebas y rollback los haces tú. Pregunta solo si sales del alcance, si es irreversible y no fue pedido, o si falta un secreto/dato que solo el dueño tiene.
+
 ## 1. Hacer el cambio
 
 1. Rama nueva desde `feature/v1.3-mobile-cloud`: `fix/<tema>` o `feature/<tema>`.
@@ -34,9 +36,9 @@ Un cambio que no toca Inicio ni Venta no necesita capturas.
 ## 5. Integrar y publicar
 
 - Integrar: merge del PR cuando CI esté verde. Borra la rama.
-- Publicar la web solo si el dueño lo pidió: `docs/DEVELOPMENT_RISK_POLICY.md` (manifiesto con SHA de producción, rollback y alcance). La lista de alcance incluye solo lo que se publica o define el gate: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/lock de `tools/cloudflare-lab` y los 3 workflows de CI exigidos.
+- Publicar la web cuando el dueño lo pidió o dio un objetivo que incluye publicar al terminar (no esperes otro OK): `docs/DEVELOPMENT_RISK_POLICY.md` (manifiesto con SHA de producción, rollback y alcance). La lista de alcance incluye solo lo que se publica o define el gate: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/lock de `tools/cloudflare-lab` y los 3 workflows de CI exigidos.
 
 ## Lo que no se toca (sigue protegido)
 
-Permisos y candados (`POS/js/config/pos-permissions.js`), costos/totales/proveedores solo del dueño, migraciones (con respaldo y OK del dueño), ventas/abonos pendientes, secretos, `tools/cloudflare-lab/**` (Worker de producción), `POS/css/experience-v2/pages/*.css`.
+Permisos y candados (`POS/js/config/pos-permissions.js`), costos/totales/proveedores solo del dueño, migraciones (solo aditivas, con respaldo hecho por ti; sin OK nuevo si el pedido las cubre), ventas/abonos pendientes, secretos, `tools/cloudflare-lab/**` (Worker de producción), `POS/css/experience-v2/pages/*.css`.
 No commitees `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si la suite de pruebas los sobrescribió (`git checkout -- <archivo>`).
