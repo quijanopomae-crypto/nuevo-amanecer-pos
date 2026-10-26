@@ -160,3 +160,27 @@ test('WORK: una consulta de solo lectura no muestra «propuestas pendientes» y 
   await expect(work.locator('#chatMessages')).toContainText('Espera un momento');
   await expect(work.locator('#chatMessages')).not.toContainText('rate_limited');
 });
+
+// B v3 (A3 N-2): con 30 tarjetas el botón «Confirmar todo» debe quedar a la vista (el chat no se va hasta la última tarjeta).
+test('WORK: con 30 tarjetas, la tarjeta «Confirmar todo» queda a la vista en el teléfono', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await expect(page.locator('#naWorkOverlay iframe')).toBeVisible();
+  const props = Array.from({ length: 30 }, (_, i) => proposal({ id: 'work-precio-' + (i + 1), nombre: 'Arroz ' + (i + 1), precio_nuevo: 4.6 }));
+  await installFakeEngine(page, proposal());
+  if (!(await page.evaluate(() => !!(window as any).NA_ASISTENTE_CORE))) await page.addScriptTag({ path: 'POS/js/modules/asistente/asistente-core.js' }); // lógica del lote (pura)
+  await page.evaluate(list => {
+    const w = window as any;
+    w.NA_ROLES.api = async () => ({ reply: 'Te preparé 30 cambios.', proposals: list });
+  }, props);
+  const work = page.frameLocator('#naWorkOverlay iframe');
+  await work.locator('#promptInput').fill('sube todo un poco');
+  await work.locator('#promptForm button[type="submit"]').click();
+  const lote = work.locator('.na-card[data-kind="lote"]');
+  await expect(lote).toBeVisible();
+  await expect(work.locator('.na-card[data-kind="confirm"]')).toHaveCount(30);
+  await expect(lote.getByRole('button', { name: /Confirmar todo \(30\)/ })).toBeInViewport();
+  const view = await work.locator('#chatMessages').evaluate(el => { const r = el.getBoundingClientRect(); const c = document.querySelector('.na-card[data-kind="lote"]')!.getBoundingClientRect(); return { chatTop: r.top, chatBottom: r.bottom, top: c.top }; });
+  expect(view.top).toBeGreaterThanOrEqual(view.chatTop - 2);
+  expect(view.top).toBeLessThan(view.chatBottom);
+});

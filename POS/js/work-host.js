@@ -96,13 +96,22 @@
   function core() { return root.NA_ASISTENTE_CORE || null; }
   // Las tarjetas de confirmación viven en el motor del asistente original (puerta con token firmado de un solo uso).
   // Al cerrar o reiniciar WORK se cancelan las que sigan pendientes (no quedan tarjetas huérfanas con datos).
+  // EXCEPCIÓN (B-1): una tarjeta con la petición YA EN VUELO (rec.busy) NO se olvida ni se cancela aquí: el servidor puede gastar su token y la
+  // puerta necesita su propuesta para aplicar el cambio. Esa tarjeta se termina sola y se avisa (confirmOnce → finishDetached → releaseDetached).
   function dropCards() {
     var e = engine();
     Object.keys(cards).forEach(function (k) {
       var rec = cards[k];
+      if (rec && rec.gated && rec.busy) { rec.detached = true; return; }
       if (rec && rec.gated && e) { try { e.cancel(k, 'cancelada'); } catch (_) {} try { e.forget(k); } catch (_) {} }
     });
     cards = Object.create(null);
+  }
+  // Suelta de la memoria una tarjeta que se terminó «aparte» (WORK ya cerrado): se llama cuando su petición ya respondió y se avisó.
+  function releaseDetached(key) {
+    var e = engine();
+    if (!e) return;
+    try { e.cancel(key, 'cancelada'); } catch (_) {} try { e.forget(key); } catch (_) {}
   }
   function resetConversation() { dropCards(); history = []; generation++; busy = false; }
   function close() {
@@ -302,12 +311,69 @@
       }
       view.key = key; views.push(view);
     });
+    // «Confirmar todo (N)»: solo para 2 o más cambios de UN toque sin avisos (precio y stock). Cada uno se confirma con SU token firmado de un solo uso.
+    var Cb = core();
+    if (Cb && typeof Cb.batchPlan === 'function') {
+      var plan = Cb.batchPlan(views.filter(function (v) { return v.kind === 'confirm' || v.kind === 'review'; }).map(function (v) { return {key: v.key, type: v.type, oneTap: v.kind === 'confirm' && v.oneTap === true}; }));
+      if (plan.usable && ownerDataAllowed()) {
+        var lk = 'lt-' + (++cardSeq), byKey = {};
+        views.forEach(function (v) { byKey[v.key] = v; });
+        cards[lk] = {gated: false, kind: 'lote', keys: plan.keys.slice(), busy: false};
+        var Cn2 = Cb, nowT = Date.now(), lim = confirmLimit(), sc = Cn2.batchSchedule ? Cn2.batchSchedule(plan.keys.length, confirmStamps, nowT, lim, 4000) : [], eng = engine(), fitN = plan.keys.length, wmsg = [];
+        if (sc.length === plan.keys.length && eng) {
+          fitN = 0;
+          plan.keys.forEach(function (k, ix) { var x = 0; try { x = Number(eng.expiry(cards[k].p)) || 0; } catch (_) { x = 0; } if (!(x > 0) || nowT + sc[ix] + 8000 < x) fitN++; });
+          var secs = Math.ceil((sc[sc.length - 1] + 4000) / 1000);
+          if (secs >= 30) wmsg.push('Tardará unos ' + (secs >= 90 ? Math.round(secs / 60) + ' minutos' : secs + ' segundos') + ' por el tope de ' + lim + ' por minuto.');
+          if (fitN < plan.keys.length) wmsg.push('Solo caben ' + fitN + ' antes de que venza la firma (5 minutos): las demás quedan sin confirmar.');
+        }
+        var warns = [];
+        if (plan.skipped) warns.push(plan.skipped === 1 ? '1 cambio tiene avisos o necesita revisión y no entra: confírmalo solo.' : plan.skipped + ' cambios tienen avisos o necesitan revisión y no entran: confírmalos uno por uno.');
+        if (fitN < plan.keys.length) warns.push(wmsg.pop());
+        views.unshift({kind: 'lote', key: lk, title: 'Confirmar todo (' + plan.keys.length + ')', count: plan.keys.length,
+          rows: plan.keys.map(function (k) { var v = byKey[k], r0 = v && v.rows && v.rows[0], r1 = v && v.rows && v.rows[1];
+            if (!r0) return [k, '']; return r1 && r1[0] === 'Stock' ? [r0[0], r0[1] + ' · Stock ' + r1[1]] : r0; }),
+          warnings: warns,
+          note: 'Se confirma cada cambio con su propia firma de un solo uso' + (REQUIRE_PIN_FOR_BATCH ? ', con tu PIN una sola vez' : ', sin PIN') + ' y con las mismas revisiones. ' + wmsg.concat(['Si pasan de ' + lim + ' por minuto, espero solo y sigo. Puedes detenerlo.']).join(' ')});
+      }
+    }
     return views;
   }
   function cardState(key, extra) {
+    if (cards[key]) cards[key].last = extra && extra.state;
     if (frame) respond(frame.contentWindow, Object.assign({action: 'card', key: key}, extra));
   }
   function closeToPos() { temporarilyLegacy = true; close(); }
+  function notify(msg, kind) { try { if (typeof root.toast === 'function') root.toast(String(msg), kind || 'error'); } catch (_) {} } // aviso del POS (sobrevive aunque WORK se cierre)
+  // Tope de confirmaciones por minuto que respeta el cliente: 5 por defecto (el del Worker: ASSISTANT_CONFIRMS_PER_MINUTE). Hoy el ping de acceso del Worker
+  // NO manda `limits`, así que este gancho está INERTE y el cliente usa siempre 5; solo cambiaría si el Worker algún día manda access.limits.confirms_per_minute
+  // con un número válido (1–60). Nunca sube de 5 por su cuenta ni con un valor raro. Aunque el valor fuera mayor que el real, el 429 se sigue esperando y reintentando.
+  function confirmLimit() {
+    var C = core(), a = root.NA_ASISTENTE, src = null;
+    try { src = (a && a.access && a.access.limits) || null; } catch (_) { src = null; }
+    return C && typeof C.confirmLimit === 'function' ? C.confirmLimit(src) : 5;
+  }
+  // ÚNICO punto para exigir PIN al «Confirmar todo». Apagado por defecto (decisión del dueño pendiente). Si se pone en true se pide el PIN del dueño UNA vez
+  // para todo el lote, igual que «Cambiar precios en lote» (roles.approve). Falla cerrado si no se puede comprobar.
+  var REQUIRE_PIN_FOR_BATCH = false;
+  async function batchApproval(n) {
+    if (!REQUIRE_PIN_FOR_BATCH) return true;
+    var roles = root.NA_ROLES;
+    try {
+      if (!roles || roles.role !== 'owner' || roles.confirmed !== true || typeof roles.approve !== 'function') return false;
+      var opId = 'work-lote-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      return !!(await roles.approve('product.update', opId, 'Confirmar todo en WORK', 'Se cambiará' + (n === 1 ? ' 1 producto' : 'n ' + n + ' productos') + '. Escribe tu PIN una sola vez para todo el lote.'));
+    } catch (_) { return false; }
+  }
+  // Termina «en segundo plano» una tarjeta cuyo token ya se gastó cuando WORK se cerró a mitad: se guarda lo que ya estaba abierto y se AVISA con el aviso del POS.
+  async function finishDetached(rec, tapNow) {
+    var p = rec.p; rec.done = true; rec.saved = false;
+    var nm = '«' + str(p.nombre, 60) + '»';
+    if (!tapNow || !sessionReady()) { notify(nm + ': el cambio se confirmó pero WORK se cerró. Revisa la ficha abierta o Inventario antes de repetirlo.', 'info'); return; }
+    var res = await saveOpenForm(p.type);
+    if (res === 'saved' && await verifySaved(p)) { notify(nm + ': se guardó el cambio (WORK se cerró a mitad).', 'success'); return; }
+    notify(nm + ': el cambio se confirmó pero no pude comprobar que quedó guardado. Revisa Inventario antes de repetirlo.', 'error');
+  }
   // Guarda el formulario EXISTENTE del POS que el motor acaba de abrir y llenar (mismo camino que el botón «Guardar»; el Admin no tiene PIN aquí).
   // Devuelve 'saved' (el formulario cerró), 'open' (terminó pero el formulario sigue abierto: validación o aviso; se muestra para revisar),
   // 'pending' (el guardado sigue en curso: NO se cierra WORK ni se repite) o 'none' (no había formulario abierto).
@@ -335,26 +401,36 @@
     }
     return false;
   }
-  async function confirmOnce(key) {
+  async function confirmOnce(key, opts) {
     var rec = cards[key], e = engine(), myGeneration = generation;
     if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || rec.done || !e) return;
     if (!ownerDataAllowed() && rec.p.type !== 'configuracion') { cardState(key, {state: 'failed', msg: 'Esta sesión ya no es de Admin. Vuelve a entrar como Admin y pide el cambio de nuevo.'}); return; }
     rec.busy = true;
     var tapNow = oneTap(rec.p); // se decide ANTES de gastar el token, con los datos de ahora
+    // En «Confirmar todo» nunca se abre una ficha a mitad del lote: lo que ya no es de un toque se deja para confirmarse solo.
+    if (opts && opts.batch && !tapNow) { rec.busy = false; cardState(key, {state: 'pending', msg: 'Tiene avisos o cambió: confírmala sola.'}); return; }
     cardState(key, {state: 'working', msg: 'Guardando…'});
     var r;
     try { r = await e.execute(key, {}); } catch (err) { r = {ok: false, code: err && err.message, msg: GENERIC_ERROR}; }
     rec.busy = false;
-    if (myGeneration !== generation || !sessionReady()) return;
     r = r || {ok: false};
+    if (myGeneration !== generation || !sessionReady()) { // WORK se cerró con la petición en vuelo: NUNCA se pierde un token en silencio
+      var nmD = '«' + str(rec.p && rec.p.nombre, 60) + '»';
+      try {
+        if (r.ok) { confirmStamps.push(Date.now()); await finishDetached(rec, tapNow); }
+        else if (r.retry || r.code === 'network') notify(nmD + ': WORK se cerró y no supe si el servidor llegó a confirmar el cambio. Revisa Inventario antes de repetirlo.', 'error');
+      } finally { releaseDetached(key); }
+      return;
+    }
     var p = rec.p;
     if (r.ok) {
+      confirmStamps.push(Date.now()); if (confirmStamps.length > 40) confirmStamps.shift();
       rec.done = true; // desde aquí cualquier «Confirmar» tardío se ignora sin consultar la puerta
       if (tapNow) {
         var res = await saveOpenForm(p.type);
         if (myGeneration !== generation) return;
         if (res === 'saved') {
-          if (await verifySaved(p)) { if (myGeneration === generation) cardState(key, {state: 'done', msg: 'Listo. Se guardó al instante.'}); return; }
+          if (await verifySaved(p)) { rec.saved = true; if (myGeneration === generation) cardState(key, {state: 'done', msg: 'Listo. Se guardó al instante.'}); return; }
           if (myGeneration === generation) cardState(key, {state: 'failed', msg: 'No pude comprobar que el cambio quedó guardado. Revisa «' + str(p.nombre, 60) + '» en Inventario antes de repetirlo.'});
           return;
         }
@@ -364,6 +440,8 @@
           cardState(key, {state: 'failed', msg: 'No se pudo abrir ni comprobar el cambio de «' + str(p.nombre, 60) + '». No lo repitas todavía: revisa en Inventario si quedó y, si no, pídelo otra vez.'});
           return;
         }
+        // En «Confirmar todo» un formulario que no se cierra tras guardar NO es un éxito: se marca fallo, no se oculta WORK y el lote se detiene.
+        if (opts && opts.batch) { cardState(key, {state: 'failed', msg: 'El formulario de «' + str(p.nombre, 60) + '» no se cerró al guardar. No sigo con las demás: revisa la ficha abierta y pulsa Guardar si hace falta.'}); return; }
         cardState(key, {state: 'done', msg: 'Abrí la pantalla con el cambio listo. Revisa y pulsa Guardar.'});
         root.setTimeout(function () { if (myGeneration === generation) park(); }, 900);
         return;
@@ -374,6 +452,7 @@
     }
     var code = r.code || 'error';
     if (ACCESS_CODES[code]) {
+      rec.accessLost = true; // «Confirmar todo» se detiene: no seguir llamando al servidor con un rol que ya no sirve
       try { var a = root.NA_ASISTENTE; if (a && typeof a.refreshAccess === 'function') a.refreshAccess(); } catch (_) {}
       cardState(key, {state: 'failed', msg: plain(r.msg, p.type) || friendly(code)}); return;
     }
@@ -390,46 +469,110 @@
     if (rec.p && e.state(key) === 'denied') { cardState(key, {state: 'failed', msg: msg}); return; }
     cardState(key, {state: 'retry', msg: msg});
   }
-  // ---- 429 (tope de confirmaciones por minuto del servidor): se reintenta SOLO, con cuenta regresiva en esa tarjeta ----
-  // El Worker responde 429 ANTES de gastar el token, así que repetir con el mismo token es seguro (nunca se reintenta ante otro error).
-  // OJO: el tope (5 por minuto) está FIJO en el servidor (ASSISTANT_CONFIRMS_PER_MINUTE) y este paquete no lo adivina ni lo cambia: solo reacciona al 429
-  // con su retry_after_s. Si el dueño sube el tope en el Worker, aquí no hay que cambiar nada (no se espera de más: no hay espera antes del 429).
+  // ---- Varias confirmaciones seguidas: una a la vez, con espera automática si se acerca el tope por minuto del servidor ----
+  var working = false, batchRunning = false, confirmStamps = [];
   function sleep(ms) { return new Promise(function (r) { root.setTimeout(r, ms); }); }
-  // La firma dura 5 minutos: si venció (o está por vencer), no se espera ni se reintenta con ella; se pide regenerar solo esa tarjeta.
-  function tokenExpired(rec) {
-    var e = engine(), x = 0;
-    try { x = e && typeof e.expiry === 'function' ? Number(e.expiry(rec.p)) || 0 : 0; } catch (_) { x = 0; }
-    return x > 0 && Date.now() >= x - 2000;
-  }
-  // «Espera N segundos…» solo en la tarjeta que espera. true = terminó; false = WORK se cerró, cambió de sesión, el dueño canceló o la firma venció.
-  async function countdown(key, secs, gen) {
+  // Cuenta regresiva en la tarjeta («Espera N segundos…»). true = terminó; false = WORK se cerró o cambió de sesión.
+  async function countdown(key, secs, gen, abort) {
     var C = core(), rec = cards[key];
     for (var n = Math.max(1, Math.ceil(secs)); n > 0; n--) {
-      if (gen !== generation || !sessionReady() || !rec || rec.cancelled) return false;
-      if (tokenExpired(rec)) return false;
+      if (gen !== generation || !sessionReady() || !rec || rec.cancelled || (abort && abort()) || tokenExpired(rec)) return false;
       cardState(key, {state: 'waiting', msg: C && typeof C.waitText === 'function' ? C.waitText(n) : 'Espera ' + n + ' segundos…'});
       await sleep(1000);
     }
-    return gen === generation && sessionReady() && !rec.cancelled && !tokenExpired(rec);
+    return gen === generation && sessionReady() && !rec.cancelled && !(abort && abort()) && !tokenExpired(rec);
   }
-  async function confirmCard(key) {
-    var rec = cards[key], myGen = generation;
+  // La firma dura 5 minutos: si venció (o está por vencer) no se espera ni se gasta; se pide regenerar solo esa tarjeta.
+  function tokenExpired(rec) {
+    var eng = engine(), x = 0;
+    try { x = eng && typeof eng.expiry === 'function' ? Number(eng.expiry(rec.p)) || 0 : 0; } catch (_) { x = 0; }
+    return x > 0 && Date.now() >= x - 2000;
+  }
+  async function confirmCard(key, opts) {
+    var rec = cards[key], C = core(), myGen = generation, batch = !!(opts && opts.batch);
     if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || rec.done || rec.waiting) return;
-    rec.waiting = true;
+    if (!batch && (working || batchRunning)) { cardState(key, {state: 'pending', msg: 'Espera: se está guardando otro cambio. Toca Confirmar cuando termine.'}); return; }
+    var was = working; working = true; rec.waiting = true;
+    var abort = opts && typeof opts.abort === 'function' ? opts.abort : null;
     function stopped() { // por qué se cortó la espera: se dice claro, sin gastar nada
-      if (myGen !== generation || rec.cancelled) return true;
-      if (tokenExpired(rec)) { cardState(key, {state: 'expired', msg: 'Esta propuesta venció (la firma dura 5 minutos). Pídela otra vez.'}); return true; }
-      return false;
+      if (myGen !== generation || rec.cancelled) return;
+      if (tokenExpired(rec)) cardState(key, {state: 'expired', msg: 'Esta propuesta venció (la firma dura 5 minutos). Pídela otra vez.'});
     }
     try {
       for (var attempt = 0; attempt < 4; attempt++) {
+        var pace = C && typeof C.confirmPace === 'function' ? C.confirmPace(confirmStamps, Date.now(), confirmLimit()) : 0;
         if (tokenExpired(rec)) { stopped(); return; }
-        var out = await confirmOnce(key);
+        if (pace > 0 && !(await countdown(key, pace, myGen, abort))) { stopped(); return; }
+        if (tokenExpired(rec)) { stopped(); return; }
+        var out = await confirmOnce(key, opts);
         if (!out || !out.wait) return;
-        if (!(await countdown(key, out.wait, myGen))) { stopped(); return; }
+        if (tokenExpired(rec)) { stopped(); return; }
+        if (!(await countdown(key, out.wait, myGen, abort))) { stopped(); return; }
       }
       if (myGen === generation) cardState(key, {state: 'retry', msg: 'Sigue el límite de confirmaciones por minuto. Toca Reintentar en un momento: no se hizo ningún cambio.'});
-    } finally { rec.waiting = false; }
+    } finally { working = was; rec.waiting = false; }
+  }
+  // «Confirmar todo (N)»: recorre las tarjetas de un toque UNA POR UNA (cada una gasta su token y pasa todas las revisiones del servidor y del POS).
+  // Solo cuenta como guardada la que se releyó en el POS (rec.saved). Se puede DETENER mientras corre (lot.stop): no gasta más tokens.
+  async function confirmAll(lk) {
+    var lot = cards[lk], e = engine(), C = core(), myGen = generation;
+    if (!lot || lot.kind !== 'lote' || lot.busy || lot.done || !e || !C) return;
+    if (working || batchRunning) { cardState(lk, {state: 'pending', msg: 'Espera: se está guardando otro cambio.'}); return; }
+    if (!ownerDataAllowed()) { cardState(lk, {state: 'failed', msg: 'Esta sesión ya no es de Admin. Vuelve a entrar como Admin y pide el cambio de nuevo.'}); return; }
+    lot.busy = true; batchRunning = true; working = true; lot.stop = false;
+    var finished = false, access = false, okN = 0, failN = 0, skipN = 0, nofitN = 0, expN = 0, cancN = 0, stopped = false, user = false, rest = 0;
+    var keys = lot.keys.filter(function (k) { var c = cards[k]; return c && c.gated && c.kind === 'confirm' && !c.done && !c.busy; });
+    var n = keys.length, i, recs = keys.map(function (k) { return cards[k]; });
+    try {
+      if (!(await batchApproval(n))) { cardState(lk, {state: 'pending', msg: 'No se confirmó el PIN. No se hizo ningún cambio.'}); finished = true; return; }
+      if (myGen !== generation) return;
+      // ¿cabe todo antes de que venzan las firmas (5 min)? Las que no caben se dejan fuera desde el principio (sin gastar su token).
+      var now = Date.now(), sched = typeof C.batchSchedule === 'function' ? C.batchSchedule(n, confirmStamps, now, confirmLimit(), 4000) : [], fit = [], noFit = 0;
+      keys.forEach(function (k, ix) {
+        var x = 0; try { x = Number(e.expiry(cards[k].p)) || 0; } catch (_) { x = 0; }
+        if (x > 0 && sched.length === n && now + sched[ix] + 8000 >= x) { noFit++; cardState(k, {state: 'pending', msg: 'No cabe antes de que venza su firma (5 minutos). Confírmala sola o pídela otra vez.'}); }
+        else fit.push(k);
+      });
+      nofitN = noFit; keys = fit; n = keys.length;
+      var total = n + noFit, abort = function () { return !!lot.stop; };
+      for (i = 0; i < n; i++) {
+        if (myGen !== generation || !sessionReady()) return;
+        if (lot.stop) { user = true; break; }
+        var k = keys[i], rec = cards[k];
+        if (!rec) { skipN++; continue; }
+        if (!oneTap(rec.p)) { skipN++; cardState(k, {state: 'pending', msg: 'Tiene avisos o cambió: confírmala sola.'}); continue; }
+        cardState(lk, {state: 'working', msg: C.batchProgressText(i + 1, n, rec.p.nombre)});
+        await confirmCard(k, {batch: true, abort: abort});
+        if (myGen !== generation) return;
+        if (rec.saved === true && rec.last === 'done') okN++;
+        else if (rec.last === 'expired') expN++;
+        else if (rec.last === 'cancelled' || rec.cancelled) cancN++; // la cancelaste tú durante la espera: no es un fallo
+        else if (rec.last === 'pending' || rec.last === 'waiting') { skipN++; if (rec.last === 'waiting') cardState(k, {state: 'pending', msg: 'Detenida antes de confirmar: sigue sin confirmar.'}); if (lot.stop) { user = true; i++; break; } }
+        else if (rec.last === 'working') { stopped = true; break; } // el guardado sigue en curso: no se cuenta como fallo ni se sigue
+        else { failN++; if (rec.accessLost) { access = true; stopped = true; break; } if (rec.done || rec.last === 'retry') { stopped = true; break; } } // token gastado sin comprobar, formulario sin cerrar o sin red: no seguir
+      }
+      if (user || stopped) rest = Math.max(0, n - i - (stopped ? 1 : 0));
+      if (user) for (var q = i; q < n; q++) { var rq = cards[keys[q]]; if (rq && !rq.done && rq.last === 'waiting') cardState(keys[q], {state: 'pending', msg: 'Detenida antes de confirmar: sigue sin confirmar.'}); }
+      var sum = C.batchSummary({ok: okN, fail: failN, skipped: skipN, nofit: nofitN, cancelled: cancN, expired: expN, total: total, stopped: stopped, user: user, rest: rest, access: access});
+      lot.done = true; finished = true;
+      cardState(lk, sum);
+    } finally {
+      lot.busy = false; batchRunning = false; working = false;
+      if (myGen !== generation) {
+        var conf = recs.filter(function (x) { return x && x.done; }).length, sinC = Math.max(0, recs.length - conf);
+        notify('WORK se cerró a mitad de «Confirmar todo»: ' + conf + ' de ' + recs.length + (conf === 1 ? ' se confirmó' : ' se confirmaron') + ' (' + okN + ' guardados y comprobados; la que iba en curso avisa aparte)' +
+          (sinC ? ' y ' + (sinC === 1 ? '1 quedó sin confirmar: pídela otra vez' : sinC + ' quedaron sin confirmar: pídelas otra vez') : '') + '. Revisa Inventario antes de repetir lo que falte.', 'info');
+      }
+      else if (!finished && !lot.done) cardState(lk, {state: 'pending', msg: 'Se interrumpió. Lo ya guardado no se repite.'});
+    }
+  }
+  // «Cancelar todo» antes de empezar cancela cada tarjeta; mientras corre, «Detener»: no gasta más tokens (la tarjeta en curso termina y se comprueba).
+  function cancelAll(lk) {
+    var lot = cards[lk];
+    if (!lot || lot.kind !== 'lote' || lot.done) return;
+    if (lot.busy || batchRunning) { lot.stop = true; cardState(lk, {state: 'working', msg: 'Deteniendo… termino la tarjeta en curso y paro.', stopping: true}); return; }
+    lot.keys.forEach(function (k) { var c = cards[k]; if (c && c.gated && !c.done && !c.busy) cancelCard(k, 'cancelada'); });
+    lot.done = true; cardState(lk, {state: 'cancelled', msg: 'Cancelado. No se hizo nada.'});
   }
   function cancelCard(key, why) {
     var rec = cards[key], e = engine();
@@ -497,7 +640,8 @@
       if (typeof text!=='string') text='';
       if (!text && out.final) text=typeof out.final==='string'?out.final:out.final.text || out.final.respuesta || '';
       var views = buildCards(out.proposals);
-      var Cn = core(); if (Cn && typeof Cn.unifyActionWords === 'function') text = Cn.unifyActionWords(text);
+      var loteN = views.reduce(function (a, v) { return v.kind === 'lote' ? v.count : a; }, 0);
+      var Cn = core(); if (Cn && typeof Cn.batchNote === 'function') text = Cn.batchNote(text, loteN);
       var hidden = (Array.isArray(out.proposals) ? out.proposals : []).filter(function (p) { return p && p.needsConfirm === true; }).length;
       if (!text && !views.length) text='El servidor respondió sin texto visible. La operación no se considera completada.';
       // Si hay cambios propuestos que no se pudieron mostrar como tarjeta, se dice claro (nunca en consultas de solo lectura).
@@ -536,6 +680,8 @@
       if (data.type==='na-work:card-confirm') confirmCard(data.key);
       else if (data.type==='na-work:card-cancel') cancelCard(data.key,data.why);
       else if (data.type==='na-work:card-open') readOnlyAction(data.key);
+      else if (data.type==='na-work:card-confirm-all') confirmAll(data.key);
+      else if (data.type==='na-work:card-cancel-all') cancelAll(data.key);
       else if (data.type==='na-work:card-assistant') { closeToPos(); try { var a3=root.NA_ASISTENTE; if (a3 && typeof a3.open==='function') a3.open(); } catch (_) {} }
       return;
     }
