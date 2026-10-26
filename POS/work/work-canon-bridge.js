@@ -192,7 +192,7 @@
     '.na-card td:last-child,.na-card th:last-child{text-align:right;white-space:nowrap;padding-left:8px}.na-card .na-warn{background:#fff6e0;border-radius:8px;padding:6px 8px;margin-top:7px;color:#7a5200}'+
     '.na-card .na-note{font-size:11.5px;color:#577086;margin-top:7px}.na-card .na-res{margin-top:7px;font-weight:650}.na-card .na-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}'+
     '.na-card button{border:0;border-radius:11px;padding:10px 14px;font:700 14px system-ui;min-height:44px}.na-card .na-ok{background:linear-gradient(120deg,#052f49,#066f87);color:#fff}'+
-    '.na-card .na-no{background:#eaf0f3;color:#16384e}.na-card button:disabled{opacity:.55}.na-card[data-st="done"]{border-color:#16a34a}.na-card[data-st="failed"],.na-card[data-st="blocked"]{border-color:#dc2626}.na-card[data-st="waiting"]{border-color:#d97706}.na-card[data-kind="clarify"] .na-acts button{flex:1 1 auto}';
+    '.na-card .na-no{background:#eaf0f3;color:#16384e}.na-card button:disabled{opacity:.55}.na-card[data-st="done"]{border-color:#16a34a}.na-card[data-st="failed"],.na-card[data-st="blocked"]{border-color:#dc2626}.na-card[data-st="partial"],.na-card[data-st="waiting"]{border-color:#d97706}.na-card[data-kind="lote"]{border-width:2px;border-color:#066f87}.na-card .na-rows{max-height:24vh;overflow-y:auto;-webkit-overflow-scrolling:touch}.na-card[data-kind="clarify"] .na-acts button{flex:1 1 auto}';
   (doc.head||doc.body).appendChild(cardCss);
   var cardEls=new Map();
   function node(tag,cls,text){var n=doc.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=String(text);return n;}
@@ -216,7 +216,7 @@
     }else if(v.rows&&v.rows.length){
       var t2=doc.createElement('table');
       v.rows.forEach(function(r){var tr=doc.createElement('tr');tr.appendChild(node('td','',r[0]));tr.appendChild(node('td','',r[1]));t2.appendChild(tr);});
-      c.appendChild(t2);
+      if(v.kind==='lote'){var wrap=node('div','na-rows');wrap.appendChild(t2);c.appendChild(wrap);}else c.appendChild(t2); // lote: la lista se desplaza dentro de la tarjeta y el botón queda a la vista
     }
     (v.warnings||[]).forEach(function(w){c.appendChild(node('div','na-warn',w));});
     if(v.note)c.appendChild(node('div','na-note',v.note));
@@ -230,7 +230,14 @@
       ok=node('button','na-ok','Confirmar');ok.type='button';
       no=node('button','na-no','Cancelar');no.type='button';
       ok.addEventListener('click',function(){if(c.dataset.st!=='pending'&&c.dataset.st!=='retry')return;ok.disabled=true;no.disabled=true;send('card-confirm');});
-      no.addEventListener('click',function(){var st=c.dataset.st;if(st!=='pending'&&st!=='retry'&&st!=='waiting')return;ok.disabled=true;no.disabled=true;send('card-cancel');}); // «Cancelar» sigue activo durante la cuenta regresiva del 429
+      no.addEventListener('click',function(){var st=c.dataset.st;if(st!=='pending'&&st!=='retry'&&st!=='waiting')return;ok.disabled=true;no.disabled=true;send('card-cancel');}); // «Cancelar» sigue activo durante la cuenta regresiva
+      acts.append(ok,no);
+    }else if(v.kind==='lote'){
+      ok=node('button','na-ok',v.title||'Confirmar todo');ok.type='button';
+      no=node('button','na-no','Cancelar todo');no.type='button';
+      ok.addEventListener('click',function(){if(c.dataset.st!=='pending'&&c.dataset.st!=='retry')return;ok.disabled=true;send('card-confirm-all');});
+      // «Cancelar todo» antes de empezar; mientras el lote corre el mismo botón es «Detener» (el host termina la tarjeta en curso y no gasta más).
+      no.addEventListener('click',function(){var st=c.dataset.st;if(st!=='pending'&&st!=='retry'&&st!=='working'&&st!=='waiting')return;no.disabled=true;send('card-cancel-all');});
       acts.append(ok,no);
     }else if(v.kind==='clarify'){
       // Una sola pregunta con opciones tocables: tocar una opción manda ese pedido ya preciso; «Otro monto» / «Solo algunas» dejan el texto listo para completar.
@@ -265,8 +272,17 @@
       };
       tick();timer=setInterval(tick,1000);
     }
-    cardEls.set(v.key,{card:c,ok:ok,no:no,res:res});
+    cardEls.set(v.key,{card:c,ok:ok,no:no,res:res,label:ok?ok.textContent:'',kind:v.kind});
     body.appendChild(c);row.appendChild(body);$msgs.appendChild(row);$msgs.scrollTop=$msgs.scrollHeight;
+  }
+  // Con muchas tarjetas el chat bajaba hasta la última y «Confirmar todo» quedaba ~30 tarjetas arriba: al pintar el lote se deja SU tarjeta a la vista
+  // (arriba del chat) y mientras hay un lote las actualizaciones de las tarjetas no arrastran el chat hacia abajo.
+  var loteEl=null;
+  function showLote(cards){
+    var lote=(cards||[]).filter(function(v){return v&&v.kind==='lote'&&typeof v.key==='string';})[0],r=lote&&cardEls.get(lote.key);
+    if(!r||!r.card||!$msgs||!r.card.getBoundingClientRect)return;
+    loteEl=r.card;
+    $msgs.scrollTop=Math.max(0,r.card.getBoundingClientRect().top-$msgs.getBoundingClientRect().top+$msgs.scrollTop-8);
   }
   function updateCard(d){
     var rec=cardEls.get(d.key);if(!rec)return;
@@ -274,12 +290,14 @@
     rec.card.dataset.st=st;
     rec.res.textContent=String(d.msg||'').slice(0,300);
     if(rec.ok){
-      if(st==='working'){rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent='Guardando…';}
+      if(rec.kind==='lote'&&(st==='working'||st==='waiting')){rec.ok.disabled=true;rec.ok.textContent=d.stopping?'Deteniendo…':'Guardando…';rec.no.disabled=!!d.stopping;rec.no.textContent=d.stopping?'Deteniendo…':'Detener';}
+      else if(st==='working'){rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent='Guardando…';}
       else if(st==='waiting'){rec.ok.disabled=true;rec.no.disabled=false;rec.ok.textContent='Esperando…';}
+      else if(st==='pending'){rec.ok.disabled=false;rec.no.disabled=false;rec.ok.textContent=rec.label||'Confirmar';if(rec.kind==='lote')rec.no.textContent='Cancelar todo';}
       else if(st==='retry'){rec.ok.disabled=false;rec.no.disabled=false;rec.ok.textContent='Reintentar';}
-      else{rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent=({done:'Hecho',failed:'No disponible',blocked:'No disponible',expired:'Venció',cancelled:'Cancelada'})[st]||'Confirmar';}
+      else{rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent=({done:'Hecho',partial:'Terminó',failed:'No disponible',blocked:'No disponible',expired:'Venció',cancelled:'Cancelada'})[st]||'Confirmar';}
     }
-    if($msgs)$msgs.scrollTop=$msgs.scrollHeight;
+    if($msgs&&!(loteEl&&/^(pending|working|waiting|retry)$/.test(loteEl.dataset.st||'')))$msgs.scrollTop=$msgs.scrollHeight;
   }
   win.addEventListener('message',function(event){
     if(event.origin!==win.location.origin||event.source!==win.parent)return;
@@ -310,7 +328,7 @@
     if(item.loading)item.loading.remove();
     var output=d.ok?String(d.text||(Array.isArray(d.cards)&&d.cards.length?'':'Sin respuesta')):('No se completó la consulta: '+String(d.text||'Error de conexión'));
     if(output.trim()||!(Array.isArray(d.cards)&&d.cards.length))bubble('theirs',output);
-    if(d.ok&&Array.isArray(d.cards))d.cards.slice(0,30).forEach(renderCard);
+    if(d.ok&&Array.isArray(d.cards)){d.cards.slice(0,31).forEach(renderCard);showLote(d.cards);}
     if(item.mode==='voice') {
       var cap=$('#voiceCaptionBox'),sub=$('#voiceSubtitle');
       if(cap)cap.hidden=false;

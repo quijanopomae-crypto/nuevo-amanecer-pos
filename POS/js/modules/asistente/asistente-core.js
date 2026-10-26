@@ -1220,8 +1220,17 @@
   }
 
   // ---------- Capacidad del asistente en WORK (lógica pura, sin pantalla ni red) ----------
-  // Todo esto SOLO decide textos y esperas. Nada aquí gasta tokens, guarda datos ni salta una validación:
+  // Todo esto SOLO decide textos, esperas y qué tarjetas entran en «Confirmar todo». Nada aquí gasta tokens, guarda datos ni salta una validación:
   // cada cambio se sigue confirmando con SU token firmado de un solo uso en el servidor (createGate / /auth/assistant/confirm).
+  var CONFIRMS_PER_MINUTE = 5; // el tope actual del Worker (ASSISTANT_CONFIRMS_PER_MINUTE); el cliente solo se adapta, no lo cambia
+  // Segundos que hay que esperar para no chocar con el tope por minuto (el Worker cuenta por minuto de reloj). stamps = momentos (ms) de las confirmaciones hechas.
+  function confirmPace(stamps, now, limit) {
+    var lim = Number(limit) > 0 ? Math.floor(Number(limit)) : CONFIRMS_PER_MINUTE, t = Number(now);
+    if (!isFinite(t)) return 0;
+    var minute = Math.floor(t / 60000), used = (Array.isArray(stamps) ? stamps : []).filter(function (x) { return isFinite(Number(x)) && Math.floor(Number(x) / 60000) === minute; }).length;
+    if (used < lim) return 0;
+    return Math.max(1, Math.ceil(((minute + 1) * 60000 - t) / 1000)) + 1; // +1 s de margen por si el reloj del aparato y el del servidor no coinciden
+  }
   // ¿Fue el tope por minuto (429)? El servidor no gastó la tarjeta, así que reintentar es seguro.
   function isRateLimitResult(r) { var c = r && r.code; return !!r && !r.ok && (c === 'rate_limited' || c === 'HTTP_429'); }
   // Segundos de espera tras un 429: lo que dijo el servidor (retry_after_s, +1 de margen) o lo que falta para el próximo minuto. Nunca más de 90.
@@ -1231,10 +1240,68 @@
     var t = isFinite(Number(now)) ? Number(now) : 0;
     return Math.min(90, Math.max(1, Math.ceil((Math.floor(t / 60000) * 60000 + 60000 - t) / 1000)) + 1);
   }
+  // Tope de confirmaciones por minuto que el cliente respeta: 5 por defecto (el del Worker hoy). Si el Worker entrega otro valor más adelante
+  // (respuesta de acceso: limits.confirms_per_minute) basta pasarlo aquí; valores raros (0, texto, >60) vuelven a 5. HOY el ping del Worker no manda `limits`:
+  // el gancho está inerte y el cliente usa siempre 5; nunca sube de 5 sin un número válido.
+  function confirmLimit(cfg) {
+    var v = cfg && typeof cfg === 'object' ? Number(cfg.confirms_per_minute != null ? cfg.confirms_per_minute : cfg.confirmsPerMinute) : NaN;
+    return isFinite(v) && v >= 1 && v <= 60 ? Math.floor(v) : CONFIRMS_PER_MINUTE;
+  }
+  // Calendario estimado de un lote: milisegundos desde ahora en que se EJECUTARÍA cada tarjeta (guardar y releer ~saveMs; al llegar al tope por minuto
+  // espera al próximo minuto de reloj +1 s). Sirve para avisar cuánto tarda y qué tarjetas no caben antes de que venza su firma (5 min).
+  function batchSchedule(n, stamps, now, limit, saveMs) {
+    var lim = Number(limit) > 0 ? Math.floor(Number(limit)) : CONFIRMS_PER_MINUTE, t = Number(now), step = Number(saveMs) >= 0 ? Number(saveMs) : 4000, out = [];
+    if (!isFinite(t)) return out;
+    var start = t, minute = Math.floor(t / 60000);
+    var used = (Array.isArray(stamps) ? stamps : []).filter(function (x) { return isFinite(Number(x)) && Math.floor(Number(x) / 60000) === minute; }).length;
+    for (var i = 0; i < (n | 0); i++) {
+      if (used >= lim) { t = (Math.floor(t / 60000) + 1) * 60000 + 1000; used = 0; }
+      out.push(t - start); used++; t += step;
+    }
+    return out;
+  }
   function waitText(sec) { var n = Math.max(1, Math.ceil(Number(sec) || 1)); return 'Espera ' + n + (n === 1 ? ' segundo' : ' segundos') + '…'; }
+  // Qué tarjetas entran en «Confirmar todo»: solo cambios de UN toque (precio y ajuste de stock) que ya salieron SIN avisos de riesgo.
+  // Lo demás (bajo costo, cambio grande, stock negativo, compras, productos nuevos, costo, configuración) se queda para confirmarse una por una.
+  var BATCH_TYPES = { precio: 1, ajuste: 1 };
+  function batchPlan(items) {
+    var keys = [], skipped = 0;
+    (Array.isArray(items) ? items : []).forEach(function (it) {
+      if (!it || typeof it.key !== 'string') return;
+      if (BATCH_TYPES[it.type] === 1 && it.oneTap === true) keys.push(it.key); else skipped++;
+    });
+    return { keys: keys, skipped: skipped, total: keys.length + skipped, usable: keys.length >= 2 };
+  }
+  function batchProgressText(i, n, name) { return 'Confirmando ' + i + ' de ' + n + (name ? ': ' + String(name).slice(0, 60) : '') + '…'; }
+  // Resumen final del lote: cuántos se guardaron, cuántos quedaron fuera y POR QUÉ (cada motivo con su cuenta). «Listo» solo si todos se guardaron.
+  function batchSummary(o) {
+    o = o || {}; var ok = o.ok | 0, fail = o.fail | 0, skipped = o.skipped | 0, nofit = o.nofit | 0, canc = o.cancelled | 0, expired = o.expired | 0, total = o.total | 0, rest = o.rest | 0;
+    if (ok === total && !fail && !skipped && !nofit && !canc && !expired && !rest && !o.stopped && !o.user) return { state: 'done', msg: ok === 1 ? 'Listo: 1 cambio guardado.' : 'Listo: los ' + ok + ' cambios se guardaron.' };
+    var parts = [o.user ? 'Lo detuviste.' : null, 'Se guardaron ' + ok + ' de ' + total + '.'].filter(Boolean);
+    var why = [];
+    if (fail) why.push(fail === 1 ? '1 no se pudo guardar (mira su tarjeta)' : fail + ' no se pudieron guardar (mira sus tarjetas)');
+    if (expired) why.push(expired === 1 ? '1 venció (la firma dura 5 minutos)' : expired + ' vencieron (la firma dura 5 minutos)');
+    if (nofit) why.push(nofit === 1 ? '1 no cabía antes de que venza la firma (5 minutos)' : nofit + ' no cabían antes de que venza la firma (5 minutos)');
+    if (skipped) why.push(skipped === 1 ? '1 tiene avisos o cambió su precio o stock mientras tanto' : skipped + ' tienen avisos o cambiaron su precio o stock mientras tanto');
+    if (canc) why.push(canc === 1 ? '1 la cancelaste tú' : canc + ' las cancelaste tú');
+    if (rest) why.push(rest === 1 ? '1 quedó sin confirmar porque el lote se detuvo' : rest + ' quedaron sin confirmar porque el lote se detuvo');
+    var out = fail + expired + nofit + skipped + canc + rest;
+    if (out) parts.push((out === 1 ? 'Quedó fuera 1' : 'Quedaron fuera ' + out) + ': ' + why.join('; ') + '.');
+    if (nofit || expired) parts.push('Las que no cupieron o vencieron hay que pedirlas otra vez.');
+    if (skipped || rest) parts.push('Las demás sin guardar siguen con su Confirmar: tócalo en cada tarjeta.');
+    if (o.access) parts.push('Tu sesión ya no tiene permiso de Admin: me detuve y no llamé más al servidor. Vuelve a entrar como Admin y pide lo que falte.');
+    else if (o.stopped) parts.push('Me detuve para que revises Inventario antes de seguir. No repitas lo ya guardado.');
+    return { state: 'partial', msg: parts.join(' ') };
+  }
   // Un solo nombre de acción: el servidor dice «Aplicar» en algunos textos y el botón es «Confirmar».
   function unifyActionWords(text) {
     return String(text == null ? '' : text).replace(/«Aplicar»/g, '«Confirmar»').replace(/\bpulsa(?:r)? Aplicar\b/gi, function (m) { return m.replace(/Aplicar/i, 'Confirmar'); });
+  }
+  // «Son N productos; cada uno se aplica aparte…» -> con «Confirmar todo (N)» disponible, dice que se puede en un toque.
+  function batchNote(text, n) {
+    var t = unifyActionWords(text);
+    if (!(n >= 2)) return t;
+    return t.replace(/Son (\d+) productos; cada uno se aplica aparte con su «Confirmar»\./g, function (m, k) { return 'Son ' + k + ' productos. Toca «Confirmar todo (' + n + ')» o confirma uno por uno.'; });
   }
   // Texto de progreso mientras el servidor piensa (respuestas de 10 a 25 s). Antes de 3 s no se dice nada.
   function thinkingText(sec) {
@@ -1279,7 +1346,7 @@
       question: '¿Cuánto ' + (dir === 'sube' ? 'les subo' : 'les bajo') + '? Hay ' + n + (n === 1 ? ' producto' : ' productos') + ' con «' + term + '»: ' + shown + '. Toca una opción.' };
   }
 
-  var api = { isRateLimitResult: isRateLimitResult, retryWaitSeconds: retryWaitSeconds, waitText: waitText, unifyActionWords: unifyActionWords, thinkingText: thinkingText, clarifyAmbiguous: clarifyAmbiguous, configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { confirmPace: confirmPace, isRateLimitResult: isRateLimitResult, retryWaitSeconds: retryWaitSeconds, waitText: waitText, batchPlan: batchPlan, batchProgressText: batchProgressText, confirmLimit: confirmLimit, batchSchedule: batchSchedule, batchSummary: batchSummary, unifyActionWords: unifyActionWords, batchNote: batchNote, thinkingText: thinkingText, clarifyAmbiguous: clarifyAmbiguous, CONFIRMS_PER_MINUTE: CONFIRMS_PER_MINUTE, configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
