@@ -10,14 +10,14 @@
     <!-- Comprobación completa, síncrona y antes de los recursos de la app; no usa document.body. -->
     <script src="/runtime-config.js"></script>
     <script src="js/sync/hosted-canonical-guard.js"></script>
-    <!-- Sin parpadeo de Inicio viejo (WORK es el Inicio por defecto en el dominio publicado): si ya hay sesión guardada y no se pidió
-         ?work=0, la pantalla queda en el color de WORK (o en el fondo del tema oscuro si ese es el tema guardado) hasta que WORK se abre.
+    <!-- Sin parpadeo de Inicio viejo (WORK es el Inicio por defecto en el dominio publicado): si ya hay sesión guardada y no se activó
+         la sesión, la pantalla queda en el color de WORK (o en el fondo del tema oscuro si ese es el tema guardado) hasta que WORK se abre.
          La marca se quita: al abrir WORK, al decidir que no se abre (js/work-host.js), al terminar de cargar la página si js/work-host.js no
          cargó (se libera al instante), a los 3,5 s del montaje, y a los 6 s como tope duro. Sin internet, sin sesión o con ?work=0 no se marca nada.
          Solo CSS y una marca en <html>; lee únicamente si hay sesión guardada y el tema guardado (no expone ni escribe nada). Mientras está
          puesta se oculta el body entero salvo #naRevoked (máx. unos segundos). -->
     <style>html.na-work-pre{background:#f7fbff}html.na-work-pre.na-work-pre-dk{background:#0f172a}html.na-work-pre body{visibility:hidden}html.na-work-pre #naRevoked{visibility:visible}</style>
-    <script>(function(){try{var l=location,d=document,h=d.documentElement;if(!/\.nuevo-amanecer-pos\.workers\.dev$/.test(l.hostname)||!/^\/app(\/|$)/.test(l.pathname))return;var cfg=window.NA_HOSTED_CONFIG;if(!cfg||cfg.environment!=='production')return;if(new URLSearchParams(l.search).get('work')==='0'||navigator.onLine===false)return;var c=JSON.parse(localStorage.getItem('na_cloud_sync_credentials')||'null');if(!c||typeof c.token!=='string'||!c.token)return;h.classList.add('na-work-pre');try{var m=(JSON.parse(localStorage.getItem('na_v9_appearance')||'{}')||{}).mode;if(m==='noche'||(m==='auto'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches))h.classList.add('na-work-pre-dk')}catch(_){}function off(){h.classList.remove('na-work-pre');h.classList.remove('na-work-pre-dk')}window.setTimeout(off,6000);d.addEventListener('DOMContentLoaded',function(){if(!window.NA_WORK_HOST)off()},{once:true});}catch(_){}})();</script>
+    <script>(function(){try{var l=location,d=document,h=d.documentElement;if(!/\.nuevo-amanecer-pos\.workers\.dev$/.test(l.hostname)||!/^\/app(\/|$)/.test(l.pathname))return;var cfg=window.NA_HOSTED_CONFIG;if(!cfg||cfg.environment!=='production')return;if(navigator.onLine===false)return;var c=JSON.parse(localStorage.getItem('na_cloud_sync_credentials')||'null');if(!c||typeof c.token!=='string'||!c.token)return;h.classList.add('na-work-pre');try{var m=(JSON.parse(localStorage.getItem('na_v9_appearance')||'{}')||{}).mode;if(m==='noche'||(m==='auto'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches))h.classList.add('na-work-pre-dk')}catch(_){}function off(){h.classList.remove('na-work-pre');h.classList.remove('na-work-pre-dk')}window.setTimeout(off,6000);d.addEventListener('DOMContentLoaded',function(){if(!window.NA_WORK_HOST)off()},{once:true});}catch(_){}})();</script>
     <meta name="theme-color" content="#0f766e">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
