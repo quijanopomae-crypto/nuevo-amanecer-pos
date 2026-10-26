@@ -172,6 +172,20 @@ controladas; no fuerza recarga ni activacion durante una venta. Si falta un recu
 de esa cache responde 503, sin mezclarlo con otra generacion. El servidor local
 calcula la generacion al arrancar: reiniciarlo despues de cambiar archivos del POS.
 
+## Revisiones de producto (`canonical_product_revisions`)
+
+`product.update` escribe una fila completa por edición. `cost_cents` es opcional: ausente
+conserva el costo vigente. Si el costo vigente es NULL, la revisión guarda un **0 de relleno**
+(la columna es `NOT NULL` en la migración 0022) y marca `result_json` con `cost_kept_null: true`.
+Ese 0 **no es un costo**.
+
+**Regla para lectores nuevos:** cualquier lectura del costo desde `canonical_product_revisions`
+debe usar `REVISION_COST_SQL(alias)` de `src/a6-products.js`, nunca la columna cruda
+`cost_cents` (`r.cost_cents`, `SELECT cost_cents …`, `r.*` que luego se lee). La única excepción
+es la lectura de productos de `src/a6-canonical.js`, que aplica el mismo marcador en línea. La
+guarda `tests/cloud-sync/product-revision-cost-readers.test.mjs` falla si aparece otro lector.
+`GET /auth/me` anuncia `capabilities.product_update_absent_cost: true`.
+
 ## Ejecutar
 
 ```sh
