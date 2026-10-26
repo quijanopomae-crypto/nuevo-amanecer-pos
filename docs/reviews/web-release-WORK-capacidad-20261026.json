@@ -1,0 +1,105 @@
+{
+  "reviewed_commit": "11873ae474a81b96f1aead16cf52feeb0ff4d4bd",
+  "kind": "independent-automated",
+  "result": "pass",
+  "reviewer": "ASISTENTE 3 (revisión independiente de solo lectura, veredicto: SEGURO CON OBSERVACIONES) + ASISTENTE 4 (revisión independiente de solo lectura, veredicto: APROBADO, sin cambios exigidos). Revisores distintos del autor del código (PROGRAMADOR/A2); mismo equipo de agentes: la independencia es de revisión, no de identidad de git.",
+  "production_base": "dcf41ddddf4ac3cf8e54f4ec43a09fbf91f406e7",
+  "rollback_ref": "dcf41ddddf4ac3cf8e54f4ec43a09fbf91f406e7",
+  "risk": "high",
+  "authorization": "Propietario 25/10/2026: «y publiquen cuando terminen quiero visualizar su trabajo en el punto de venta listo para usar». Propietario 26/10/2026 (sala): «que no habia dicho que no es necesario mi ok si les dije que si les doy una mision terminenlo y publiquenlo no esperen una orden»; y en el chat privado: «Sí, publica ahora». Alcance autorizado: SOLO Web, sin paquete B, sin Worker ni migraciones. (Aclaración: «Sí, aplica el parche 08: mi pedido es la autorización, publiquen con respaldo sin preguntarme» fue para el parche 08, no para esta publicación.)",
+  "evidence": {
+    "contenido": "WORK Fase 1 (#1061: tarjetas con Confirmar real, contexto de productos, errores amables) + paquete A de capacidad de A2 (reintento solo del 429, aclaración con opciones, WORK oculto al abrir la ficha, hora de Lima) + rendimiento sin parpadeo v3 (#1062). Fusionado con merge commit c14389ed (padres dcf41ddd y 11873ae4), árbol idéntico a 11873ae4 (git diff vacío).",
+    "paquete_B": "EXCLUIDO (REQUIRE_PIN_FOR_BATCH, «Confirmar todo», batchApproval: 0 coincidencias en POS/). Parado hasta OK del dueño.",
+    "alcance": "20 archivos vs dcf41ddd, 9 publicables en POS/ (index.html, js/legacy-inline/inline-02.js, js/legacy-inline/inline-10.js, js/modules/asistente/asistente-core.js, -loader.js, -ui.js, js/work-host.js, work/index.html, work/work-canon-bridge.js); el resto docs/tests. Sin Worker, migraciones, .github/workflows, tools/release, pos-permissions.js (FEATURE_LOCKS), ownerAllowed, sw.js, cache-identity-guard ni PIN.",
+    "veredicto_a3": "SEGURO CON OBSERVACIONES",
+    "veredicto_a4": "APROBADO (sin cambios exigidos; 4 observaciones informativas)",
+    "arbol": "db1747389754927033a5341afb5e57dee4347ef1 (idéntico al de 6967165a + asistente-capacidad-v2-A.patch + rendimiento-sin-parpadeo-v3.patch aplicados en orden)",
+    "pruebas_node22": {
+      "a3": "Node 22.23.4, archivo por archivo con restauración del árbol, base dcf41ddd vs 11873ae4: 409 vs 414 archivos; 4006 vs 4078 pruebas; 84 fallos en ambos, idénticos, 0 fallos NUEVOS (3 de cloud-sync por falta de esbuild/exceljs y 81 de base: offline-compat, catalog-v2, state, core-utils, bulk-inline, ui-polish, macro-extraction, gate1-v9-multitab). tests/asistente 1228/1228; tests/work 68/68; tests/cloud-sync/work-host-session 7/7; tests/release 100%. Pruebas existentes modificadas (assistant-card-completar, assistant-reconnect-d72b7601, work-host-session, work-default.spec): solo texto «Toque»→«Toca» y fixtures; ninguna debilitada. Playwright local (servidor estático, sin producción): work-* + canon-mobile-home + canon-phone-sale + pwa-update-banner + pos-smoke + canon-mobile-speed = 99/99 (e2e WORK 6/6).",
+      "a4": {
+        "base": "dcf41ddd",
+        "final": "11873ae4",
+        "archivos": 290,
+        "fallos_nuevos": 0,
+        "nuevas_que_pasan": [
+          "assistant-capacidad-a2 (8)",
+          "work-capacidad (12)",
+          "work-cards (39)",
+          "sec-txt (6)",
+          "work-pre-flicker (7)"
+        ],
+        "rojas_identicas_en_base_y_final": [
+          "d1-backup-image-rows",
+          "d1-backup-workflow",
+          "migration-reconciliation",
+          "release-invariants/gate1-v9-multitab (2)"
+        ],
+        "work_host_session_fixture_setTimeout": "correcta, 7/7"
+      }
+    },
+    "respaldo_bd": {
+      "workflow": "Owner Backup Recovery Drill",
+      "run_id": 40314065267,
+      "head_sha": "c14389edc486f1c305d4931e234465547e2aaa55",
+      "result": "success",
+      "url": "https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/40314065267",
+      "genero": "Export SQL de la BD de producción (cf2c83d3…, 2 533 735 bytes, sha256 421d492546ffe74fff0804c09932f62ea987c16a5f35c83d98d4d9250db21de6) guardado en R2 nuevo-amanecer-prod-v2-backups con clave recovery-drills/2026-10-26T11-18-33Z-c14389edc486f1c305d4931e234465547e2aaa55.sql y su manifiesto .manifest.json; restaurado en una BD temporal verificada y luego borrada. Snapshot: 408 productos, 31 clientes, 313 créditos, 131 pagos.",
+      "respaldo_anterior": {
+        "run_id": 40281087592,
+        "url": "https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/40281087592",
+        "hora_lima": "2026-10-26 01:39",
+        "result": "success"
+      }
+    },
+    "ci_en_el_merge_c14389ed": {
+      "CANON Critical CI": {
+        "run_id": 40281024883,
+        "event": "push",
+        "result": "success"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40281024968,
+        "event": "push",
+        "result": "success",
+        "run_attempt": 2,
+        "url": "https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/40281024968"
+      },
+      "OpenCode Role Map CI": {
+        "run_id": 40281024869,
+        "event": "push",
+        "result": "success"
+      },
+      "Visual Regression": {
+        "run_id": 40281054117,
+        "event": "workflow_dispatch",
+        "requerido_por_la_puerta": false,
+        "result": "success"
+      },
+      "nota": "Las 3 corridas exigidas por la puerta quedaron en verde sobre c14389ed (árbol idéntico a 11873ae4). La puerta exige además verde sobre el target_commit exacto (commit de este recibo): se verifica de nuevo en ese SHA."
+    },
+    "ci_flaky": "E2E Smoke CI sobre c14389ed, intento 1: CANCELADO por el tope de 30 min con 7 fallos en pruebas de empleado (cliente-historial-compras:441, compras-factura-duplicada:76, costo-ausente-guion:40 y :89, historial-compras:331 por timeout de 30 s, kardex:222), en el mismo árbol que había pasado en 11873ae4 (run 40276726427, 21.7 min): runner lento, no un cambio de código. Se relanzó solo el job fallido una vez (rerun-failed-jobs) y el intento 2 terminó en verde. Prueba inestable conocida: compras-factura-duplicada.spec.ts:76 (empleado).",
+    "observaciones_aceptadas": [
+      "baja: Reloj del teléfono adelantado >2 s respecto del servidor puede mostrar «venció» sin llamar al servidor (work-host.js:399-421); no hay gasto de token ni riesgo de datos.",
+      "baja: _naSecTxt pierde el número 0 y un cliente llamado exactamente «Nan», «Null», «False» o «Undefined» sale «Consumidor final» (inline-10.js:13-21); solo fecha, hora y cliente, nunca cantidades ni totales.",
+      "baja: pre-parpadeo: con sesión guardada en el dominio publicado el body queda oculto hasta que WORK abre, con tope duro de 6 s (index.html:20); WORK no tiene modo noche: en tema oscuro hay un destello oscuro→claro (decisión del dueño).",
+      "baja: la aclaración con más de 12 coincidencias no lista nombres y el contexto del Worker ve máx. 25 productos; sin daño, cada cambio sigue con tarjeta y Confirmar.",
+      "baja: cuenta regresiva en aria-live y foco no restaurado al volver a WORK; guarda de doble toque durante la espera sin prueba que la ejerza (no hay doble gasto: botón apagado, rec.done y puerta del motor).",
+      "info: el tope de 5 confirmaciones/min es del Worker (ASSISTANT_CONFIRMS_PER_MINUTE); el cliente solo reacciona al 429 con retry_after_s."
+    ],
+    "tope_5_por_minuto": "del Worker (ASSISTANT_CONFIRMS_PER_MINUTE); el cliente solo reacciona al 429 con retry_after_s; sin gancho confirms_per_minute.",
+    "condiciones_antes_de_activar": [
+      "SHA vivo = dcf41ddd igual a la base (verify lo comprueba; build-info público = dcf41ddd).",
+      "Respaldo de BD (D1) hecho antes de activar: run 40314065267 en verde (06:18 Lima); anterior 40281087592 (01:39 Lima).",
+      "3 checks exactos (CANON Critical CI, E2E Smoke CI, OpenCode Role Map CI) en verde sobre el target_commit (commit de este recibo).",
+      "Entre 11873ae4 y el target_commit solo cambia este archivo (diff verificado).",
+      "Paquete B excluido; PIN de acciones de alto riesgo sin cambios.",
+      "Rollback: commit de reversión a dcf41ddd (sin force-push)."
+    ],
+    "limitations": [
+      "revisión local/de solo lectura; no equivale a verificación live",
+      "falta la prueba manual en teléfono real (checklist del dueño: precio con un toque, 429 con cuenta regresiva, WORK oculto y vuelta, ?work=0 y burbuja vieja, sin Pagar/Cobrar)",
+      "motor real del Worker con IA y 429 real: solo simulados",
+      "este recibo cubre solo la Web (POS/**), no el Worker"
+    ]
+  }
+}
