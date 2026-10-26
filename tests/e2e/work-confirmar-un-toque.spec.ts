@@ -140,7 +140,7 @@ test('WORK: con aviso de riesgo (bajo costo) el cambio NO se guarda solo: se abr
   const card = work.locator('.na-card[data-kind="confirm"]');
   await expect(card).toContainText('por debajo del costo');
   await card.getByRole('button', { name: 'Confirmar' }).click();
-  await expect(page.locator('#naWorkOverlay')).toHaveCount(0, { timeout: 10000 });
+  await expect(page.locator('#naWorkOverlay')).toBeHidden({ timeout: 10000 }); // WORK queda oculto (no destruido): el chat se conserva
   await expect(page.locator('#mProd')).toHaveClass(/\bopen\b/);
   expect(await price(page)).toBe(4.5);
 });

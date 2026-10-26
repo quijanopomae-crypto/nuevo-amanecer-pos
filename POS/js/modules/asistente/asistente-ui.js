@@ -1544,6 +1544,13 @@
       for (i = 0; i < list.length; i++) { x = list[i]; if (x && String(x.id) === String(id)) return { precio: x.precio, costo: x.costo, stock: x.stock, controla: x.controla }; }
       return null;
     },
+    // Lista (solo lectura) de {id, nombre, precio} para que WORK haga UNA pregunta de aclaración con opciones («súbele un poco a las galletas»). Sin costos.
+    catalog: function () {
+      if (!access || !isAdmin()) return [];
+      var list = deps.productos() || [], out = [], i, x;
+      for (i = 0; i < list.length && out.length < 3000; i++) { x = list[i]; if (x && x.id != null) out.push({ id: String(x.id), nombre: String(x.nombre || x.name || ''), precio: x.precio }); }
+      return out;
+    },
     // Cuerpo del chat: texto con nombres tapados, contexto de productos (máx. 25, costo solo si NA_ROLES.isOwner()) y estado de las tarjetas.
     prepare: function (text) {
       if (!access || !isAdmin()) return null;
