@@ -18,7 +18,8 @@ import { SETTINGS_TOOL, SERVER_SETTINGS_TOOL, settingsSnapshot, settingsProposal
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
-import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, statedCost, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
+import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, statedCost, memoryOperation, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
+import { memoryOn, createMemoryStore, memoryMessage, memoryMessageInfo, proposeFact, MEMORY_SYSTEM_LINE } from './pos-assistant-memoria-negocio.js'; // memoria permanente de negocio (A2): SOLO con ASSISTANT_MEMORY_V=1
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
@@ -2119,7 +2120,8 @@ export function createSettingsUsageStore(db) {
 // (lote 3) Lo que el Admin enseña HOY se guarda en el servidor (pos_settings, la misma tabla del cupo; sin migración), por aparato del Admin
 // y por día de Lima. Así «¿qué te enseñé hoy?» no depende del historial del celular (8 mensajes) ni del token que se pierde con una foto.
 export const LESSONS_PREFIX = USAGE_PREFIX + 'taught:';
-export async function lessonsKey(auth) { return LESSONS_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 40); }
+// pos_settings.key admite 60 caracteres (CHECK en 0024): 14 (USAGE_PREFIX) + 7 («taught:») + 32 = 53, como lvl/odev/provop. Con 40 eran 61 y el INSERT fallaba en silencio.
+export async function lessonsKey(auth) { return LESSONS_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 32); }
 export async function readLessons(store, auth, nowMs) {
   try { const r = await store.get(await lessonsKey(auth)), v = r && r.value; return v && v.d === limaDate(nowMs) && Array.isArray(v.items) ? v.items.filter((x) => typeof x === 'string').slice(-MAX_TAUGHT) : []; }
   catch { return []; }
@@ -2180,7 +2182,9 @@ export async function saveLesson(store, auth, nowMs, fact, customers = [], produ
       const r = await store.get(key), v = r.value && r.value.d === day && Array.isArray(r.value.items) ? r.value.items : [];
       if (await store.put(key, { d: day, items: [...v.filter((x) => x !== f), f].slice(-MAX_TAUGHT) }, r.revision)) return true;
     }
-  } catch { /* sin guardar: el token firmado sigue llevando lo enseñado */ }
+  } catch (e) { // sin guardar: el token firmado sigue llevando lo enseñado; pero ya no en silencio (sin claves, filas ni mensaje: solo tipo y código)
+    try { console.warn('[asistente] no se pudo guardar la lección:', String(e?.name || 'Error'), (String(e?.message || '').match(/\b(?:D1_[A-Z_]+|SQLITE_[A-Z_]+|CHECK constraint failed|no such table)\b/) || ['sin_codigo'])[0]); } catch { /* nada */ }
+  }
   return false;
 }
 function capFrom(env, name, fallback) { const n = Number.parseInt(env?.[name] || '', 10); return Number.isFinite(n) && n >= 0 ? n : fallback; }
@@ -2211,7 +2215,7 @@ export async function reserveUsage(store, auth, env, nowMs, hasImage) {
 }
 
 // ---------- DeepSeek ----------
-export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceMemory, lessons, priceFacts, resumen = null, cards }) {
+export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceMemory, lessons, bizFacts = null, priceFacts, resumen = null, cards }) {
   const messages = [{ role: 'system', content: systemPrompt(role, ctx, text) }, contextMessage(ctx)];
   // Empleado (defensa en datos): el historial lo manda el aparato (un aparato que antes fue del dueño puede guardar respuestas con costos):
   // antes del modelo pasa por el mismo filtro de montos del dueño. El texto nuevo de la persona va tal cual (es lo que ella escribió).
@@ -2225,6 +2229,8 @@ export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceM
   if (remembered) messages.push(remembered);
   const taught = role === 'owner' ? taughtMemoryMessage(invoiceMemory, lessons) : null;
   if (taught) messages.push(taught);
+  const bizMem = bizFacts ? memoryMessage(bizFacts, role === 'owner' ? 'owner' : 'empleado') : null; // memoria de negocio (interruptor): solo DATO, por rol
+  if (bizMem) { messages.push(bizMem); messages[0] = { ...messages[0], content: messages[0].content + '\n' + MEMORY_SYSTEM_LINE }; } // M-2: el system prompt respalda el bloque (solo cuando el bloque va)
   if (priceFacts) messages.push(priceFacts);
   const cardNote = cardsMessage(cards); // estado real de las tarjetas: una cancelada no vuelve a salir como pendiente
   if (cardNote) messages.push(cardNote);
@@ -3306,6 +3312,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const resetAsk = isResetRequest(parsed.text);
   // (lote 3) lo enseñado hoy (servidor) y, si preguntan precio/costo de un producto nombrado, sus datos reales buscados por nombre.
   const lessons = role === 'owner' ? await readLessons(store, auth, now) : [];
+  // Memoria permanente de negocio (A2): apagada por defecto; sin interruptor o sin BD no se lee ni se escribe nada.
+  const memStore = memoryOn(env) && deps.db && typeof deps.db.prepare === 'function' ? createMemoryStore(deps.db) : null;
+  const memList = memStore ? await memStore.list(role === 'owner' ? 'owner' : 'empleado') : null;
+  const bizFacts = memList ? memList.facts : null;
+  const memInfo = bizFacts ? memoryMessageInfo(bizFacts, role === 'owner' ? 'owner' : 'empleado') : null;
+  if (memInfo && memInfo.dropped > 0) { try { console.warn('[asistente] memoria de negocio: prompt_truncated', memInfo.dropped); } catch { /* nada */ } }
   const rd0 = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
   const loadProducts = async () => { if (!rd0 || typeof rd0.products !== 'function') return null; try { return await rd0.products(); } catch { return null; } };
   let sysProducts = PRICE_ASK_RE.test(parsed.text || '') ? await loadProducts() : null;
@@ -3365,7 +3377,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
       histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;
     }
-    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenToModel, cards: parsed.cards });
+    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, bizFacts, priceFacts, resumen: resumenToModel, cards: parsed.cards });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
@@ -3610,16 +3622,50 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
+  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text, { memory: memoryOn(env) }); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
     if (!sysProducts) sysProducts = await loadProducts(); await saveLesson(store, auth, now, redactModelOwner(fact), cust, [...(ctx.products || []), ...(sysProducts || [])]); } }
+  // Memoria permanente (interruptor): solo el dueño escribe y olvida. Cada fallo deja un código (sin datos) en `memoria_negocio.aviso`.
+  // B-1: el producto se resuelve SOLO contra el catálogo del servidor (sysProducts), nunca contra el que manda el celular (ctx.products).
+  // M-3: cada guardado/olvido deja una fila de auditoría del dueño (herramienta «memoria», solo el resultado, sin textos) y el aviso lleva lo olvidado.
+  let memResult = role === 'owner' && memList && !memList.ok ? { aviso: memList.code } : null;
+  if (role === 'owner' && memInfo && memInfo.dropped > 0) memResult = { ...(memResult || {}), recortadas: memInfo.dropped }; // B-3: el tope de bytes recortó entradas (ya hubo console.warn)
+  if (memStore && role === 'owner' && !parsed.image && !resetAsk) {
+    const op = memoryOperation(parsed.text), fact2 = op ? null : taughtFact(parsed.text, { memory: true });
+    const audM = async (type, outcome) => { try { await (deps.audit || auditWrite)(deps.db, [{ device_id: auth?.principalId, role, tool: 'memoria', type, outcome }]); } catch { /* la auditoría nunca rompe el chat */ } };
+    const dev = (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 16);
+    if ((op && op.explicit) || fact2) {
+      let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
+      if (!sysProducts) sysProducts = await loadProducts();
+      const server = sysProducts || [];
+      if (op) {
+        if (op.op === 'olvidar') {
+          const r = await memStore.forgetMatching(op.objetivo, { role, deviceId: dev, products: server });
+          memResult = { ...(memResult || {}), ...(r.ok ? { olvidado: [r.forgotten] } : { aviso: r.code }) };
+          if (r.ok) await audM('olvidar', 'forgotten'); else if (r.code !== 'memory_not_found' && r.code !== 'memory_ambiguous') await audM('olvidar', r.code);
+        } else memResult = { ...(memResult || {}), aviso: 'memory_use_forget_then_teach' }; // «corrige/usa…» no editan: se dice el dato nuevo y reemplaza la versión
+      } else {
+        const clean = redactModelOwner(fact2), safe = sanitizeLesson(clean, cust, [...(ctx.products || []), ...server]).trim();
+        if (safe !== clean.replace(/\s+/g, ' ').trim()) memResult = { ...(memResult || {}), aviso: 'memory_rejected_sensitive' }; // nombre/DNI/teléfono de cliente: no queda en la memoria permanente
+        else {
+          const pf = await proposeFact(safe, server);
+          if (!pf.ok) memResult = { ...(memResult || {}), aviso: 'memory_rejected_' + pf.reason };
+          else {
+            const r = await memStore.remember(pf.fact, { role, deviceId: dev });
+            memResult = { ...(memResult || {}), ...(r.ok ? (r.unchanged ? {} : { guardado: [{ tipo: pf.fact.kind, ...(pf.fact.kind === 'presentacion' ? { producto: pf.fact.subject_ref } : {}), dato: pf.fact.value }] }) : { aviso: r.code === 'memory_rejected' ? 'memory_rejected_' + r.reason : r.code }) };
+            if (r.ok && !r.unchanged) await audM('guardar', 'saved'); else if (!r.ok) await audM('guardar', r.code);
+          }
+        }
+      }
+    }
+  }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
-  const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner}) : null;
+  const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner, memory:memoryOn(env)}) : null;
   let shown = reply; // lo que ve el Admin en pantalla: los «producto #N» de resúmenes/consultas con su nombre; turns e historial siguen con el código
   if (role === 'owner' && refIds.size && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); shown = nameProductRefs(reply, known.names.filter((p) => !notRef(p))); }
   return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
-    ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
+    ...(nota ? { nota } : {}), memoria, ...(memResult && Object.keys(memResult).length ? { memoria_negocio: memResult } : {}), ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 
 // (auditoría 500) AJ-002 negativos en masa, AJ-043 varios movimientos sin tarjeta y VE-010 mensaje cortado: una línea aparte por aviso.

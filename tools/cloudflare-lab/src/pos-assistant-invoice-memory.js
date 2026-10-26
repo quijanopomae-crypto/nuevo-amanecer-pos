@@ -35,10 +35,36 @@ export function statedCost(text) {
   }
   return null;
 }
-export function taughtFact(text) {
-  const t = String(text || '').replace(/\s+/g, ' ').trim();
+// (A2, memoria de negocio) Tres cambios, TODOS detrás de opts.memory === true (el Worker lo pasa SOLO con ASSISTANT_MEMORY_V=1, vía memoryOn(env)):
+//  1) Existencias («tienen 24 en stock», «quedan 3», «el stock de leche es de 12»): cambian con cada venta; guardadas como enseñanza se
+//     vuelven viejas y contradicen al inventario. «stock mínimo/máximo» sí es una preferencia y se conserva.
+//  2) Operaciones sobre un hecho ya guardado («Olvida la regla…», «Corrige tu recuerdo…», «Usa mi preferencia…»): no son una lección nueva.
+//  3) Preferencias sin número («Recuerda que vendo por display»): guardan MÁS.
+//  SIN el flag (apagado, por defecto) taughtFact devuelve EXACTAMENTE lo mismo que antes de este cambio (915a3bdc) para cualquier texto
+//  (decisión de A1/A3/A5/PROGRAMADOR, ronda 3, opción b; lo vigila la prueba «apagado = main»).
+const foldT = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const STOCK_LEVEL = /\b(?:stock|inventario|existencias?)\s+(?:minim\w*|maxim\w*|de\s+seguridad|critico|bajo)\b|\b(?:minim\w*|maxim\w*)\s+(?:de\s+)?(?:stock|inventario)\b/g;
+const INVENTORY_RE = /\b(?:stock|inventario|existencias?|almacen|bodega|estante|anaquel|quedan?|quedaron|quedo|hay|disponibles?)\b|\b(?:tengo|tenemos|tenia|teniamos)\s+\d/;
+export function isInventoryFact(text) { return INVENTORY_RE.test(foldT(text).replace(STOCK_LEVEL, ' ')); }
+const OP_LEAD = /^(?:(?:por\s+favor|oye|ojo|ya|bueno|entonces|ahora)[,:]?\s+)*(olvida(?:te)?|borra|elimina|quita|corrige|corrijo|actualiza|cambia|modifica|reemplaza|usa|utiliza|aplica)\b\s*(?:que\s+)?/;
+const MEMORY_WORD = /\b(?:regla|reglas|recuerdo|recuerdos|preferencia|preferencias|memoria|ensenanza|leccion|lo\s+que\s+te\s+ense\w*)\b/;
+// {op:'olvidar'|'corregir'|'usar', objetivo, explicit} si la frase opera sobre un hecho ya enseñado (no es una enseñanza nueva); si no, null.
+// explicit = nombra la memoria con una palabra clara (regla/recuerdo/preferencia/memoria/lo que te enseñé). SOLO una operación explícita se EJECUTA (M-3: «elimina el producto
+// leche que trae 24 del inventario» no olvida nada); las no explícitas solo se excluyen de «enseñanza nueva» (guardan menos).
+export function memoryOperation(text) {
+  const raw = String(text || '').replace(/\s+/g, ' ').trim(), t = foldT(raw), m = OP_LEAD.exec(t);
+  if (!m || raw.length > 300 || isQuestion(raw)) return null;
+  const verb = m[1], op = /^(?:olvida|borra|elimina|quita)/.test(verb) ? 'olvidar' : /^(?:corrige|corrijo|actualiza|cambia|modifica|reemplaza)/.test(verb) ? 'corregir' : 'usar';
+  const memWord = MEMORY_WORD.test(t);
+  if (op === 'olvidar' ? !(memWord || TEACH_FACT.test(t)) : !memWord) return null;
+  return { op, objetivo: t.slice(m[0].length).trim(), explicit: memWord };
+}
+const PREF_CUE = /\b(?:vend[oe]|vendemos|prefiero|preferimos|uso|usamos|manejo|manejamos|trabajo\s+con|trabajamos\s+con|cobro|cobramos|redondeo|redondeamos)\s+\S/i;
+export function taughtFact(text, opts = {}) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim(), mem = opts?.memory === true;
   if (!t || t.length > 300 || isQuestion(t) || statedCost(t)) return null;
-  return (TEACH_LEAD.test(t) && /\d|\b(?:solo|siempre|nunca|no\s+se)\b/i.test(t)) || (TEACH_FACT.test(t) && /\d/.test(t)) || SUPPLIER_FACT.test(t) ? t : null;
+  if (mem && (memoryOperation(t) || isInventoryFact(t))) return null;
+  return (TEACH_LEAD.test(t) && (/\d|\b(?:solo|siempre|nunca|no\s+se)\b/i.test(t) || (mem && PREF_CUE.test(t)))) || (TEACH_FACT.test(t) && /\d/.test(t)) || SUPPLIER_FACT.test(t) ? t : null;
 }
 const b64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 async function sign(secret, value) {
@@ -60,11 +86,11 @@ export async function readInvoiceMemory(token, secret, auth, now) {
     return m;
   } catch { return null; }
 }
-export async function writeInvoiceMemory({previous, image, proposals, reply, text, secret, auth, now, clean}) {
+export async function writeInvoiceMemory({previous, image, proposals, reply, text, secret, auth, now, clean, memory = false}) {
   if (!secret) return null;
   const purchases = proposals.filter(p => p.type === 'compra');
   const fresh = !!image || purchases.length > 0;
-  const fact = !image ? taughtFact(text) : null, taughtBefore = previous?.taught || [];
+  const fact = !image ? taughtFact(text, { memory: memory === true }) : null, taughtBefore = previous?.taught || [];
   if (!fresh && !previous && !fact) return null;
   const oldDocs = new Set((previous?.invoices || []).map(p => p.documento).filter(Boolean));
   const newDocument = purchases.some(p => p.documento && oldDocs.size && !oldDocs.has(clean(p.documento).slice(0,80)));
