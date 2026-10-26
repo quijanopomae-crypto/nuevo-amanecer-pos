@@ -189,6 +189,7 @@
   var cardCss=doc.createElement('style');
   cardCss.textContent='.na-card{background:#fff;border:1px solid #cfe0ea;border-radius:14px;padding:12px 13px;margin-top:6px;font-size:13px;color:#16384e;max-width:100%}'+
     '.na-card h4{margin:0 0 7px;font-size:14px}.na-card table{width:100%;border-collapse:collapse}.na-card td,.na-card th{padding:4px 0;text-align:left;vertical-align:top;border-bottom:1px solid #eef3f6}'+
+    '.na-card .na-tscroll{overflow-x:auto;max-width:100%;min-width:0;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.na-card .na-tscroll:focus-visible{outline:2px solid #066f87;outline-offset:2px}.na-card caption.na-cap{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}'+
     '.na-card td:last-child,.na-card th:last-child{text-align:right;white-space:nowrap;padding-left:8px}.na-card .na-warn{background:#fff6e0;border-radius:8px;padding:6px 8px;margin-top:7px;color:#7a5200}'+
     '.na-card .na-note{font-size:11.5px;color:#577086;margin-top:7px}.na-card .na-res{margin-top:7px;font-weight:650}.na-card .na-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}'+
     '.na-card button{border:0;border-radius:11px;padding:10px 14px;font:700 14px system-ui;min-height:44px}.na-card .na-ok{background:linear-gradient(120deg,#052f49,#066f87);color:#fff}'+
@@ -205,11 +206,19 @@
     var res=node('div','na-res');res.setAttribute('aria-live','polite');
     if(v.kind==='table'){
       if(v.text)c.appendChild(node('div','na-note',v.text));
+      // Si el host recortó filas o columnas, se dice claro y en voz de lector de pantalla (role=status).
+      if(v.trim){var tn=node('div','na-warn na-trim',v.trim);tn.setAttribute('role','status');c.appendChild(tn);}
       if(v.rows&&v.rows.length){
+        // Contenedor con scroll horizontal propio: la tabla ancha se desliza dentro de la tarjeta y no ensancha la página.
+        var wrap=node('div','na-tscroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Tabla: '+String(v.title||'Consulta')+'. Se desliza a los lados.');
         var tb=doc.createElement('table');
-        if(v.columns&&v.columns.length){var hr=doc.createElement('tr');v.columns.forEach(function(x){hr.appendChild(node('th','',x));});tb.appendChild(hr);}
-        v.rows.forEach(function(r){var tr=doc.createElement('tr');r.forEach(function(x){tr.appendChild(node('td','',x));});tb.appendChild(tr);});
-        c.appendChild(tb);
+        var nc=Math.max((v.columns||[]).length,v.rows.reduce(function(m,r){return Math.max(m,r.length);},0));
+        if(nc>3)tb.style.minWidth=(nc*80)+'px';
+        tb.appendChild(node('caption','na-cap',String(v.title||'Consulta')+(v.trim?'. '+v.trim:'')));
+        if(v.columns&&v.columns.length){var th=doc.createElement('thead'),hr=doc.createElement('tr');v.columns.forEach(function(x){var h=node('th','',x);h.setAttribute('scope','col');hr.appendChild(h);});th.appendChild(hr);tb.appendChild(th);}
+        var tbody=doc.createElement('tbody');
+        v.rows.forEach(function(r){var tr=doc.createElement('tr');r.forEach(function(x){tr.appendChild(node('td','',x));});tbody.appendChild(tr);});
+        tb.appendChild(tbody);wrap.appendChild(tb);c.appendChild(wrap);
       }else if(!v.text)c.appendChild(node('div','na-note','Sin datos.'));
     }else if(v.kind==='steps'){
       var ol=doc.createElement('ol');(v.steps||[]).forEach(function(x){ol.appendChild(node('li','',x));});c.appendChild(ol);
