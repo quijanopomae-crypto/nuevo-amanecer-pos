@@ -107,6 +107,27 @@
     localStorage.removeItem('na_pos_role_v1');
   }
 
+  // T-47 S3 (caché por identidad): con el token nuevo ya guardado, purga la réplica en caché
+  // del usuario anterior usando el mismo helper que la app (/app/js/sync/cache-identity-guard.js).
+  // Separado de clearSession a propósito. Si no carga, la app purga igual al arrancar.
+  function purgePreviousIdentityCache() {
+    // El aviso «aparato desconectado» (pos-roles-client.js:74) es de la sesión anterior, no de la recién guardada.
+    try { localStorage.removeItem('na_device_revoked_v1'); } catch {}
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, 3000);
+      const done = () => { clearTimeout(timer); resolve(); };
+      const run = () => {
+        try { Promise.resolve(globalThis.NuevoAmanecerCacheIdentity.check('activation')).then(done, done); } catch { done(); }
+      };
+      if (globalThis.NuevoAmanecerCacheIdentity) { run(); return; }
+      const script = document.createElement('script');
+      script.src = '/app/js/sync/cache-identity-guard.js';
+      script.onload = run;
+      script.onerror = done;
+      document.head.appendChild(script);
+    });
+  }
+
   function showActivation(message) {
     setStatus(message, message.includes('incorrecta') || message.includes('falló') ? 'error' : '');
     panel.hidden = false;
@@ -227,6 +248,7 @@
       const authority = await fetchAuthority(body.session_token);
       saveSession(body.session_token, authority);
       localStorage.removeItem('na_pos_role_v1');
+      await purgePreviousIdentityCache();
       input.value = '';
       panel.hidden = true;
       retryButton.hidden = true;
@@ -258,6 +280,7 @@
       const authority = await fetchAuthority(body.session_token);
       saveSession(body.session_token, authority);
       try { localStorage.setItem('na_pos_role_v1', JSON.stringify({ role: 'empleado', at: Date.now() })); } catch {}
+      await purgePreviousIdentityCache();
       panel.hidden = true; if (pairPanel) pairPanel.hidden = true; retryButton.hidden = true;
       setStatus('Aparato de empleado vinculado. ' + environmentName() + ' está listo.', 'ok');
       openPos.hidden = false;
