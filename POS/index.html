@@ -10,10 +10,10 @@
     <!-- Comprobación completa, síncrona y antes de los recursos de la app; no usa document.body. -->
     <script src="/runtime-config.js"></script>
     <script src="js/sync/hosted-canonical-guard.js"></script>
-    <!-- Sin parpadeo de Inicio viejo (WORK es el Inicio por defecto en el dominio publicado): si ya hay sesión guardada y no se activó
-         la sesión, la pantalla queda en el color de WORK (o en el fondo del tema oscuro si ese es el tema guardado) hasta que WORK se abre.
-         La marca se quita: al abrir WORK, al decidir que no se abre (js/work-host.js), al terminar de cargar la página si js/work-host.js no
-         cargó (se libera al instante), a los 3,5 s del montaje, y a los 6 s como tope duro. Sin internet, sin sesión o con ?work=0 no se marca nada.
+    <!-- Sin parpadeo del Inicio heredado: en CANON hospedado con sesión guardada, el fondo se mantiene del color de WORK
+         (o del tema oscuro guardado) mientras carga la nueva pantalla principal.
+         La marca se quita al abrir WORK, al decidir que no se abre (js/work-host.js), al terminar de cargar la página si js/work-host.js no
+         cargó, a los 3,5 s del montaje o a los 6 s como tope duro. Sin internet o sin sesión no se marca nada.
          Solo CSS y una marca en <html>; lee únicamente si hay sesión guardada y el tema guardado (no expone ni escribe nada). Mientras está
          puesta se oculta el body entero salvo #naRevoked (máx. unos segundos). -->
     <style>html.na-work-pre{background:#f7fbff}html.na-work-pre.na-work-pre-dk{background:#0f172a}html.na-work-pre body{visibility:hidden}html.na-work-pre #naRevoked{visibility:visible}</style>
