@@ -1,0 +1,90 @@
+{
+  "reviewed_commit": "4571466482f11ea428342a7d94dcca6e7f5ba2e6",
+  "kind": "independent-automated",
+  "result": "pass",
+  "reviewer": "ASISTENTE 4 (delta y original de #1068, solo lectura; CON OBSERVACIONES, sin bloqueantes) + ASISTENTE 1 (#1068 original y #1070; SEGURO CON OBSERVACIONES) + ASISTENTE 3 (compatibilidad #1068/#1070 y #1070; SEGURO CON OBSERVACIONES). #1070 es parche de A4: su revisión independiente es la de A1 y A3 (A4 solo comprobó hechos). Independencia de revisión, no de identidad git. reviewed_commit es el merge final publicado: los revisores vieron las piezas (aa67fc68, 3251491d) y A4/A3 verificaron que la fusión es limpia con el mismo árbol; el árbol del merge final fue verificado por el ejecutor.",
+  "production_base": "915a3bdc72bfc4b8820a85f0644decba613773c0",
+  "rollback_ref": "915a3bdc72bfc4b8820a85f0644decba613773c0",
+  "risk": "high",
+  "authorization": "Propietario, 26/10/2026: «publicalo» (DM, 09:58 Lima) y «ya les di una mision y terminenla y publiquenla» (sala, 08:53 Lima). Alcance autorizado: SOLO Web, cambios #1068 (NAWorkBusy con tope de 10 min) y #1070 (tabla honesta). NO cubre Worker (#1071 no se toca), migraciones ni paquetes de Worker. (Citas transmitidas por el coordinador desde la sala/DM del dueño.)",
+  "autorizacion_del_dueno": "Propietario, 26/10/2026: «publicalo» (DM, 09:58 Lima) y «ya les di una mision y terminenla y publiquenla» (sala, 08:53 Lima). Alcance autorizado: SOLO Web, cambios #1068 (NAWorkBusy con tope de 10 min) y #1070 (tabla honesta). NO cubre Worker (#1071 no se toca), migraciones ni paquetes de Worker. (Citas transmitidas por el coordinador desde la sala/DM del dueño.)",
+  "evidence": {
+    "contenido": "#1068 gate NAWorkBusy (no recargar por versión nueva durante un guardado/lote de WORK, con tope BUSY_MAX_MS=600000) fusionado como f66648697f34d0d1630f45e7d06f6cff94f4e215; #1070 tabla honesta (aviso «Mostrando X de Y…» y tabla ancha deslizable) fusionado como 4571466482f11ea428342a7d94dcca6e7f5ba2e6 (padres f6664869 y 3251491d). Merge commits puros. Árbol final f2a139e2b3ffbfe6ff56185bdb117a1190237a77 = fusión sin conflicto de aa67fc68 + 3251491d (git merge-tree) = árbol reportado por A4.",
+    "alcance": "7 archivos vs 915a3bdc, 3 publicables: POS/index.html, POS/js/work-host.js, POS/work/work-canon-bridge.js; 4 tests. Solo cliente; sin Worker, pos-permissions.js, FEATURE_LOCKS, PIN, sw.js, migraciones ni ops.",
+    "veredictos": {
+      "a4_1068_original": "CON OBSERVACIONES (709a5d2a)",
+      "a4_1068_delta": "CON OBSERVACIONES (aa67fc68; vale con E2E verde)",
+      "a1_1070": "SEGURO CON OBSERVACIONES (todas bajas, de exactitud)",
+      "a3_1070_y_compat": "SEGURO CON OBSERVACIONES; fusión limpia en ambos órdenes"
+    },
+    "observaciones_aceptadas": [
+      "#1068 O1: el tope de 10 min libera la recarga pero no destraba working",
+      "O2 salto de reloj hacia adelante puede dar false (bajo)",
+      "O3 busyBegin redundante (higiene)",
+      "O4 aviso solo en consola",
+      "#1070: observaciones bajas de exactitud"
+    ],
+    "informes": [
+      "/workspace/auditoria-higiene/revision-delta-watchdog-1068-asistente4.md",
+      "/workspace/auditoria-higiene/revision-1068-asistente4.md",
+      "/workspace/auditoria-higiene/revision-fix-lecciones-y-pr1070-asistente1.md",
+      "/workspace/auditoria-higiene/compat-1068-1070-A3.md",
+      "/workspace/auditoria-higiene/hechos-1070-asistente4.md"
+    ],
+    "ci_en_aa67fc68_pr1068": {
+      "CANON Critical CI": {
+        "run_id": 40343618817,
+        "result": "success"
+      },
+      "Visual Regression": {
+        "run_id": 40343618795,
+        "result": "success"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40343618963,
+        "result": "success (intento 3)",
+        "nota": "intento 1 cancelado por el tope de 30 min; intento 2 falló solo compras-factura-duplicada.spec.ts:76; intento 3 verde (reintentos extra autorizados por el coordinador)"
+      }
+    },
+    "ci_en_merge_4571466": {
+      "CANON Critical CI": {
+        "run_id": 40357373833,
+        "event": "push"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40357373866,
+        "event": "push",
+        "resultado": "success (intento 1, run 40357373866)"
+      },
+      "OpenCode Role Map CI": {
+        "run_id": 40357373978,
+        "event": "push",
+        "result": "success"
+      },
+      "Visual Regression": {
+        "run_id": 40357394745,
+        "event": "workflow_dispatch",
+        "requerido_por_la_puerta": false
+      }
+    },
+    "ci_flaky": "compras-factura-duplicada.spec.ts:76 (empleado) es defecto preexistente e intermitente: falló también en la base 915a3bdc (push, run 40336481577: 1 failed duro, 6 flaky) y en los runs recientes revisados (f5e4c81b, e220c85b, 88eaa2ff, 51e4f2f2, d971eaad, 709a5d2a, 3251491d) falla en el primer try y pasa en el retry interno de Playwright; falló también el retry (fallo duro) en 915a3bdc, en el intento 1 de f5e4c81b y en el intento 2 de aa67fc68. No es causado por estos cambios. E2E Smoke es lento (19–30 min) y el tope de 30 min cancela intentos.",
+    "respaldo_bd": {
+      "workflow": "Owner Backup Recovery Drill",
+      "run_id": 40325039821,
+      "result": "success",
+      "hora_lima": "2026-10-26 07:46",
+      "url": "https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/40325039821",
+      "nota": "Solo Web, sin migración ni Worker; se reutiliza si tiene <6 h al activar."
+    },
+    "no_probado": [
+      "teléfono real",
+      "service worker real",
+      "suspensión real del teléfono",
+      "lote real con tokens reales"
+    ],
+    "limitations": [
+      "revisión local/de solo lectura; no equivale a verificación live",
+      "este recibo cubre solo la Web (POS/**)"
+    ]
+  }
+}
