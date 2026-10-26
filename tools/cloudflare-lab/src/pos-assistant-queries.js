@@ -317,7 +317,20 @@ export function canonicalReader(db) {
   const salesSqlLimit = (p, build, limit) => salesQuery(p, (from, where) => build(from, where) + ' LIMIT ?4', [limit]);
   return {
     async products() { const rows = await all('products'); const list = rows.map((p) => ({ id: String(p.product_id), nombre: p.name, stock: Number(p.current_stock_quantity), min: Number(p.stock_min_quantity || 0),
-      costo: cents(p.cost_cents), precio: cents(p.price_cents), categoria: p.category ?? null, controla: p.tracks_inventory === 1 || p.tracks_inventory === true, unidad: p.unit ?? null })); list.truncated = rows.truncated; return list; },
+      costo: cents(p.cost_cents), precio: cents(p.price_cents), categoria: p.category ?? null, controla: p.tracks_inventory === 1 || p.tracks_inventory === true, unidad: p.unit ?? null,
+      // Tamaño de caja CONFIRMADO (ficha: units_per_box + box_price_cents, siempre juntos). Sin él, lo que diga el nombre es provisional.
+      caja: Number(p.units_per_box) > 0 ? Number(p.units_per_box) : null, precio_caja: p.box_price_cents == null ? null : cents(p.box_price_cents) })); list.truncated = rows.truncated; return list; },
+    // Tamaño de caja de los ids pedidos (tarjeta «Guardar tamaño de caja»): ficha efectiva = base o en vivo + última revisión. Lanza si falla.
+    async packSizes(ids) {
+      const want = [...new Set((ids || []).map(String))].slice(0, PRODUCT_ID_CHUNK); const out = new Map(); if (!want.length) return out;
+      const c = await ctl(), marks = want.map((_, k) => '?' + (k + 2)).join(',');
+      const q = async (sql) => { try { return (await db.prepare(sql).bind(c.active_promotion_id, ...want).all()).results || []; } catch (e) { if (/no such table/i.test(String(e?.message || e))) return []; throw e; } };
+      const cols = 'product_id,units_per_box,box_price_cents';
+      for (const r of [...await q(`SELECT ${cols} FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`), ...await q(`SELECT ${cols} FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`),
+        ...await q(`SELECT ${cols} FROM canonical_product_revisions WHERE promotion_id=?1 AND product_id IN (${marks}) ORDER BY revision`)])
+        out.set(String(r.product_id), { caja: Number(r.units_per_box) > 0 ? Number(r.units_per_box) : null, precio_caja: r.box_price_cents == null ? null : cents(r.box_price_cents) });
+      return out;
+    },
     // Solo los ids pedidos (control de inventario de una tarjeta): una consulta por tramo de <= 50 ids con parámetros enlazados, sin
     // leer el catálogo. Misma autoridad que la lectura canónica: promoción activa (importados + creados en vivo). Si la consulta
     // falla, lanza (quien llama falla CERRADO). Un id que no vuelve es un producto que no existe.

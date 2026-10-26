@@ -203,7 +203,7 @@
   // ¿Puede ESTE aparato ejecutar ESTA propuesta? (el Worker ya filtró y vuelve a revisar al confirmar; esto es la segunda barrera).
   // Dueño: sí. Empleado: solo si el SERVIDOR le dio un nivel (roles.level viene del último ping, nunca de una caché local);
   // y aun así NO recibe tarjetas que cambian algo (solo el dueño confirma). Documentos del empleado: solo lista de precios y pedido.
-  var TYPES = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto', 'documento', 'consulta', 'pasos'];
+  var TYPES = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto', 'tamano_caja', 'documento', 'consulta', 'pasos'];
   var EMP_LEVELS = ['consultas', 'consultas_documentos'], EMP_DOCS = ['lista_precios', 'lista_pedido'];
   // (#967 teléfono) Datos del negocio y del ticket (destino servidor): los aplica el Admin o el nivel 3 con «costos y cambios» (roles.cambios,
   // del ping). Las tarjetas del aparato (#972: apariencia, lector, stock…) siguen solo del Admin. Misma lista cerrada que el Worker (CONFIG_KEYS).
@@ -354,6 +354,8 @@
       return { ok: true, msg: 'Abrí «Nuevo producto» lleno. Revisa y pulsa Guardar.' };
     },
     documento: async function (p, d) { var doc = await buildDocument(p, d.data ? d.data() : {}, d.businessName && d.businessName()); d.showDocument(doc.html, p); return { ok: true, msg: 'Documento listo (' + doc.rows + (doc.rows === 1 ? ' fila' : ' filas') + '). No es comprobante SUNAT.' }; },
+    // «Guardar tamaño de caja» (solo Admin): /auth/assistant/confirm ya escribió la ficha (units_per_box + box_price_cents); aquí solo se avisa.
+    tamano_caja: function () { return { ok: true, msg: 'Guardé la caja en la ficha.' }; },
     consulta: function () { return { ok: true, msg: '' }; },
     pasos: function (p, d) { if (p.pantalla) d.navigate(p.pantalla); return { ok: true, msg: 'Te llevé a la pantalla.' }; }
   };
@@ -808,7 +810,7 @@
   var ROLE_LOST_MSG = 'Esta sesión ya no es de Admin. Vuelva a entrar como Admin y pida la compra de nuevo.';
   // borra lo escrito a mano (sin dejar copia) y suelta la propuesta
   function wipeManual(p) { var m = p && p._manual; if (m && typeof m === 'object') Object.keys(m).forEach(function (k) { m[k] = ''; delete m[k]; }); if (p) { try { delete p._manual; } catch (_) {} } }
-  var CARD_TIPOS = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto'];
+  var CARD_TIPOS = ['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto', 'tamano_caja'];
   // Total de cada fila (cantidad × costo unitario) y total de la compra, en céntimos para no arrastrar decimales. Fila sin costo: sin total.
   function purchaseTotals(p) {
     var rows = [], cents = 0, sinCosto = 0;
