@@ -1,7 +1,7 @@
 // Modo demostración del asistente: se usa cuando el Worker no tiene DEEPSEEK_API_KEY.
 // Responde con reglas simples y devuelve las MISMAS llamadas de herramienta que haría el modelo,
 // así la validación, los permisos y las tarjetas «Confirmar» se prueban igual sin gastar.
-import { dateWordRange } from './pos-assistant-queries.js';
+import { dateWordRange, clientCodesInText } from './pos-assistant-queries.js';
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function findProducts(text, products) {
   const t = norm(text);
@@ -39,8 +39,26 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/\bgane\b|\bganamos\b|ganancia|utilidad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ganancia', ...queryDates(t) })] };
   if (/no se vend|sin ventas|no (se )?vendi|no sale|no salen/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'productos_sin_ventas', ...(/\d{4}-\d{2}-\d{2}|\bhoy\b|\bayer\b|semana|\bmes\b/.test(t) ? queryDates(t) : {}) })] };
   if (/a que hora|por hora|que hora(s)? (vendo|se vende|hay mas)|horas? de mas venta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_por_hora', ...queryDates(t) })] };
-  { const cli = /\bcliente\s*#?\s*([A-Za-z0-9_-]{1,40})\b/i.exec(String(text || '')); // solo el código («cliente #12» o «cliente 12»), nunca el nombre
-    if (cli && /debe|deuda|saldo/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[1] })] }; }
+  // (auditoría 500, CLI-024) cobros de fiados del período: no son ventas ni la deuda.
+  // (#995) «registra / anota un pago…» es una acción, no la pregunta; con «cliente #N» van solo los cobros de ese cliente.
+  // «cliente nro. 5»: el punto de la abreviatura no corta la frase (igual que el chat real).
+  const tc = t.replace(/\b(nro|no|n)\.(?=\s*\d)/g, '$1');
+  if (/\b(cobr\w*|me pagaron|pagaron|pagos?|abonos?|abonaron)\b[^.?!]{0,40}(fiad|credito|deud)|\b(me|cuanto) abonaron\b/.test(tc) && !/\b(vend\w*|venta\w*|fie|fio|fiamos|fiaste|fiaron|fiado que)\b/.test(tc)
+    && !/\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b[^.?!]{0,30}\b(pagos?|abonos?|cobros?)\b/.test(tc)) {
+    const cli = clientCodesInText(text); // «cliente #5» o «el cliente 5»
+    return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), ...(cli.length === 1 ? { cliente_id: cli[0] } : {}) })] };
+  }
+  // (#995, 3ª revisión) «¿cuánto me abonó cliente #5 esta semana?» (sin «fiado»; el chat ya cambió el nombre por el código): sus cobros.
+  { const cli = [...new Set(clientCodesInText(text))];
+    if (cli.length === 1 && /\b(pago|pagaron|abono|abonaron|cancelo|cancelaron|devolvio|devolvieron)\b/.test(tc) && !/\b(vend\w*|venta\w*)\b/.test(tc)
+      && !/\b(registr(a|e|ar|alo|ame)|anot(a|e|ar|alo|ame)|apunt(a|e|ar|alo|ame)|agreg(a|ue|ar|alo|ame)|ingres(a|e|ar|alo|ame))\b/.test(tc))
+      return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), cliente_id: cli[0] })] };
+  }
+  { const cli = clientCodesInText(text); // solo el código («cliente #12», «cliente 12», «cliente nro. 12», «N° 12»), nunca el nombre
+    const uno = [...new Set(cli.map((c) => c.toLowerCase()))].length === 1; // (#995, punto 3) «cliente #5 o el #9»: pregunta cuál, no elige el primero
+    if (cli.length && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t))
+      return uno ? { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[0] })] }
+        : { content: '¿De cuál cliente: ' + [...new Set(cli)].map((c) => 'cliente #' + c).join(' o ') + '? Pregunte por uno a la vez.', calls: [] }; }
   if (/vend|carrito|cobra/.test(t) && !/vendid|ventas|reporte/.test(t)) return { content: 'Las ventas se hacen a mano en Venta. Yo te ayudo con stock, compras, precios, productos y reportes.', calls: [] };
   if (/document|pdf|imprim|reporte de|lista de precios|estado de cuenta|inventario valorizado|valorizado|cierre de caja|pedido para|lista de pedido/.test(t)) {
     const tipo = /lista de precios/.test(t) ? 'lista_precios' : /valoriz/.test(t) ? 'inventario_valorizado' : /reponer|pedido/.test(t) ? 'lista_pedido'
@@ -53,7 +71,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
   if (/atrasad|moros|creditos? vencid/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'creditos_atrasados' })] };
-  if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
+  if (/deud|deben|fiado|me debe|debe mas/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
   if (/compras (recientes|ultimas)|ultimas compras/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'compras_recientes' })] };
   if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...queryDates(t) })] };
   if (/ventas|vendi|vendimos/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_periodo', ...queryDates(t) })] };
