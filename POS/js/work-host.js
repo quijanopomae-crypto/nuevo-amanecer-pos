@@ -472,7 +472,19 @@
   // ---- Varias confirmaciones seguidas: una a la vez, con espera automática si se acerca el tope por minuto del servidor ----
   var working = false, batchRunning = false, confirmStamps = [];
   // (A3 fase 0) El POS no recarga por versión nueva mientras WORK guarda o corre «Confirmar todo» (tokens ya gastados en vuelo).
-  try { root.NAWorkBusy = function () { return !!(working || batchRunning); }; } catch (_) {}
+  // (A3 watchdog) Tope de tiempo: si «ocupado» se queda pegado más de BUSY_MAX_MS (un `finally` que no limpió), NAWorkBusy vuelve a false para que
+  // la recarga diferida no se aplace sin límite. Se mide con Date.now() al consultar (sin timers: nada que limpiar). No toca working/batchRunning.
+  var BUSY_MAX_MS = 600000, busySince = 0, busyWarned = false;
+  function busyBegin() { busySince = Date.now(); busyWarned = false; } // empieza una operación nueva: el reloj se reinicia
+  function busyEnd() { if (!(working || batchRunning)) { busySince = 0; busyWarned = false; } } // terminó limpia: no queda nada pendiente
+  function workBusy() {
+    if (!(working || batchRunning)) return false;
+    if (!busySince) busySince = Date.now(); // ocupado sin inicio registrado: se cuenta desde ahora
+    if (Date.now() - busySince <= BUSY_MAX_MS) return true;
+    if (!busyWarned) { busyWarned = true; try { root.console.warn('[WORK] ocupado sin terminar tras ' + (BUSY_MAX_MS / 60000) + ' min (' + (batchRunning ? 'lote' : 'tarjeta') + '): no se aplaza más la recarga'); } catch (_) {} }
+    return false;
+  }
+  try { root.NAWorkBusy = function () { return workBusy(); }; } catch (_) {}
   function sleep(ms) { return new Promise(function (r) { root.setTimeout(r, ms); }); }
   // Cuenta regresiva en la tarjeta («Espera N segundos…»). true = terminó; false = WORK se cerró o cambió de sesión.
   async function countdown(key, secs, gen, abort) {
@@ -494,7 +506,7 @@
     var rec = cards[key], C = core(), myGen = generation, batch = !!(opts && opts.batch);
     if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || rec.done || rec.waiting) return;
     if (!batch && (working || batchRunning)) { cardState(key, {state: 'pending', msg: 'Espera: se está guardando otro cambio. Toca Confirmar cuando termine.'}); return; }
-    var was = working; working = true; rec.waiting = true;
+    var was = working; working = true; rec.waiting = true; busyBegin();
     var abort = opts && typeof opts.abort === 'function' ? opts.abort : null;
     function stopped() { // por qué se cortó la espera: se dice claro, sin gastar nada
       if (myGen !== generation || rec.cancelled) return;
@@ -512,7 +524,7 @@
         if (!(await countdown(key, out.wait, myGen, abort))) { stopped(); return; }
       }
       if (myGen === generation) cardState(key, {state: 'retry', msg: 'Sigue el límite de confirmaciones por minuto. Toca Reintentar en un momento: no se hizo ningún cambio.'});
-    } finally { working = was; rec.waiting = false; }
+    } finally { working = was; rec.waiting = false; busyEnd(); }
   }
   // «Confirmar todo (N)»: recorre las tarjetas de un toque UNA POR UNA (cada una gasta su token y pasa todas las revisiones del servidor y del POS).
   // Solo cuenta como guardada la que se releyó en el POS (rec.saved). Se puede DETENER mientras corre (lot.stop): no gasta más tokens.
@@ -521,7 +533,7 @@
     if (!lot || lot.kind !== 'lote' || lot.busy || lot.done || !e || !C) return;
     if (working || batchRunning) { cardState(lk, {state: 'pending', msg: 'Espera: se está guardando otro cambio.'}); return; }
     if (!ownerDataAllowed()) { cardState(lk, {state: 'failed', msg: 'Esta sesión ya no es de Admin. Vuelve a entrar como Admin y pide el cambio de nuevo.'}); return; }
-    lot.busy = true; batchRunning = true; working = true; lot.stop = false;
+    lot.busy = true; batchRunning = true; working = true; lot.stop = false; busyBegin();
     var finished = false, access = false, okN = 0, failN = 0, skipN = 0, nofitN = 0, expN = 0, cancN = 0, stopped = false, user = false, rest = 0;
     var keys = lot.keys.filter(function (k) { var c = cards[k]; return c && c.gated && c.kind === 'confirm' && !c.done && !c.busy; });
     var n = keys.length, i, recs = keys.map(function (k) { return cards[k]; });
@@ -559,7 +571,7 @@
       lot.done = true; finished = true;
       cardState(lk, sum);
     } finally {
-      lot.busy = false; batchRunning = false; working = false;
+      lot.busy = false; batchRunning = false; working = false; busyEnd();
       if (myGen !== generation) {
         var conf = recs.filter(function (x) { return x && x.done; }).length, sinC = Math.max(0, recs.length - conf);
         notify('WORK se cerró a mitad de «Confirmar todo»: ' + conf + ' de ' + recs.length + (conf === 1 ? ' se confirmó' : ' se confirmaron') + ' (' + okN + ' guardados y comprobados; la que iba en curso avisa aparte)' +

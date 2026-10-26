@@ -7,7 +7,8 @@ const host = readFileSync(new URL('../../POS/js/work-host.js', import.meta.url),
 const index = readFileSync(new URL('../../POS/index.html', import.meta.url), 'utf8');
 
 test('WORK expone NAWorkBusy ligado a working/batchRunning', () => {
-  assert.match(host, /root\.NAWorkBusy\s*=\s*function\s*\(\)\s*\{\s*return !!\(working \|\| batchRunning\);/);
+  assert.match(host, /root\.NAWorkBusy\s*=\s*function\s*\(\)\s*\{\s*return workBusy\(\);/);
+  assert.match(host, /function workBusy\(\) \{\s*if \(!\(working \|\| batchRunning\)\) return false;/); // (watchdog A3: el tope vive en workBusy; ver work-busy-watchdog.test.mjs)
 });
 test('moneyOpInProgress consulta NAWorkBusy sin quitar los chequeos de dinero existentes', () => {
   const m = /function moneyOpInProgress\(\) \{([\s\S]*?)\n    \}/.exec(index);
