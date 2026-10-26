@@ -1,36 +1,25 @@
 {
   "format": "nuevo-amanecer-web-release-v2",
   "authorized": true,
-  "authorization": "Propietario 25/10/2026: «Espera a #884 y #888 y luego publica solo la Web con respaldo de BD»; «mi pedido es la autorización, publiquen con respaldo sin preguntarme».",
+  "authorization": "Propietario 25/10/2026: «y publiquen cuando terminen quiero visualizar su trabajo en el punto de venta listo para usar». Propietario 26/10/2026 (sala): «que no habia dicho que no es necesario mi ok si les dije que si les doy una mision terminenlo y publiquenlo no esperen una orden»; y en el chat privado: «Sí, publica ahora». Alcance autorizado: SOLO Web, sin paquete B, sin Worker ni migraciones. (Aclaración: «Sí, aplica el parche 08: mi pedido es la autorización, publiquen con respaldo sin preguntarme» fue para el parche 08, no para esta publicación.) Web sin paquete B.",
   "risk": "high",
-  "approved_base": "4273e2d81b72a7fa5a0c56ebbb654e3b8871bfcd",
-  "target_commit": "6025210d703183c4b0bec0dcb3fcc7ecd3dbec32",
-  "rollback_ref": "4273e2d81b72a7fa5a0c56ebbb654e3b8871bfcd",
+  "approved_base": "dcf41ddddf4ac3cf8e54f4ec43a09fbf91f406e7",
+  "target_commit": "d971eaadd8f4e4968e82886d5dddc121b0aefa63",
+  "rollback_ref": "dcf41ddddf4ac3cf8e54f4ec43a09fbf91f406e7",
   "allowed_paths": [
-    "POS/css/theme-dark.css",
     "POS/index.html",
-    "POS/js/config/pos-roles-client.js",
-    "POS/js/config/pos-sale-note-client.js",
     "POS/js/legacy-inline/inline-02.js",
-    "POS/js/modules/client-credit-accounts-v2.js",
-    "POS/js/modules/ticket/overrides.js",
-    "POS/js/modules/ticket/share-receipt.js",
-    "POS/js/modules/ticket/zones.js",
-    "POS/js/sync/cache-identity-guard.js",
-    "POS/js/sync/canonical-cash-bridge.js",
-    "POS/js/sync/canonical-client.js",
-    "POS/js/sync/canonical-credit-payment-bridge.js",
-    "POS/js/sync/canonical-sale-integration.js",
-    "POS/js/sync/canonical-sale-outbox.js",
-    "POS/js/sync/canonical-sale-view.js",
-    "POS/js/sync/canonical-status-banner.js",
-    "POS/sw.js",
-    "tools/cloudflare-pos-web/public/activate.js",
-    "tools/release/web-release.mjs"
+    "POS/js/legacy-inline/inline-10.js",
+    "POS/js/modules/asistente/asistente-core.js",
+    "POS/js/modules/asistente/asistente-loader.js",
+    "POS/js/modules/asistente/asistente-ui.js",
+    "POS/js/work-host.js",
+    "POS/work/index.html",
+    "POS/work/work-canon-bridge.js"
   ],
   "review": {
     "kind": "independent-automated",
-    "evidence": "docs/reviews/web-release-WORK2-20261025.json"
+    "evidence": "docs/reviews/web-release-WORK-capacidad-20261026.json"
   },
-  "requested_at_utc": "2026-10-26T01:34:44.092Z"
+  "requested_at_utc": "2026-10-26T11:20:15.461Z"
 }
