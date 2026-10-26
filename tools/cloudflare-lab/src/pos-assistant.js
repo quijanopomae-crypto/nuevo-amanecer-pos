@@ -2899,6 +2899,26 @@ export async function issueConfirmToken(proposal, role, auth, secret, nowMs) {
   const body = b64url(enc.encode(JSON.stringify(payload)));
   return body + '.' + (await hmac(secret, body));
 }
+// Tarjeta de conteo desactualizada (VE-009): null si sigue vigente. Solo «Ajuste de inventario» con stock_actual numérico en la tarjeta
+// y stock numérico en la base. El objetivo es el número contado (stock_despues de la tarjeta), no la cantidad.
+export const STALE_COUNT_MOTIVO = 'Ajuste de inventario';
+const r3 = (n) => Math.round(n * 1000) / 1000;
+export async function staleCountCard(card, current, role, auth, secret, now) {
+  if (!card || card.motivo !== STALE_COUNT_MOTIVO || !current) return null;
+  const antes = Number(card.stock_actual), ahora = Number(current.stock), q = Number(card.cantidad);
+  if (card.stock_actual == null || current.stock == null || !Number.isFinite(antes) || !Number.isFinite(ahora) || !Number.isFinite(q)) return null;
+  if (r3(antes) === r3(ahora)) return null;
+  const objetivo = r3(antes + (card.tipo === 'entrada' ? q : -q)), dif = r3(objetivo - ahora);
+  const base = { error: 'stock_changed', nombre: card.nombre, stock_antes: r3(antes), stock_ahora: r3(ahora), objetivo };
+  if (dif === 0) return { ...base, proposal: null, message: 'El stock de ' + card.nombre + ' ya cambió a ' + r3(ahora) + ', que es el número contado. No hace falta el ajuste.' };
+  const { confirm_token, completar, ...rest } = card;
+  const fresh = { ...rest, id: String(card.id || 'ajuste') + '-r', tipo: dif > 0 ? 'entrada' : 'salida', cantidad: Math.abs(dif), stock_actual: r3(ahora), stock_despues: objetivo,
+    title: dif > 0 ? 'Entrada de stock' : 'Salida de stock', quedaNegativo: objetivo < 0, grande: Math.abs(dif) > PURCHASE_BOUNDS.maxQty };
+  if (Math.abs(dif) > PURCHASE_HARD_LIMITS.maxQty) return { ...base, proposal: null, message: 'El stock de ' + card.nombre + ' cambió de ' + r3(antes) + ' a ' + r3(ahora) + ' y el ajuste pasa el límite. Hazlo desde Inventario.' };
+  fresh.confirm_token = await issueConfirmToken(fresh, role, auth, secret, now);
+  return { ...base, proposal: fresh, message: 'El stock de ' + card.nombre + ' cambió de ' + r3(antes) + ' a ' + r3(ahora) + ' desde que preparé la tarjeta. Para llegar a ' + objetivo
+    + ' ahora es ' + (dif > 0 ? 'una entrada' : 'una salida') + ' de ' + Math.abs(dif) + '. Revisa la tarjeta nueva.' };
+}
 export async function readConfirmToken(token, secret) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig || token.length > 2000) return null;
@@ -3052,6 +3072,10 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
       if (missing.length) return json({ error: 'product_missing', message: 'Ese producto ya no está en el inventario. Pide la tarjeta de nuevo.' }, 409);
       const bad = lines.filter((l) => l.product_id && byId.get(String(l.product_id)).controla === false).map((l) => l.nombre);
       if (bad.length) return json({ error: 'sin_control_stock', nombres: bad, message: bad.map(NO_STOCK_TEXT).join(' ') }, 409);
+      // (auditoría 500, VE-009) Corrección de conteo («conté 15 y el sistema dice 12»): la tarjeta se armó con el stock de ese momento.
+      // Si otro aparato lo cambió desde entonces, aplicar la misma cantidad dejaría mal el conteo: 409 stock_changed y una tarjeta NUEVA,
+      // firmada, que llega al mismo número contado con el stock de ahora. Entradas, salidas, mermas, vencidos y devoluciones siguen igual.
+      if (tok.t === 'ajuste') { const sc = await staleCountCard(applied, byId.get(String(applied.product_id)), role, auth, secret, now); if (sc) return json({ ...sc, operation_id: tok.op }, 409); }
     }
   }
   // Límite de confirmaciones por aparato y minuto.
