@@ -96,3 +96,44 @@ test('sin lectura fiable del catálogo no abre una ficha nueva', async () => {
  const h=uiHarness();h.refreshWith(async()=>{throw Error('offline');});h.button.click();await new Promise(r=>setImmediate(r));
  assert.equal(h.opened.length,0);assert.match(h.row.textContent,/No repitas/);
 });
+
+// (auditoría OCR-024) Un product_id que manda el modelo no basta: si los números de presentación/tamaño del nombre leído
+// no coinciden con los del producto (24x395 vs 48x170, 16x6x32g vs 6x32g) la línea queda sin vincular y la busca el
+// emparejamiento exacto del servidor. Los vínculos correctos (mismos números, o nombre sin números) se mantienen.
+const GLORIA = [
+  { id: 'g24', nombre: 'LECHE GLORIA EVAPORADA 24 LATAS X 395GR', stock: 3, costo: 91, precio: 99, controla: true },
+  { id: 'g48', nombre: 'LECHE GLORIA EVAPORADA 48 LATAS X 170GR', stock: 2, costo: 98, precio: 110, controla: true },
+  { id: 'chk', nombre: 'GALLETA CHOKO 6 X 32G', stock: 9, costo: 4, precio: 5, controla: true }
+];
+async function invoiceCtx(lineas, products = GLORIA) {
+  const request = new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text: 'Lee esta factura de compra', context: { products } }) });
+  const res = await assistantChatRoute(request, { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: 'test-secret-invoice-0123456789', DEEPSEEK_API_KEY: 'test-only' }, { principalId: 'test-owner' }, (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { 'content-type': 'application/json' } }), {
+    store: createMemoryUsageStore(), resolveRole: async () => 'owner', reader: { products: async () => products },
+    fetch: async () => new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: [{ id: 'invoice', type: 'function', function: { name: 'leer_factura_compra', arguments: JSON.stringify({ lineas }) } }] } }] }))
+  });
+  assert.equal(res.status, 200); const body = await res.json(); return body.proposals.find((p) => p.type === 'compra');
+}
+test('OCR-024: product_id del modelo con presentación distinta (24x395 vs 48x170) no se acepta; queda el nombre leído', async () => {
+  const p = await invoiceCtx([{ product_id: 'g24', nombre: 'GLORIA EVAP 48X170', cantidad: 3, costo_unitario: 98.5 }]);
+  assert.equal(p.lineas[0].product_id, null);
+  assert.equal(p.lineas[0].nombre, 'GLORIA EVAP 48X170');
+  assert.equal(p.sinProducto, 1);
+  const q = await invoiceCtx([{ product_id: 'chk', nombre: 'GALLETA CHOKO 16X6X32G', cantidad: 3, costo_unitario: 28.8 }]);
+  assert.equal(q.lineas[0].product_id, null, '16x6x32g no es el paquete 6x32g');
+  assert.equal(q.lineas[0].nombre, 'GALLETA CHOKO 16X6X32G');
+});
+test('OCR-024: con el id descartado, el emparejamiento exacto del servidor sí puede vincular el nombre completo', async () => {
+  const p = await invoiceCtx([{ product_id: 'g24', nombre: 'Leche Gloria Evaporada 48 latas x 170gr', cantidad: 3, costo_unitario: 98.5 }]);
+  assert.equal(p.lineas[0].product_id, 'g48');
+  assert.equal(p.lineas[0].nombre, 'LECHE GLORIA EVAPORADA 48 LATAS X 170GR');
+});
+test('OCR-024: vínculos correctos del modelo se mantienen (mismos números o nombre sin números)', async () => {
+  const p = await invoiceCtx([
+    { product_id: 'g48', nombre: 'GLORIA EVAP 48X170', cantidad: 3, costo_unitario: 98.5 },
+    { product_id: 'g24', nombre: 'Leche Gloria', cantidad: 2, costo_unitario: 91 },
+    { product_id: 'g24', nombre: 'LECHE GLORIA 24 LATAS X 395 G', cantidad: 1, costo_unitario: 91 },
+    { product_id: 'chk', nombre: 'Galleta Choko 6x32 g', cantidad: 4, costo_unitario: 4 }
+  ]);
+  assert.deepEqual(p.lineas.map((l) => l.product_id), ['g48', 'g24', 'g24', 'chk']);
+  assert.equal(p.sinProducto, 0);
+});
