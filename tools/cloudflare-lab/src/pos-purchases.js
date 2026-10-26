@@ -8,6 +8,8 @@ import { adjustCanonicalInventory } from './a6-inventory.js';
 import { posRoleFor, verifyOwnerPin } from './pos-roles.js';
 import { canDo } from './pos-permissions.js';
 import { lotsCore, lotsReady } from './stock-lots.js';
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, foreignOperationLedgerSql, crossLedgerConflict } from './operation-ledgers.js';
+const OWN_LEDGER = ['pos_purchases'];
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const PID = v => typeof v === 'string' && v.length > 0 && v.length <= 160 && !/[\x00-\x1f\x7f]/.test(v);
@@ -112,7 +114,11 @@ export async function purchasesRoute(request, env, auth, json) {
     return JSON.stringify(want)===JSON.stringify(have)&&(saved.supplier??null)===supplier&&(saved.document_ref??null)===doc;
   }
 
-  let claim = await db.prepare('SELECT * FROM pos_purchases WHERE purchase_id=?1').bind(b.operation_id).first();
+  // Own claim and cross-ledger owner of the id in ONE read (same trips as before).
+  const ledgers = await operationLedgers(db, auth?.ledgerTables);
+  const head = await db.prepare(`SELECT p.*,${foreignOperationLedgerSql(ledgers, OWN_LEDGER, '?1')} AS foreign_ledger
+    FROM (SELECT 1) LEFT JOIN pos_purchases p ON p.purchase_id=?1`).bind(b.operation_id).first();
+  let claim = head?.purchase_id ? head : null;
   async function fillClaimCosts(saved) {
     const role = auth.posRole === 'empleado' ? 'empleado' : await posRoleFor(db, auth.principalId);
     if (canDo(role, 'purchases.costs.view')) return;
@@ -133,8 +139,13 @@ export async function purchasesRoute(request, env, auth, json) {
   }
   if (claim && claim.status === 'aplicada') return json({ status: 'already_processed', purchase_id: b.operation_id, idempotent: true }, 200);
   if (!claim) {
+    // Cross-ledger (PR #885, delta 3b): pos_purchases is a ledger. The header id may
+    // not already be another command's operation_id (folded into the claim read +
+    // atomic fence in this same batch, 0 extra trips). Lines keep their own fence
+    // (inventory.adjust with '<purchase>:<line>'). Own idempotency is checked first.
+    if (head?.foreign_ledger) return json(crossLedgerConflict(b.operation_id, { ledger: head.foreign_ledger }), 409);
     const assertion='purchase:'+crypto.randomUUID();
-    const stmts = [db.prepare(`INSERT INTO pos_purchases(purchase_id,promotion_id,supplier,document_ref,total_cost_cents,line_count,status,principal_id,created_at)
+    const stmts = [foreignOperationAssertion(db, assertion + ':foreign-operation', b.operation_id, ledgers, OWN_LEDGER), db.prepare(`INSERT INTO pos_purchases(purchase_id,promotion_id,supplier,document_ref,total_cost_cents,line_count,status,principal_id,created_at)
       VALUES(?1,?2,?3,?4,?5,?6,'en_curso',?7,?8) ON CONFLICT DO NOTHING`).bind(b.operation_id, b.promotion_id, supplier, doc, purchaseTotal(), b.lines.length, String(auth.principalId || 'unknown'), b.created_at)];
     // Only the request that created the header can create its immutable lines/lots.
     // A concurrent loser rolls back before inserting metadata into another receipt.
@@ -142,10 +153,15 @@ export async function purchasesRoute(request, env, auth, json) {
     b.lines.forEach(l => stmts.push(db.prepare('INSERT INTO pos_purchase_lines(purchase_id,line_number,product_id,quantity,unit_cost_cents) VALUES(?1,?2,?3,?4,?5) ON CONFLICT DO NOTHING')
       .bind(b.operation_id, l.line, l.product_id, l.quantity, l.unit_cost_cents ?? null)));
     if(lotSchema)b.lines.filter(l=>l.lots?.length).forEach(l=>stmts.push(db.prepare('INSERT INTO pos_purchase_line_lots(purchase_id,line_number,lots_json) VALUES(?1,?2,?3) ON CONFLICT DO NOTHING').bind(b.operation_id,l.line,JSON.stringify(l.lots))));
-    stmts.push(db.prepare('DELETE FROM canonical_assertions WHERE assertion_id=?1').bind(assertion));
+    stmts.push(db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(assertion, assertion + ':foreign-operation'));
     try{await db.batch(stmts);}catch(error){
       claim=await db.prepare('SELECT * FROM pos_purchases WHERE purchase_id=?1').bind(b.operation_id).first();
-      if(!claim)throw error;
+      if(!claim){
+        // Fence lost: another ledger took this id after the pre-read.
+        const raced=await foreignOperationRead(db,b.operation_id,ledgers,OWN_LEDGER).first();
+        if(raced)return json(crossLedgerConflict(b.operation_id,raced),409);
+        throw error;
+      }
       await fillClaimCosts(claim);
       if(!await payloadMatches(claim))return json({error:'purchase_payload_mismatch',purchase_id:b.operation_id,status:claim.status==='aplicada'?'applied':'in_progress'},409);
       if(claim.status==='aplicada')return json({status:'already_processed',purchase_id:b.operation_id,idempotent:true},200);

@@ -1,3 +1,4 @@
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, foreignOperationsJsonSql, crossLedgerConflict } from './operation-ledgers.js';
 import { cashSessionCashierAvailable, authenticatedCashier } from './cash-session-cashier.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
@@ -95,12 +96,16 @@ export async function createCanonicalFinancial(command, request, env, auth, json
         c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
+  const ledgers = await operationLedgers(db,auth?.ledgerTables);
+  const OWN = ['canonical_financial_operations'];
   async function replay() {
     const row = await db.prepare('SELECT command,request_hash,result_json FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first();
-    const collision = row ? null : await db.prepare('SELECT operation_id FROM sales WHERE operation_id=?1').bind(body.operation_id).first();
+    // Own ledger first (replay/conflict); only an unknown id is checked against the other ledgers.
+    const collision = row ? null : await foreignOperationRead(db,body.operation_id,ledgers,OWN).first();
     const denied = await authorityError();
     if (denied) return json({error:denied},409);
-    if (collision || (row && (row.command !== command || row.request_hash !== hash))) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+    if (row && (row.command !== command || row.request_hash !== hash)) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+    if (collision) return json(crossLedgerConflict(body.operation_id,collision),409);
     return row ? json({...JSON.parse(row.result_json),status:'already_processed',idempotent:true}) : null;
   }
   const denied = await authorityError();
@@ -191,7 +196,9 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   // D1 batch is the durable boundary: receipt, CAS checks and effect commit together.
   // A zero-row mutation cannot become a successful receipt.
   const statements = [];
-  for (const [i, statement] of [guard,receipt,...assertions,...effects,marker,
+  // Atomic cross-ledger fence first: another ledger taking this id after replay() aborts the batch.
+  const foreignFence = foreignOperationAssertion(db,`${token}:foreign-operation`,body.operation_id,ledgers,OWN);
+  for (const [i, statement] of [foreignFence,guard,receipt,...assertions,...effects,marker,
     db.prepare('DELETE FROM canonical_write_guards WHERE operation_id=?1 AND commit_token=?2').bind(body.operation_id,token)].entries()) {
     statements.push(statement,db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(`${token}:changed:${i}`));
   }
@@ -262,6 +269,7 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
   const operationIds = payments.map(payment => payment.operation_id);
   const creditIds = payments.map(payment => payment.credit_id);
   const method = payments[0].payment_method;
+  const ledgers = await operationLedgers(db,auth?.ledgerTables);
 
   // Lean read phase: one D1 SELECT returns authority, replay rows, credit
   // baselines and optional cash session as JSON. This replaces four binding
@@ -290,6 +298,7 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
         'result_json',result_json
       )),'[]') FROM canonical_financial_operations
         WHERE operation_id IN (${inClause(operationIds.length,operationStart)})) AS operations_json,
+      ${foreignOperationsJsonSql(ledgers,['canonical_financial_operations'],operationIds.map((_,index)=>'?'+(operationStart+index)))} AS foreign_json,
       (SELECT COALESCE(json_group_array(json_object(
         'credit_id',credit_id,
         'provenance',provenance,
@@ -328,6 +337,7 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
   const existingRows = packedJson(packed?.operations_json,[]);
   const creditRows = packedJson(packed?.credits_json,[]);
   const session = packedJson(packed?.session_json,null);
+  const foreign = packedJson(packed?.foreign_json,null);
 
   if (!authority || authority.mode !== 'ACTIVE') return json({error:'canonical_not_active'},409);
   if (authority.active_promotion_id !== body.promotion_id || authority.authority_epoch !== body.authority_epoch ||
@@ -353,6 +363,8 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
     },200);
   }
 
+  // After own-ledger replay, before credit/session CAS: a child id owned by another ledger.
+  if (foreign) return json(crossLedgerConflict(foreign.operation_id,foreign),409);
   if (creditRows.length !== payments.length) return json({error:'credit_not_found'},409);
   // The whole batch shares one reference and counts as ONE use of it.
   const referenceGuard = await paymentReferenceGuard(db,body.promotion_id,method,payments[0].reference);
@@ -401,6 +413,7 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
   // the existing SQL trigger.
   statements.push(db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash)
     VALUES(?1,?2,?3,?4,?5,?6,?7,?8)`).bind(first.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,auth.principalId,auth.credentialHash));
+  payments.forEach((payment,index)=>statements.push(foreignOperationAssertion(db,`${token}:foreign-operation:${index}`,payment.operation_id,ledgers,['canonical_financial_operations'])));
 
   // One CAS assertion covers every DISTINCT credit. This is the transaction
   // fence that makes the pre-read revisions authoritative at commit time.
@@ -472,6 +485,10 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
       },200);
     }
     if (await referenceTakenBy(db,referenceGuard,body.operation_id)) return json({error:'reference_already_used',reference:payments[0].reference},409);
+    for (const payment of payments) {
+      const raced = await foreignOperationRead(db,payment.operation_id,ledgers,['canonical_financial_operations']).first();
+      if (raced) return json(crossLedgerConflict(payment.operation_id,raced),409);
+    }
     const conflict = /constraint|conflict|stale_authority|gate_p_control|invalid_|forbidden/i.test(String(error?.message));
     return json({error:conflict?'payment_batch_conflict':'payment_batch_storage_error',operation_id:body.operation_id,retry_same_operation_id:true},conflict?409:503);
   }
