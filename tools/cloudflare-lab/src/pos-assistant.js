@@ -2120,7 +2120,8 @@ export function createSettingsUsageStore(db) {
 // (lote 3) Lo que el Admin enseña HOY se guarda en el servidor (pos_settings, la misma tabla del cupo; sin migración), por aparato del Admin
 // y por día de Lima. Así «¿qué te enseñé hoy?» no depende del historial del celular (8 mensajes) ni del token que se pierde con una foto.
 export const LESSONS_PREFIX = USAGE_PREFIX + 'taught:';
-export async function lessonsKey(auth) { return LESSONS_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 40); }
+// pos_settings.key admite 60 caracteres (CHECK en 0024): 14 (USAGE_PREFIX) + 7 («taught:») + 32 = 53, como lvl/odev/provop. Con 40 eran 61 y el INSERT fallaba en silencio.
+export async function lessonsKey(auth) { return LESSONS_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 32); }
 export async function readLessons(store, auth, nowMs) {
   try { const r = await store.get(await lessonsKey(auth)), v = r && r.value; return v && v.d === limaDate(nowMs) && Array.isArray(v.items) ? v.items.filter((x) => typeof x === 'string').slice(-MAX_TAUGHT) : []; }
   catch { return []; }
@@ -2181,7 +2182,9 @@ export async function saveLesson(store, auth, nowMs, fact, customers = [], produ
       const r = await store.get(key), v = r.value && r.value.d === day && Array.isArray(r.value.items) ? r.value.items : [];
       if (await store.put(key, { d: day, items: [...v.filter((x) => x !== f), f].slice(-MAX_TAUGHT) }, r.revision)) return true;
     }
-  } catch { /* sin guardar: el token firmado sigue llevando lo enseñado */ }
+  } catch (e) { // sin guardar: el token firmado sigue llevando lo enseñado; pero ya no en silencio (sin claves, filas ni mensaje: solo tipo y código)
+    try { console.warn('[asistente] no se pudo guardar la lección:', String(e?.name || 'Error'), (String(e?.message || '').match(/\b(?:D1_[A-Z_]+|SQLITE_[A-Z_]+|CHECK constraint failed|no such table)\b/) || ['sin_codigo'])[0]); } catch { /* nada */ }
+  }
   return false;
 }
 function capFrom(env, name, fallback) { const n = Number.parseInt(env?.[name] || '', 10); return Number.isFinite(n) && n >= 0 ? n : fallback; }
