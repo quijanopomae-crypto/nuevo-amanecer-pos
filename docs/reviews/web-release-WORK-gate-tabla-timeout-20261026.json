@@ -1,0 +1,133 @@
+{
+  "reviewed_commit": "82080a10fb7b623153e2afb3d17227d2e10bcb4e",
+  "kind": "independent-automated",
+  "result": "pass",
+  "reviewer": "ASISTENTE 4 (delta y original de #1068, solo lectura; CON OBSERVACIONES, sin bloqueantes) + ASISTENTE 1 (#1068 original y #1070; SEGURO CON OBSERVACIONES) + ASISTENTE 3 (compatibilidad #1068/#1070 y #1070; SEGURO CON OBSERVACIONES). #1070 es parche de A4: su revisión independiente es la de A1 y A3 (A4 solo comprobó hechos). Independencia de revisión, no de identidad git. reviewed_commit es el merge final publicado: los revisores vieron las piezas (aa67fc68, 3251491d) y A4/A3 verificaron que la fusión es limpia con el mismo árbol; el árbol del merge final fue verificado por el ejecutor. Para el cambio de CI (timeout 30->50): ASISTENTE 1, revisión por contenido en la sala, sin riesgo de seguridad, con 4 condiciones (ver evidence.cambio_ci_1073); sin recibo firmado de A1; A1 no lo verificó en GitHub. Independencia de revisión, no de identidad git.",
+  "production_base": "915a3bdc72bfc4b8820a85f0644decba613773c0",
+  "rollback_ref": "915a3bdc72bfc4b8820a85f0644decba613773c0",
+  "risk": "high",
+  "authorization": "Propietario, 26/10/2026: «publicalo» (DM, 09:58 Lima) y «ya les di una mision y terminenla y publiquenla» (sala, 08:53 Lima). Decisión del dueño (13:28 Lima, transmitida por el coordinador): abrir un PR mínimo que suba el tope del job E2E de 30 a 50 minutos y continuar la publicación con el Plan A. Alcance autorizado: SOLO Web, #1068 (NAWorkBusy con tope de 10 min) y #1070 (tabla honesta) más el cambio de CI del tope E2E. NO cubre Worker (#1071 no se toca), migraciones ni paquetes de Worker. (Citas transmitidas por el coordinador desde la sala/DM del dueño.)",
+  "autorizacion_del_dueno": "Propietario, 26/10/2026: «publicalo» (DM, 09:58 Lima) y «ya les di una mision y terminenla y publiquenla» (sala, 08:53 Lima). Decisión del dueño (13:28 Lima, transmitida por el coordinador): abrir un PR mínimo que suba el tope del job E2E de 30 a 50 minutos y continuar la publicación con el Plan A. Alcance autorizado: SOLO Web, #1068 (NAWorkBusy con tope de 10 min) y #1070 (tabla honesta) más el cambio de CI del tope E2E. NO cubre Worker (#1071 no se toca), migraciones ni paquetes de Worker. (Citas transmitidas por el coordinador desde la sala/DM del dueño.)",
+  "evidence": {
+    "contenido": "Web: #1068 gate NAWorkBusy con tope BUSY_MAX_MS=600000 (f6664869) + #1070 tabla honesta (45714664), ya revisados por A4/A1/A3 (ver docs/reviews/web-release-WORK-gate-tabla-20261026.json, reviewed_commit 45714664, tree POS f2a139e2…); más el cambio de CI de PR #1073: timeout-minutes del job e2e-smoke de 30 a 50 en .github/workflows/e2e-smoke-ci.yml (commit 82080a10fb7b623153e2afb3d17227d2e10bcb4e, padre 987c3315). reviewed_commit = 82080a10: su árbol = 987c3315 + esa línea; entre 82080a10 y el target solo cambia este recibo.",
+    "alcance": "vs 915a3bdc: 3 rutas publicables de POS/ (index.html, js/work-host.js, work/work-canon-bridge.js) + .github/workflows/e2e-smoke-ci.yml (workflow que define un check exigido por la puerta) + 4 tests + 2 recibos. Sin Worker, pos-permissions.js, FEATURE_LOCKS, PIN, sw.js, migraciones ni ops (salvo el activador posterior).",
+    "veredictos": {
+      "a4_1068_original": "CON OBSERVACIONES (709a5d2a)",
+      "a4_1068_delta": "CON OBSERVACIONES (aa67fc68; vale con E2E verde)",
+      "a1_1070": "SEGURO CON OBSERVACIONES (todas bajas, de exactitud)",
+      "a3_1070_y_compat": "SEGURO CON OBSERVACIONES; fusión limpia en ambos órdenes"
+    },
+    "observaciones_aceptadas": [
+      "#1068 O1: el tope de 10 min libera la recarga pero no destraba working",
+      "O2 salto de reloj hacia adelante puede dar false (bajo)",
+      "O3 busyBegin redundante (higiene)",
+      "O4 aviso solo en consola",
+      "#1070: observaciones bajas de exactitud"
+    ],
+    "informes": [
+      "/workspace/auditoria-higiene/revision-delta-watchdog-1068-asistente4.md",
+      "/workspace/auditoria-higiene/revision-1068-asistente4.md",
+      "/workspace/auditoria-higiene/revision-fix-lecciones-y-pr1070-asistente1.md",
+      "/workspace/auditoria-higiene/compat-1068-1070-A3.md",
+      "/workspace/auditoria-higiene/hechos-1070-asistente4.md"
+    ],
+    "ci_en_aa67fc68_pr1068": {
+      "CANON Critical CI": {
+        "run_id": 40343618817,
+        "result": "success"
+      },
+      "Visual Regression": {
+        "run_id": 40343618795,
+        "result": "success"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40343618963,
+        "result": "success (intento 3)",
+        "nota": "intento 1 cancelado por el tope de 30 min; intento 2 falló solo compras-factura-duplicada.spec.ts:76; intento 3 verde (reintentos extra autorizados por el coordinador)"
+      }
+    },
+    "ci_en_merge_4571466": {
+      "CANON Critical CI": {
+        "run_id": 40357373833,
+        "event": "push"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40357373866,
+        "event": "push",
+        "resultado": "success (intento 1, run 40357373866)"
+      },
+      "OpenCode Role Map CI": {
+        "run_id": 40357373978,
+        "event": "push",
+        "result": "success"
+      },
+      "Visual Regression": {
+        "run_id": 40357394745,
+        "event": "workflow_dispatch",
+        "requerido_por_la_puerta": false
+      }
+    },
+    "ci_flaky": "compras-factura-duplicada.spec.ts:76 (empleado) es un defecto preexistente e intermitente: falló también (fallo duro, retry incluido) en la base 915a3bdc (push, run 40336481577). En los demás runs recientes falla en el primer try y pasa en el retry interno de Playwright. Si en el E2E del SHA final pasa por retry de pruebas, se registrará como «pasó por reintento», no como «verde limpio»; el run solo cuenta si termina en success. Tampoco debe leerse el tope de 50 min como que la prueba pasa «porque cabe más tiempo».",
+    "respaldo_bd": {
+      "workflow": "Owner Backup Recovery Drill",
+      "run_id": 40368937827,
+      "head_sha": "987c3315219a64eddfc35cd8a12c058a52cad40c",
+      "result": "success",
+      "hora_lima": "2026-10-26 12:28",
+      "url": "https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/40368937827",
+      "nota": "Se reutiliza solo si tiene <6 h al desplegar (hasta 18:28 Lima); si no, se repite. Solo Web: sin migración ni Worker."
+    },
+    "no_probado": [
+      "teléfono real",
+      "service worker real",
+      "suspensión real del teléfono",
+      "lote real con tokens reales"
+    ],
+    "limitations": [
+      "revisión local/de solo lectura; no equivale a verificación live",
+      "este recibo cubre solo la Web (POS/**)"
+    ],
+    "cambio_ci_1073": {
+      "diff_exacto": "una sola línea: `timeout-minutes: 30` -> `timeout-minutes: 50` en el job e2e-smoke de .github/workflows/e2e-smoke-ci.yml (único timeout-minutes del archivo, línea 22); 1 archivo, +1/−1 (git diff 987c3315 82080a10).",
+      "causa": "duración, no fallo de código: el job E2E Smoke sobre 987c3315 (run 40362359922) se canceló 3 veces por el tope de 30 min; en el intento 3 llegó a la prueba nº 983 de las 982 pruebas más reintentos (976 ✓) cuando cayó el tope. Los intentos 1 y 2 también se cancelaron por tiempo (el 2 sin log recuperable, BlobNotFound).",
+      "revision_a1": {
+        "veredicto": "visto por contenido, sin riesgo de seguridad (según lo relató el coordinador a partir del mensaje de A1 en la sala; no hay recibo firmado de A1 para este cambio; este recibo NO firma por A1).",
+        "condiciones_de_a1": [
+          "1) el diff es exactamente esa línea",
+          "2) un run cancelado nunca se da por verde: debe terminar en success sobre el SHA final",
+          "3) anotar que la causa es la duración (983 de 982 más reintentos) y no un fallo de código, y que A1 no lo verificó en GitHub",
+          "4) compras-factura-duplicada.spec.ts:76 (falla igual en la base) no se registra como «verde solo porque cabe más tiempo»: si pasa por retry, anotarlo honestamente como «pasó por reintento»"
+        ],
+        "a1_no_verifico_en_github": true,
+        "origen_de_la_afirmacion": "mensaje de A1 en la sala transmitido por el coordinador (13:32 Lima)"
+      },
+      "como_exige_el_repo": "la rama feature/v1.3-mobile-cloud exige PR (0 aprobaciones) y no tiene required_status_checks; la exigencia de CI verde es la puerta tools/release/web-release.mjs verify (CANON Critical + E2E Smoke + OpenCode Role Map en success sobre el target_commit exacto, run con head_sha igual y concluido en success)."
+    },
+    "ci_e2e_en_987c3315": {
+      "run_id": 40362359922,
+      "intentos": [
+        {
+          "n": 1,
+          "resultado": "cancelado por tope de 30 min"
+        },
+        {
+          "n": 2,
+          "resultado": "cancelado (35 min de job, sin log recuperable)"
+        },
+        {
+          "n": 3,
+          "resultado": "cancelado por tope de 30 min; iba en la prueba 983"
+        }
+      ],
+      "conclusion": "nunca success; no se usa como verde"
+    },
+    "ci_en_el_sha_final": {
+      "nota": "Los run IDs del SHA final (merge commit de #1073) se anotan en progress-fixes y en el PR del activador; la puerta los verifica por API sobre el target_commit exacto."
+    },
+    "procedencia_de_las_afirmaciones": {
+      "veredictos_a4_a1_a3_sobre_1068_1070": "copiados del recibo ya fusionado web-release-WORK-gate-tabla-20261026.json (PR #1072), que los tomó de los informes en /workspace/auditoria-higiene/ (revision-delta-watchdog-1068-asistente4.md, revision-1068-asistente4.md, revision-fix-lecciones-y-pr1070-asistente1.md, compat-1068-1070-A3.md, hechos-1070-asistente4.md)",
+      "cambio_de_timeout": "diff y causa verificados por el ejecutor (git diff y logs de GitHub Actions); el veredicto de A1 es el relatado por el coordinador, sin firma propia",
+      "autorizacion": "citas literales transmitidas por el coordinador"
+    }
+  }
+}
