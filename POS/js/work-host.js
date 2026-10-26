@@ -270,12 +270,29 @@
     }
     return {rows: rows, warnings: warn};
   }
+  // «Mostrando 30 de 45 filas y 8 de 11 columnas.»: solo si de verdad se recortó algo (si cabe todo, no sale nada).
+  function trimNote(shownR, totalR, shownC, totalC, hayMas) {
+    var parts = [];
+    if (shownR < totalR) parts.push(shownR + ' de ' + totalR + ' filas');
+    else if (hayMas) parts.push(shownR + ' filas (hay más sin cargar)');
+    if (shownC < totalC) parts.push(shownC + ' de ' + totalC + ' columnas');
+    return parts.length ? 'Mostrando ' + parts.join(' y ') + '. Pídeme una lista más corta (por ejemplo, un solo día o una categoría) para ver el resto.' : '';
+  }
   function readOnlyView(p) {
     var r = p.result || {};
     if (p.type === 'consulta') {
       var filas = Array.isArray(r.filas) ? r.filas.slice(0, 30).map(function (f) { return (Array.isArray(f) ? f : []).slice(0, 8).map(function (c) { return typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : str(c, 120); }); }) : [];
+      // El tope (30 filas × 8 columnas) ya no recorta en silencio: se cuenta lo recibido y se dice cuánto se muestra. Si el Worker manda el contrato
+      // opcional `result.contrato` (na.result v1: cobertura.filas_total / filas_mostradas / truncado, tabla.paginacion.hay_mas) se usa; si no viene, se calcula con las filas locales.
+      var rowsN = Array.isArray(r.filas) ? r.filas.length : 0, colsN = Array.isArray(r.columnas) ? r.columnas.length : 0;
+      if (Array.isArray(r.filas)) r.filas.forEach(function (f) { if (Array.isArray(f) && f.length > colsN) colsN = f.length; });
+      var cov = r.contrato && typeof r.contrato === 'object' && r.contrato.cobertura && typeof r.contrato.cobertura === 'object' ? r.contrato.cobertura : {};
+      var pag = r.contrato && r.contrato.tabla && typeof r.contrato.tabla === 'object' && r.contrato.tabla.paginacion && typeof r.contrato.tabla.paginacion === 'object' ? r.contrato.tabla.paginacion : {};
+      var totalN = Number.isInteger(cov.filas_total) && cov.filas_total >= rowsN && cov.filas_total <= 10000000 ? cov.filas_total : rowsN;
+      var hayMas = pag.hay_mas === true && totalN === rowsN;
       return {kind: 'table', title: str(r.titulo || 'Consulta', 100), columns: Array.isArray(r.columnas) ? r.columnas.slice(0, 8).map(function (c) { return str(c, 40); }) : [],
-        rows: filas, text: r.error ? str(r.texto, 300) : '', warnings: r.truncado ? ['Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.'] : [],
+        rows: filas, text: r.error ? str(r.texto, 300) : '', warnings: r.truncado || cov.truncado === true ? ['Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.'] : [],
+        trim: trimNote(Math.min(30, rowsN), totalN, Math.min(8, colsN), colsN, hayMas), totalRows: totalN, shownRows: Math.min(30, rowsN), totalCols: colsN, shownCols: Math.min(8, colsN),
         note: 'Datos leídos del servidor. No cambia nada.'};
     }
     if (p.type === 'pasos') return {kind: 'steps', title: str(p.title || 'Cómo hacerlo', 100), steps: (Array.isArray(p.pasos) ? p.pasos : []).slice(0, 8).map(function (x) { return str(x, 200); }), go: !!p.pantalla};
