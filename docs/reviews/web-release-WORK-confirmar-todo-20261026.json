@@ -1,0 +1,216 @@
+{
+  "reviewed_commit": "88eaa2ff53f2901fc6034a4a60dd7ebf030c064a",
+  "kind": "independent-automated",
+  "result": "pass",
+  "reviewer": "ASISTENTE 3 (revisión independiente de solo lectura; veredicto: SEGURO CON OBSERVACIONES) + ASISTENTE 4 (revisión independiente de solo lectura; veredicto: APROBADO). El commit 88eaa2ff está firmado como «ASISTENTE 2 <a2@local>»: la independencia es de revisión (otros agentes, solo lectura), no de identidad git; mismo equipo de agentes.",
+  "production_base": "51e4f2f219295997ab82a1994455ef9d5e5b213a",
+  "rollback_ref": "51e4f2f219295997ab82a1994455ef9d5e5b213a",
+  "risk": "high",
+  "authorization": "Propietario, 26/10/2026, en la sala: «Sí, Confirmar todo sin PIN y publícalo cuando esté listo»; en mensaje directo: «confirmar todo»; y en la sala: «no había dicho que no es necesario mi ok, si les doy una misión terminenlo y publiquenlo no esperen una orden». Alcance autorizado: SOLO Web, paquete B «Confirmar todo» (REQUIRE_PIN_FOR_BATCH=false). NO cubre Worker, endpoint de lote, «Deshacer», subir el tope de 5/min, FEATURE_LOCKS, pos-permissions.js, PIN de anular venta ni migraciones. (Citas transmitidas por el coordinador desde la sala/DM del dueño; no las oyeron directamente los revisores.)",
+  "fecha_lima": "2026-10-26",
+  "evidence": {
+    "contenido": "Paquete B «Confirmar todo» (REQUIRE_PIN_FOR_BATCH=false) del asistente en WORK, solo Web. PR #1065 (rama feat/work-confirmar-todo, commit único 88eaa2ff, padre 51e4f2f2 = producción). Fusionado con merge commit puro e220c85bbb45feb18fe94d37c515716c7d37a092 (padres 51e4f2f2 y 88eaa2ff); árbol 0f4ea2e54aaeb17acf6368ebfeb231bafdd21f9d, idéntico al de 88eaa2ff.",
+    "alcance": "6 archivos, +701/−52: POS/js/modules/asistente/asistente-core.js, POS/js/work-host.js, POS/work/work-canon-bridge.js (publicables) y 3 pruebas. Sin Worker, endpoint de lote, Deshacer, tope 5/min, migraciones, .github, ops, tools, pos-permissions.js, FEATURE_LOCKS, sw.js ni PIN existente.",
+    "permisos": "Solo la sesión Admin/dueño ve y puede usar «Confirmar todo»; los empleados no reciben la tarjeta ni pueden confirmar; el Worker revisa el rol en cada confirmación y cada cambio lleva su firma de un solo uso.",
+    "veredicto_a3": "SEGURO CON OBSERVACIONES",
+    "veredicto_a4": "APROBADO (sin cambios bloqueantes). Contenido idéntico a c1742e4c (6/6 blobs). Observación de redacción: la descripción del PR dice 'solo roles con acceso a WORK'; lo correcto es 'solo la sesión Admin/dueño'.",
+    "a3": {
+      "sha_revisado": {
+        "commit": "88eaa2ff53f2901fc6034a4a60dd7ebf030c064a (PR #1065, rama feat/work-confirmar-todo; un solo commit; autor «ASISTENTE 2 <a2@local>»)",
+        "padre": "51e4f2f219295997ab82a1994455ef9d5e5b213a (producción viva: build-info público = 51e4f219 al revisar, 07:40 Lima)",
+        "arbol": "0f4ea2e54aaeb17acf6368ebfeb231bafdd21f9d: IDÉNTICO al árbol de 51e4f2f2 + asistente-capacidad-v3-B-sobre-live-51e4f2f2.patch aplicado con git apply (git write-tree = 0f4ea2e5…; git diff --cached contra 88eaa2ff = 0 líneas). Líneas +/− idénticas (mismo multiconjunto, md5 a68742d4…) a las de B v3 sobre main d971eaad (c1742e4c, que no está en el remoto; se comparó con su parche).",
+        "archivos": [
+          "POS/js/modules/asistente/asistente-core.js",
+          "POS/js/work-host.js",
+          "POS/work/work-canon-bridge.js",
+          "tests/asistente/assistant-capacidad-a2.test.mjs",
+          "tests/e2e/work-confirmar-un-toque.spec.ts",
+          "tests/work/work-capacidad.test.mjs"
+        ],
+        "tamano": "+701/−52"
+      },
+      "comprobaciones_automaticas": "Sin Worker, migraciones, .github, ops, tools, pos-permissions.js, sw.js, asistente-ui.js ni PIN existente en el diff (git diff --name-only 51e4f2f2 88eaa2ff = los 6 archivos). 0 líneas añadidas con innerHTML/outerHTML/insertAdjacent/eval/new Function/document.write/fetch/localStorage/postMessage nuevo/setAttribute('on…'). 'var REQUIRE_PIN_FOR_BATCH = false;' es la ÚNICA asignación (POS/js/work-host.js:358; solo se lee en :337 y :360; es var local de la IIFE, no se expone). Solo el Admin ve y ejecuta «Confirmar todo» (work-host.js:318 y :521 vía ownerDataAllowed → NA_ROLES.isOwner() con sesión confirmada); solo precio y ajuste de un toque sin avisos entran en el lote.",
+      "pruebas_ejecutadas": "Node 22.23.4, archivo por archivo con restauración del árbol, 414 archivos: 51e4f2f2 = 4078 pruebas, 84 fallos; 88eaa2ff = 4120 pruebas, 84 fallos; los 84 son los mismos (0 fallos NUEVOS; 3 de cloud-sync por falta de esbuild/exceljs). work-capacidad 47/47 y assistant-capacidad-a2 15/15 con B (12 y 8 sin B). Playwright local (servidor estático, sin producción ni sesión), claro y oscuro: base 51e4f2f2 = 91/91 + 91/91; 88eaa2ff = 98/98 + 98/98 (los 91 de work-confirmar-un-toque, work-default, pos-smoke, pwa-update-banner, canon-mobile-home, canon-phone-sale + 7 de zz-a3-n2/n2c a 390/768/1280 px: lote de 30, botón en vista, sin desborde horizontal).",
+      "observaciones": [
+        "info (resuelta por el dueño): H-1 «sin PIN» ya autorizada: «Sí, Confirmar todo sin PIN y publícalo cuando esté listo».",
+        "baja: el comentario de POS/js/work-host.js:356 sigue diciendo «decisión del dueño pendiente»; A2 lo corrige en un commit aparte DESPUÉS de publicar B (no invalida este recibo).",
+        "baja: la descripción del PR #1065 dice «solo roles con acceso a WORK»; es PARCIAL: lo exacto es «solo el Admin (dueño) con sesión confirmada por el servidor». Ajustar el texto (no el código).",
+        "baja N-7: el resumen final del lote sale de pantalla (work-canon-bridge.js ~:300).",
+        "baja N-8: loteEl no se reinicia con «Nueva conversación» (work-canon-bridge.js ~:280-284).",
+        "baja N-9/N-10/N-11: texto impreciso con «Detener» en espera (asistente-core.js ~:1285), cuenta X+K≠N con guardado en curso (work-host.js ~:547-556) y «1 guardados» (work-host.js ~:563).",
+        "baja N-12: con WORK cerrado y respuesta no ok y no de red (410/403/429/409/otro 4xx) la tarjeta se suelta en silencio (work-host.js ~:417-424); no es regresión.",
+        "info N-13: el gancho del tope por minuto está doblemente inerte (el Worker no manda limits; asistente-ui.js:1153 no los copia).",
+        "info N-14/N-15/N-16: confirmLimit acepta cadenas numéricas; rec.detached es bandera muerta; finishDetached no valida que el formulario abierto sea el de la tarjeta (ventana de milisegundos).",
+        "info: WORK no tiene modo noche; el parpadeo oscuro→claro queda como decisión del dueño."
+      ],
+      "NO_verificado_por_asistente_3": [
+        "Teléfono real, Safari/iOS, scroll táctil, bloqueo de pantalla durante un lote",
+        "Motor real del asistente + Worker de punta a punta con un lote real (navegador con motor falso; work-host/core reales con puerta real en pruebas Node)",
+        "OpenCode Role Map CI sobre el SHA del merge (aún no existe)",
+        "La cita del dueño: la recibo de la sala, no la oí directamente",
+        "Cómo cuenta el Worker las confirmaciones con 2 aparatos o burbuja vieja"
+      ]
+    },
+    "a4": {
+      "fecha_lima": "2026-10-26",
+      "sha_y_padres": "88eaa2ff53f2901fc6034a4a60dd7ebf030c064a; padre único 51e4f219295997ab82a1994455ef9d5e5b213a; árbol 0f4ea2e54aaeb17acf6368ebfeb231bafdd21f9d; refs/pull/1065/head = feat/work-confirmar-todo = 88eaa2ff",
+      "autoria": "author ASISTENTE 2 <a2@local> (26-oct 00:45:59 -0500); committer quijanopomae-crypto (26-oct 06:52:26 -0500)",
+      "frescura": "origin/feature/v1.3-mobile-cloud = 51e4f219295997ab82a1994455ef9d5e5b213a (sin avance) al 26-oct 07:32 Lima; PR draft, mergeable_state clean.",
+      "build_info_publico_al_escribir": {
+        "hash": "51e4f219295997ab82a1994455ef9d5e5b213a",
+        "date": "2026-10-26T11:50:42Z",
+        "leido": "2026-10-26 07:32 Lima",
+        "produccion_sin_REQUIRE_PIN_FOR_BATCH": true,
+        "nota": "el SHA vivo debe releerse justo antes de activar y igualarse a approved_base/rollback_ref"
+      },
+      "contenido": "6 archivos, +701/-52: POS/js/modules/asistente/asistente-core.js, POS/js/work-host.js, POS/work/work-canon-bridge.js, tests/asistente/assistant-capacidad-a2.test.mjs, tests/e2e/work-confirmar-un-toque.spec.ts, tests/work/work-capacidad.test.mjs. Líneas +/- idénticas a c1742e4c y los 6 blobs git idénticos a los de c1742e4c (0 diferencias, ni de contexto).",
+      "allowed_paths_si_base_es_51e4f2f2": [
+        "POS/js/modules/asistente/asistente-core.js",
+        "POS/js/work-host.js",
+        "POS/work/work-canon-bridge.js"
+      ],
+      "no_incluido": [
+        "Worker / tools/cloudflare-lab",
+        "endpoint de lote",
+        "Deshacer",
+        "subir el tope 5/min",
+        "migraciones",
+        ".github",
+        ".opencode",
+        "ops/",
+        "tools/release",
+        "FEATURE_LOCKS",
+        "ownerAllowed",
+        "pos-permissions.js",
+        "sw.js",
+        "innerHTML/eval nuevos"
+      ],
+      "no_backend_change": true,
+      "pin": "REQUIRE_PIN_FOR_BATCH=false en POS/js/work-host.js:358 (única asignación). PIN de anular venta, cambios masivos fuera del asistente y permisos de empleado: sin cambios en el diff.",
+      "roles": "'Confirmar todo' solo para la sesión Admin: work-host.js:318 (plan.usable && ownerDataAllowed()), work-host.js:27-29, re-chequeo en :521 y :407; empleados: tarjetas de cambio denegadas (work-host.js:296-298, asistente-core.js:212-224); servidor: tools/cloudflare-lab/src/pos-assistant.js:2949 (403 forbidden_role) + token firmado de un solo uso. Costos solo dueño (asistente-core.js:194). La frase de la descripción del PR 'solo roles con acceso a WORK' es IMPRECISA (por amplia): sugerencia 'solo la sesión Admin/dueño'.",
+      "pruebas_node22": {
+        "base": "51e4f2f2",
+        "final": "88eaa2ff",
+        "fallos_nuevos": 0,
+        "suben": [
+          "work-capacidad 12->47",
+          "assistant-capacidad-a2 8->15"
+        ],
+        "estables": [
+          "work-host-session 7/7",
+          "work-cards 39/39",
+          "work-pre-flicker 7/7",
+          "sec-txt 6/6"
+        ],
+        "suite_completa": "414 archivos sobre c1742e4c (mismos blobs) vs d971eaad: 0 fallos nuevos; 21 archivos rojos idénticos en ambos (preexistentes/entorno)"
+      },
+      "simulaciones_a4": "sim-capacidad-v3-B-A4: 85 PASS/0 FAIL; v2B: 41/0; v2A: 72/1 (FAIL esperado: con B hay tarjeta de lote). 429 sin doble gasto de token, tope 30 tarjetas, token no llega al iframe, costos solo isOwner, 403 empleado detiene el lote, cierre de WORK a mitad sin token perdido.",
+      "ci_en_88eaa2ff_pr": {
+        "all_on": "88eaa2ff53f2901fc6034a4a60dd7ebf030c064a",
+        "CANON Critical CI": {
+          "run_id": 40318780432,
+          "job": "critical-regression",
+          "event": "pull_request",
+          "attempt": 1,
+          "result": "success"
+        },
+        "E2E Smoke CI": {
+          "run_id": 40318780176,
+          "job": "e2e-smoke",
+          "event": "pull_request",
+          "attempt": 1,
+          "result": "success",
+          "duracion": "29 min 50 s de un tope de 30 min (paso 'Run E2E smoke tests' 29,3 min): riesgo de cancelación por tiempo en el merge/target"
+        },
+        "OpenCode Role Map CI": "no corre en el PR (filtro de rutas: este diff no toca .opencode/tools/release/etc.); sí corre en el push al merge commit en feature/v1.3-mobile-cloud; la puerta lo exige en el target exacto",
+        "otros": {
+          "Visual Regression": {
+            "run_id": 40318780124,
+            "job": "visual",
+            "event": "pull_request",
+            "result": "success",
+            "requerido_por_la_puerta": false
+          }
+        }
+      },
+      "ci_target_exacto": "PENDIENTE: run_id de los 3 CI en el SHA del target tras el merge",
+      "important_findings": [],
+      "observaciones": [
+        "La descripción del PR debe decir 'solo la sesión Admin/dueño' en vez de 'roles con acceso a WORK' (no exige cambiar el commit).",
+        "Comentario obsoleto work-host.js:356 ('decisión del dueño pendiente'): se corrige después; si se cambia POS/js/work-host.js cambia el SHA y requiere nueva revisión de que sea solo comentario.",
+        "Un toque puede cambiar hasta 30 productos sin PIN; no hay Deshacer del lote (fuera de alcance según el dueño). Probar en teléfono con 2-3 productos de prueba y con empleado (no ve 'Confirmar todo').",
+        "e2e-smoke al límite de 30 min: puede requerir reintento en el target.",
+        "Merge commit, no squash/rebase; tras reviewed_commit solo el recibo y el activador."
+      ],
+      "limitations": [
+        "revisión local/de solo lectura; no equivale a verificación live",
+        "sin prueba en teléfono real ni sesión de empleado",
+        "Worker leído en el árbol del commit, no el desplegado",
+        "A4 y el autor son agentes del mismo equipo (commit firmado como ASISTENTE 2): independencia de revisión, no de identidad git"
+      ]
+    },
+    "ci_en_el_pr_88eaa2ff": {
+      "CANON Critical CI": {
+        "run_id": 40318780432,
+        "result": "success"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40318780176,
+        "result": "success",
+        "duracion": "29:50 de 30 min (sin margen; riesgo de cancelación por tope de tiempo)"
+      },
+      "Visual Regression": {
+        "run_id": 40318780124,
+        "result": "success"
+      }
+    },
+    "ci_en_el_merge_e220c85b": {
+      "CANON Critical CI": {
+        "run_id": 40324990030,
+        "event": "push",
+        "result": "success"
+      },
+      "E2E Smoke CI": {
+        "run_id": 40324990032,
+        "event": "push",
+        "result": "success",
+        "run_attempt": 1
+      },
+      "OpenCode Role Map CI": {
+        "run_id": 40324990091,
+        "event": "push",
+        "result": "success"
+      },
+      "Visual Regression": {
+        "run_id": 40325001493,
+        "event": "workflow_dispatch",
+        "result": "success",
+        "requerido_por_la_puerta": false
+      }
+    },
+    "respaldo_bd": {
+      "workflow": "Owner Backup Recovery Drill",
+      "run_id": 40325039821,
+      "head_sha": "e220c85bbb45feb18fe94d37c515716c7d37a092",
+      "result": "success",
+      "url": "https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/40325039821",
+      "genero": "Export SQL de la BD de producción (cf2c83d3…, 2 533 735 bytes, sha256 421d492546ffe74fff0804c09932f62ea987c16a5f35c83d98d4d9250db21de6) guardado en R2 nuevo-amanecer-prod-v2-backups con clave recovery-drills/2026-10-26T12-46-09Z-e220c85bbb45feb18fe94d37c515716c7d37a092.sql (+ .manifest.json, UTC), restaurado en una BD temporal verificada y luego borrada. Snapshot: 408 productos, 31 clientes, 313 créditos, 131 pagos."
+    },
+    "ci_flaky": "E2E Smoke es lento: 29:50 de 30 min en el PR #1065; si se cancela por tiempo se relanza solo el job fallido una vez. En el merge e220c85b pasó a la primera. Prueba inestable conocida: compras-factura-duplicada.spec.ts:76 (empleado).",
+    "condiciones_antes_de_activar": [
+      "SHA vivo = 51e4f2f2 igual a la base (verify lo comprueba)",
+      "Respaldo de BD fresco hecho antes de publicar (run 40325039821)",
+      "3 checks exactos en verde sobre el target_commit (el commit de este recibo)",
+      "Entre 88eaa2ff y el target_commit solo cambia este archivo",
+      "allowed_paths = exactamente los 3 archivos POS/ de B",
+      "Sin Worker/Deshacer/endpoint de lote/tope 5 por min",
+      "Rollback: commit de reversión a 51e4f2f2 (sin force-push); ?work=0 rápido"
+    ],
+    "limitations": [
+      "revisión local/de solo lectura; no equivale a verificación live",
+      "falta prueba manual en teléfono real con lote real de productos de prueba, sin Pagar/Cobrar",
+      "Worker real con IA y 429 real solo simulados",
+      "este recibo cubre solo la Web (POS/**)"
+    ]
+  }
+}
