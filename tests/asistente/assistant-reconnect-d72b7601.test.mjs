@@ -52,7 +52,7 @@ test('confirmRemote: corte → UN reintento automático con el MISMO cuerpo y «
   let rr = 0; const r4 = await c4(compra('c2'), null, { onRetry: () => { rr++; } }); assert.equal(sent.length, 1); assert.equal(rr, 0); assert.equal(r4.error, 'fields_required'); assert.equal(r4.status, 422);
 });
 
-test('puerta: corte o 5xx → bloqueada con «Sin conexión. Toque Reintentar» y el cuerpo guardado se reenvía igual; 200 o 4xx real → desbloqueada', async () => {
+test('puerta: corte o 5xx → bloqueada con «Sin conexión. Toca Reintentar» y el cuerpo guardado se reenvía igual; 200 o 4xx real → desbloqueada', async () => {
   let n = 0; const bodies = [], answers = [];
   const deps = { roles: () => owner, online: () => true, productos: () => [], openPurchase: () => ({ querySelector: () => null }), fillPurchase: () => true, navigate: () => {},
     confirm: async (pp, rv, o) => { n++; const body = (o && o.body) || { token: pp.confirm_token, manual: C.fillValues(pp), review: rv }; bodies.push(body); const a = answers.shift();
@@ -62,7 +62,7 @@ test('puerta: corte o 5xx → bloqueada con «Sin conexión. Toque Reintentar» 
       return { ok: true, operation_id: 'AST-9', type: 'compra', proposal: JSON.parse(JSON.stringify({ ...pp, confirm_token: undefined })) }; } };
   const g = C.createGate(deps), p = compra('c1'), key = g.add(p);
   answers.push('cut'); const r1 = await g.execute(key, { confirmed: true, review: { op: 'A', accept: [], drop: [] } });
-  assert.equal(r1.locked, true); assert.equal(r1.msg, C.NO_LINK_MSG); assert.equal(C.NO_LINK_MSG, 'Sin conexión. Toque Reintentar'); assert.equal(g.locked(key), true); assert.equal(g.state(key), 'pending');
+  assert.equal(r1.locked, true); assert.equal(r1.msg, C.NO_LINK_MSG); assert.equal(C.NO_LINK_MSG, 'Sin conexión. Toca Reintentar'); assert.equal(g.locked(key), true); assert.equal(g.state(key), 'pending');
   const v = C.confirmFailureView(r1); assert.equal(v.locked, true); assert.equal(v.button, 'Reintentar'); assert.equal(v.again, false, 'sin «Pedir de nuevo» editable');
   // 5xx: sigue bloqueada, mismo cuerpo, aunque cambien lo escrito y las filas
   p._manual.documento = 'F001-77777777'; answers.push('503'); const r2 = await g.execute(key, { confirmed: true, review: { op: 'A', accept: [0], drop: [] } });
@@ -81,7 +81,7 @@ test('409 already_confirmed_same_session con la propuesta firmada (sin manual) �
     openPurchase: () => { opened++; return { querySelector: () => null }; }, fillPurchase: (w, ap) => { filled = { proveedor: C.purchaseValue(ap, 'proveedor'), documento: C.purchaseValue(ap, 'documento') }; return true; },
     confirm: async () => { const r = { ok: false, error: 'already_confirmed_same_session', status: 409, operation_id: 'AST-1', type: 'compra', proposal: signed }; Object.defineProperty(r, 'sentBody', { value: sentBody }); return r; } };
   const g = C.createGate(deps), key = g.add(p); const r = await g.execute(key, { confirmed: true });
-  assert.equal(r.ok, true); assert.equal(r.code, 'already_confirmed_same_session'); assert.equal(r.msg, 'Esta compra ya se confirmó. Corrija los datos en Nueva compra.'); assert.equal(C.SAME_SESSION_MSG, r.msg);
+  assert.equal(r.ok, true); assert.equal(r.code, 'already_confirmed_same_session'); assert.equal(r.msg, 'Esta compra ya se confirmó. Corrige los datos en Nueva compra.'); assert.equal(C.SAME_SESSION_MSG, r.msg);
   assert.equal(opened, 1); assert.deepEqual(filled, { proveedor: 'Bodega Juan', documento: 'F001-00054321' }, 'lo escrito sale del cuerpo que guardó el celular, no del servidor');
   assert.equal(g.state(key), 'done'); assert.doesNotMatch(r.msg, /otro aparato|otra sesión/);
   // propuesta que no es la de la tarjeta → no se abre nada

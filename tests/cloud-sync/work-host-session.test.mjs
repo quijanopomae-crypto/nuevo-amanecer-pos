@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const source=readFileSync('POS/js/work-host.js','utf8');
-function fixture(confirmed=false,owner=false){
+function fixture(confirmed=false,owner=false,extra={}){
  const nodes=new Map(),listeners={},sent=[],frames=[];
  const home={classList:{contains:()=>true}};
  const body={classList:{add(){},remove(){}},appendChild(el){if(el.id)nodes.set(el.id,el);}};
  const create=(tag)=>{const element=({setAttribute(){},appendChild(){},addEventListener(){},remove(){nodes.delete(this.id);},contentWindow:{postMessage(m){sent.push(m);}}});if(tag==='iframe')frames.push(element);return element;};
- const root={document:{body,head:{appendChild(){}},readyState:'complete',createElement:create,getElementById:id=>id==='pageMenu'?home:nodes.get(id),querySelectorAll:()=>[{querySelector:q=>({textContent:q==='.qs-label'?'Ventas hoy':'S/ 100'})}]},location:{origin:'https://pos.test',search:'',hostname:'pos.test'},NA_HOSTED_CONFIG:{environment:'production'},NA_ROLES:{confirmed,role:owner?'owner':'empleado',isOwner:()=>owner,api:async()=>({reply:'real'})},addEventListener:(e,fn)=>listeners[e]=fn,setInterval(){},MutationObserver:class{observe(){}}};
+ const root={document:{body,head:{appendChild(){}},readyState:'complete',createElement:create,getElementById:id=>id==='pageMenu'?home:nodes.get(id),querySelectorAll:()=>[{querySelector:q=>({textContent:q==='.qs-label'?'Ventas hoy':'S/ 100'})}]},location:{origin:'https://pos.test',search:'',hostname:'pos.test'},NA_HOSTED_CONFIG:{environment:'production'},NA_ROLES:{confirmed,role:owner?'owner':'empleado',isOwner:()=>owner,api:async()=>({reply:'real'})},addEventListener:(e,fn)=>listeners[e]=fn,setInterval(){},setTimeout:(fn)=>setTimeout(fn,1),MutationObserver:class{observe(){}},
+  NA_ASISTENTE:{engine:{ready:()=>true,owner:()=>owner,prepare:t=>({text:t,context:{products:[{id:'1',nombre:'Arroz',precio:5,stock:3}]},cards:[]}),canExecute:()=>({ok:true}),expiry:()=>Date.now()+300000,
+    add:p=>p.id,cancel(){},forget(){},forgetAll(){},state:()=>'pending',execute:async()=>({ok:true,msg:'ok'}),go:()=>({ok:true}),openDocument:async()=>({ok:true}),...(extra.engine||{})}},...(extra.root||{})};
  vm.runInNewContext(source,{window:root,URLSearchParams,Array,Object,String,Error});
  return {root,nodes,listeners,sent,frames};
 }

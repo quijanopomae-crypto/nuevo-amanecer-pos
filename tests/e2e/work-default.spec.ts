@@ -32,6 +32,8 @@ test.describe('WORK hosted design integration (synthetic browser, no production 
     await page.evaluate(() => {
       const roles = (window as any).NA_ROLES;
       if (!roles) throw new Error('La sesión de roles no se montó');
+      // El motor del asistente original (nombres tapados + contexto) se prueba en tests/asistente y tests/work; aquí solo se verifica la ruta.
+      (window as any).NA_ASISTENTE = { engine: { ready: () => true, prepare: (t: string) => ({ text: t, context: { screen: 'pageMenu', products: [] }, cards: [] }) } };
       roles.api = async (path: string, body: any) => {
         if (path !== '/auth/assistant/chat') throw new Error('Ruta incorrecta');
         if (body.text !== '¿Cuánto vendí hoy?') throw new Error('Consulta incorrecta');
