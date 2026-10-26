@@ -1246,7 +1246,7 @@
     doc.querySelectorAll('#naDevList').forEach(function (list) { var host = list.parentElement; if (host && !host.querySelector('.na-asst-acc')) decorateOne(host); });
   }
   function decorateOne(host) {
-    var box = el('div', 'na-asst-acc'); box.innerHTML = '<h4>Asistente en aparatos de empleado</h4><p class="na-asst-acc-n">Apagado por defecto. Al cambiar se pide tu PIN y se guarda solo. Los cambios de stock, precio o compra que proponga el asistente los confirmas tú con un toque, sin PIN (el PIN se sigue pidiendo para anular ventas, reiniciar y dar permisos).</p><div class="na-asst-acc-l">Cargando…</div>';
+    var box = el('div', 'na-asst-acc'); box.innerHTML = '<h4>Asistente en aparatos de empleado</h4><p class="na-asst-acc-n">Apagado por defecto. Al cambiar se pide tu PIN y se guarda solo. Los cambios de stock, precio o compra que proponga el asistente los confirmas tú con un toque, sin PIN. El PIN se sigue pidiendo en las acciones de alto riesgo: anular ventas, reiniciar, dar permisos y los cambios masivos.</p><div class="na-asst-acc-l">Cargando…</div>';
     host.appendChild(box);
     decorateOwners(host, box);
     get(ACCESS_PATH).then(function (d) { paintAccess(box, d); }, function () { box.querySelector('.na-asst-acc-l').textContent = 'No se pudo cargar. Revisa internet.'; });
@@ -1536,6 +1536,14 @@
   var engine = {
     owner: function () { return isOwnerAccess() && !!root.NA_ROLES && typeof root.NA_ROLES.isOwner === 'function' && root.NA_ROLES.isOwner() === true; },
     ready: function () { return !!access && isAdmin(); },
+    // 'pending' = el ping de acceso aún no respondió; 'denied' = este aparato no es Admin (asistente apagado o sin permiso); 'ok' = listo.
+    accessState: function () { return !access ? 'pending' : isAdmin() ? 'ok' : 'denied'; },
+    // Copia (solo lectura) de lo que el POS tiene hoy de un producto: sirve para revisar riesgos y comprobar lo guardado. No escribe nada.
+    product: function (id) {
+      var list = deps.productos() || [], i, x;
+      for (i = 0; i < list.length; i++) { x = list[i]; if (x && String(x.id) === String(id)) return { precio: x.precio, costo: x.costo, stock: x.stock, controla: x.controla }; }
+      return null;
+    },
     // Cuerpo del chat: texto con nombres tapados, contexto de productos (máx. 25, costo solo si NA_ROLES.isOwner()) y estado de las tarjetas.
     prepare: function (text) {
       if (!access || !isAdmin()) return null;

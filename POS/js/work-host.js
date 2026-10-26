@@ -118,9 +118,14 @@
     if (/rate_limited|HTTP_429/.test(c) && Number(retryAfter) > 0 && Number(retryAfter) <= 300) msg = 'Espera ' + Math.ceil(Number(retryAfter)) + ' segundos e intenta de nuevo.';
     return msg;
   }
-  function plain(text) {
+  // Textos heredados del motor que hablan de «usted» o de «la compra»: aquí se dicen en «tú» y según el tipo de tarjeta.
+  function tu(text, type) {
+    return String(text == null ? '' : text).replace(/Vuelva a entrar/g, 'Vuelve a entrar').replace(/Ábrala/g, 'Ábrela')
+      .replace(/pida la compra de nuevo/g, type === 'compra' ? 'pide la compra de nuevo' : 'pide el cambio de nuevo');
+  }
+  function plain(text, type) {
     var C = core(), t = String(text == null ? '' : text);
-    return C && typeof C.looksTechnical === 'function' && C.looksTechnical(t) ? GENERIC_ERROR : t;
+    return tu(C && typeof C.looksTechnical === 'function' && C.looksTechnical(t) ? GENERIC_ERROR : t, type);
   }
   var ACCESS_CODES = {assistant_off:1,forbidden_role:1,admin_only:1};
   function waitEngine(ms) {
@@ -129,6 +134,7 @@
       (function poll() {
         var e = engine();
         if (e && typeof e.ready === 'function' && e.ready()) { resolve(e); return; }
+        if (e && typeof e.accessState === 'function' && e.accessState() === 'denied') { resolve(null); return; }
         if (Date.now() - t0 >= ms) { resolve(null); return; }
         root.setTimeout(poll, 250);
       })();
@@ -155,10 +161,31 @@
   }
   // Un toque (sin segundo «Guardar») solo para precio y ajuste de stock del Admin, y solo si la tarjeta no trae avisos de riesgo:
   // con aviso (precio ~100 veces mayor, cambio >50%, bajo costo, stock negativo, cantidad enorme) se conserva el segundo paso a propósito.
+  // Los avisos los calcula el servidor con el contexto que mandó este aparato; por eso aquí se VUELVEN a calcular con lo que el POS tiene ahora
+  // y, si no se puede comprobar (producto ausente, precio/stock distinto al de la propuesta, aviso que no vino), se trata como riesgo: se abre la ficha.
+  function near(a, b, tol) { return isFinite(a) && isFinite(b) && Math.abs(a - b) <= (tol || 0.005); }
+  function localProduct(p) {
+    var e = engine();
+    try { return e && typeof e.product === 'function' && p && p.product_id != null ? e.product(p.product_id) : null; } catch (_) { return null; }
+  }
   function oneTap(p) {
     if (!ownerDataAllowed()) return false;
-    if (p.type === 'precio') return p.quisoDecir == null && !p.cambioGrande && !p.bajoCosto;
-    if (p.type === 'ajuste') return !p.quedaNegativo && !p.grande;
+    var loc = localProduct(p);
+    if (!loc) return false;
+    if (p.type === 'precio') {
+      if (typeof p.cambioGrande !== 'boolean' || typeof p.bajoCosto !== 'boolean' || p.quisoDecir != null || p.cambioGrande || p.bajoCosto) return false;
+      var cur = Number(loc.precio), nuevo = Number(p.precio_nuevo), costo = Number(loc.costo);
+      if (!(cur > 0) || !(nuevo > 0) || !near(cur, Number(p.precio_actual))) return false;
+      if (Math.abs(nuevo - cur) / cur > 0.5) return false;
+      if (costo > 0 && nuevo < costo) return false;
+      return true;
+    }
+    if (p.type === 'ajuste') {
+      if (typeof p.quedaNegativo !== 'boolean' || typeof p.grande !== 'boolean' || p.quedaNegativo || p.grande) return false;
+      var stock = Number(loc.stock), q = Number(p.cantidad), after = stock + (p.tipo === 'entrada' ? q : -q);
+      if (loc.controla === false || loc.stock == null || !(q > 0) || q > 1000 || !near(stock, Number(p.stock_actual), 0.001)) return false;
+      return after >= 0 && near(after, Number(p.stock_despues), 0.001);
+    }
     return false;
   }
   function cardRows(p) {
@@ -216,7 +243,7 @@
       if (!CONFIRMABLE[p.type] || p.needsConfirm !== true || !p.id || !p.confirm_token || !e) return;
       var perm = e.canExecute(p), body = cardRows(p);
       view = {type: p.type, title: str(p.title || 'Propuesta', 100), rows: body.rows, warnings: body.warnings};
-      if (!perm || !perm.ok) { view.kind = 'denied'; view.note = plain(perm && perm.msg); view.key = 'dn-' + (++cardSeq); views.push(view); return; }
+      if (!perm || !perm.ok) { view.kind = 'denied'; view.rows = []; view.warnings = []; view.note = plain(perm && perm.msg, p.type); view.key = 'dn-' + (++cardSeq); views.push(view); return; }
       key = e.add(p);
       if (!key) return;
       if (needsReview(p)) {
@@ -239,20 +266,38 @@
   }
   function closeToPos() { temporarilyLegacy = true; close(); }
   // Guarda el formulario EXISTENTE del POS que el motor acaba de abrir y llenar (mismo camino que el botón «Guardar»; el Admin no tiene PIN aquí).
-  // Si el formulario sigue abierto después de unos segundos (validación o aviso), no se fuerza nada: se muestra el formulario para que la persona lo revise.
+  // Devuelve 'saved' (el formulario cerró), 'open' (terminó pero el formulario sigue abierto: validación o aviso; se muestra para revisar),
+  // 'pending' (el guardado sigue en curso: NO se cierra WORK ni se repite) o 'none' (no había formulario abierto).
   async function saveOpenForm(type) {
     var fn = type === 'precio' ? root.guardarProd : root.guardarMovInv, modal = doc.getElementById(type === 'precio' ? 'mProd' : 'mMovInv');
-    if (typeof fn !== 'function' || !modal || !modal.classList || !modal.classList.contains('open')) return false;
-    try {
-      await Promise.race([Promise.resolve(fn()), new Promise(function (r) { root.setTimeout(r, 8000); })]);
-    } catch (_) {}
-    return !modal.classList.contains('open');
+    if (typeof fn !== 'function' || !modal || !modal.classList || !modal.classList.contains('open')) return 'none';
+    var settled = false, run;
+    try { run = Promise.resolve(fn()).then(function () { settled = true; }, function () { settled = true; }); } catch (_) { settled = true; run = Promise.resolve(); }
+    function wait(ms) { return Promise.race([run, new Promise(function (r) { root.setTimeout(r, ms); })]); }
+    await wait(8000);
+    if (!settled) await wait(22000);
+    if (!settled) return 'pending';
+    return modal.classList.contains('open') ? 'open' : 'saved';
+  }
+  // Relee lo que el POS tiene ahora (hasta ~2,5 s) y compara con lo pedido: «Listo» solo si de verdad coincide.
+  async function verifySaved(p) {
+    var i, loc;
+    for (i = 0; i < 6; i++) {
+      loc = localProduct(p);
+      if (loc) {
+        if (p.type === 'precio' && near(Number(loc.precio), Number(p.precio_nuevo))) return true;
+        if (p.type === 'ajuste' && near(Number(loc.stock), Number(p.stock_despues), 0.001)) return true;
+      }
+      await new Promise(function (r) { root.setTimeout(r, 500); });
+    }
+    return false;
   }
   async function confirmCard(key) {
     var rec = cards[key], e = engine(), myGeneration = generation;
-    if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || !e) return;
+    if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || rec.done || !e) return;
     if (!ownerDataAllowed() && rec.p.type !== 'configuracion') { cardState(key, {state: 'failed', msg: 'Esta sesión ya no es de Admin. Vuelve a entrar como Admin y pide el cambio de nuevo.'}); return; }
     rec.busy = true;
+    var tapNow = oneTap(rec.p); // se decide ANTES de gastar el token, con los datos de ahora
     cardState(key, {state: 'working', msg: 'Guardando…'});
     var r;
     try { r = await e.execute(key, {}); } catch (err) { r = {ok: false, code: err && err.message, msg: GENERIC_ERROR}; }
@@ -261,26 +306,32 @@
     r = r || {ok: false};
     var p = rec.p;
     if (r.ok) {
-      if (oneTap(p)) {
-        var saved = await saveOpenForm(p.type);
+      rec.done = true; // desde aquí cualquier «Confirmar» tardío se ignora sin consultar la puerta
+      if (tapNow) {
+        var res = await saveOpenForm(p.type);
         if (myGeneration !== generation) return;
-        if (saved) { cardState(key, {state: 'done', msg: 'Listo. Se guardó al instante.'}); return; }
+        if (res === 'saved') {
+          if (await verifySaved(p)) { if (myGeneration === generation) cardState(key, {state: 'done', msg: 'Listo. Se guardó al instante.'}); return; }
+          if (myGeneration === generation) cardState(key, {state: 'failed', msg: 'No pude comprobar que el cambio quedó guardado. Revisa «' + str(p.nombre, 60) + '» en Inventario antes de repetirlo.'});
+          return;
+        }
+        if (res === 'pending') { cardState(key, {state: 'failed', msg: 'El guardado sigue en curso. No lo repitas: espera unos segundos y revisa «' + str(p.nombre, 60) + '» en Inventario.'}); return; }
         cardState(key, {state: 'done', msg: 'Abrí la pantalla con el cambio listo. Revisa y pulsa Guardar.'});
         root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
         return;
       }
-      cardState(key, {state: 'done', msg: plain(r.msg) || 'Listo.'});
+      cardState(key, {state: 'done', msg: plain(r.msg, p.type) || 'Listo.'});
       if (p.type !== 'configuracion') root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
       return;
     }
     var code = r.code || 'error';
     if (ACCESS_CODES[code]) {
       try { var a = root.NA_ASISTENTE; if (a && typeof a.refreshAccess === 'function') a.refreshAccess(); } catch (_) {}
-      cardState(key, {state: 'failed', msg: plain(r.msg) || friendly(code)}); return;
+      cardState(key, {state: 'failed', msg: plain(r.msg, p.type) || friendly(code)}); return;
     }
     if (code === 'confirm_expired' || code === 'HTTP_410') { cardState(key, {state: 'expired', msg: 'Esta propuesta venció. Pídela otra vez.'}); return; }
     var C = core(), view = C && typeof C.confirmFailureView === 'function' ? C.confirmFailureView(r, {type: p.type}) : null;
-    var msg = plain((view && view.msg) || r.msg) || friendly(code, r.retry_after_s);
+    var msg = plain((view && view.msg) || r.msg, p.type) || friendly(code, r.retry_after_s);
     if (Number(r.retry_after_s) > 0 && /rate_limited|HTTP_429/.test(code)) msg = friendly(code, r.retry_after_s);
     var kind = view ? view.kind : 'other';
     if (kind === 'blocked' || kind === 'review' || kind === 'fields' || kind === 'limit') {
@@ -317,8 +368,18 @@
       var e = await waitEngine(6000);
       if (requestGeneration !== generation || !sessionReady()) return;
       var prepared = e ? e.prepare(String(message || '')) : null;
-      if (!prepared) throw Error('El asistente todavía no está listo en este aparato. Espera unos segundos e intenta de nuevo. No se envió nada.');
-      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:String(prepared.text||'').slice(0,MAX_TEXT),history:history.slice(),context:prepared.context,cards:prepared.cards});
+      if (!prepared) {
+        var eng = engine(), st = eng && typeof eng.accessState === 'function' ? eng.accessState() : 'pending';
+        throw Error(st === 'denied'
+          ? 'Este aparato no tiene permiso para usar el asistente (solo el Admin lo usa). No se envió nada. El resto del sistema funciona igual.'
+          : 'El asistente no pudo conectarse todavía (revisa tu internet). No se envió nada. Intenta de nuevo en unos segundos o usa el asistente del POS.');
+      }
+      var finalText = String(prepared.text || '');
+      if (finalText.length > MAX_TEXT) {
+        respond(target,{action:'chat',id:id,ok:true,text:'Al tapar nombres y datos privados tu mensaje quedó de ' + finalText.length + ' letras y el máximo es ' + MAX_TEXT + '. No lo envié. Acórtalo e intenta de nuevo.'});
+        return;
+      }
+      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:finalText,history:history.slice(),context:prepared.context,cards:prepared.cards});
       if (requestGeneration !== generation || !sessionReady()) return;
       var out=answer && typeof answer==='object' ? answer : {};
       if (out.error) { var codeErr = new Error(String(out.error).slice(0,80)); codeErr.data = out; throw codeErr; }

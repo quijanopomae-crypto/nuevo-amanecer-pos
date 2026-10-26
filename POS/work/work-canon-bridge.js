@@ -191,7 +191,7 @@
     '.na-card h4{margin:0 0 7px;font-size:14px}.na-card table{width:100%;border-collapse:collapse}.na-card td,.na-card th{padding:4px 0;text-align:left;vertical-align:top;border-bottom:1px solid #eef3f6}'+
     '.na-card td:last-child,.na-card th:last-child{text-align:right;white-space:nowrap;padding-left:8px}.na-card .na-warn{background:#fff6e0;border-radius:8px;padding:6px 8px;margin-top:7px;color:#7a5200}'+
     '.na-card .na-note{font-size:11.5px;color:#577086;margin-top:7px}.na-card .na-res{margin-top:7px;font-weight:650}.na-card .na-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}'+
-    '.na-card button{border:0;border-radius:11px;padding:10px 14px;font:700 13px system-ui;min-height:42px}.na-card .na-ok{background:linear-gradient(120deg,#073958,#0a90ae);color:#fff}'+
+    '.na-card button{border:0;border-radius:11px;padding:10px 14px;font:700 14px system-ui;min-height:44px}.na-card .na-ok{background:linear-gradient(120deg,#052f49,#066f87);color:#fff}'+
     '.na-card .na-no{background:#eaf0f3;color:#16384e}.na-card button:disabled{opacity:.55}.na-card[data-st="done"]{border-color:#16a34a}.na-card[data-st="failed"],.na-card[data-st="blocked"]{border-color:#dc2626}';
   (doc.head||doc.body).appendChild(cardCss);
   var cardEls=new Map();

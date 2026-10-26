@@ -70,7 +70,7 @@ async function setup(page: Page, me: Me = { status: 200, body: ownerMe }) {
 
 const proposal = (extra: Record<string, unknown> = {}) => ({
   id: 'work-precio-1', type: 'precio', needsConfirm: true, confirm_token: 'sintetico.firma', title: 'Cambiar precio', nombre: 'Arroz historial',
-  product_id: PRODUCT_ID, precio_actual: 4.5, precio_nuevo: 5.2, ...extra
+  product_id: PRODUCT_ID, precio_actual: 4.5, precio_nuevo: 5.2, cambioGrande: false, bajoCosto: false, ...extra
 });
 
 // Motor de prueba: hace lo mismo que el ejecutor real de precio (abre la ficha del POS con el precio nuevo); el guardado lo hace WORK con el
@@ -86,6 +86,9 @@ async function installFakeEngine(page: Page, p: Record<string, unknown>) {
     w.NA_ASISTENTE = { engine: {
       ready: () => true, owner: () => true,
       prepare: (t: string) => ({ text: t, context: { screen: 'pageMenu', products: [] }, cards: [] }),
+      accessState: () => 'ok',
+      // Lee el producto del POS (solo lectura), igual que el motor real.
+      product: (id: string) => { const x = ((0, eval)('productos') as any[]).find((q: any) => String(q.id) === String(id)); return x ? { precio: x.precio, costo: x.costo, stock: x.stock, controla: x.controla } : null; },
       canExecute: () => ({ ok: true }), expiry: () => Date.now() + 300000, add: (x: any) => x.id,
       cancel() {}, forget() {}, forgetAll() {}, state: () => 'pending', go: () => ({ ok: true }), openDocument: async () => ({ ok: true }),
       execute: async () => {
