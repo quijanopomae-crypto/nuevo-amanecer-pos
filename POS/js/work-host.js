@@ -27,7 +27,8 @@
   function ownerDataAllowed() {
     try { return sessionReady() && !!(root.NA_ROLES && root.NA_ROLES.isOwner() === true); } catch (_) { return false; }
   }
-  function syncButton() { if (launcher) launcher.hidden = !isHome() || !!overlay || !featureEnabled || !temporarilyLegacy; }
+  var parked = false; // WORK oculto (no cerrado): conserva la conversación y las tarjetas mientras se ve la ficha del POS
+  function syncButton() { if (launcher) launcher.hidden = !isHome() || (!!overlay && !parked) || !featureEnabled || !temporarilyLegacy; }
   var identity = null;
   function syncView() {
     var roles = root.NA_ROLES;
@@ -71,7 +72,7 @@
     }
   }
   var history = [], generation = 0, busy = false, cards = Object.create(null), cardSeq = 0;
-  var MAX_TEXT = 1500;
+  var MAX_TEXT = 1500, MAX_CARDS = 30;
   function engine() { var a = root.NA_ASISTENTE; return a && a.engine ? a.engine : null; }
   function core() { return root.NA_ASISTENTE_CORE || null; }
   // Las tarjetas de confirmación viven en el motor del asistente original (puerta con token firmado de un solo uso).
@@ -86,11 +87,24 @@
   }
   function resetConversation() { dropCards(); history = []; generation++; busy = false; }
   function close() {
-    resetConversation();
+    resetConversation(); parked = false;
     if (overlay) { overlay.remove(); overlay=null; frame=null; doc.body.classList.remove('na-work-open'); }
     syncButton();
   }
+  // Oculta WORK sin destruirlo (la ficha del POS queda a la vista y el chat sigue ahí al volver con «✦ WORK»).
+  // Salir de Inicio, cambiar de rol o «Volver al POS» sí lo cierra del todo (close()).
+  function park() {
+    if (!overlay) return;
+    temporarilyLegacy = true; parked = true; overlay.hidden = true; doc.body.classList.remove('na-work-open'); syncButton();
+  }
+  function unpark() {
+    if (!overlay || !parked) return false;
+    parked = false; overlay.hidden = false; doc.body.classList.add('na-work-open'); syncButton();
+    if (frame) respond(frame.contentWindow, initPayload());
+    return true;
+  }
   function open() {
+    if (unpark()) return;
     if (overlay || !doc.body || !sessionReady()) return;
     overlay=doc.createElement('section');
     overlay.id='naWorkOverlay';
@@ -237,7 +251,7 @@
   }
   function buildCards(proposals) {
     var e = engine(), views = [];
-    (Array.isArray(proposals) ? proposals : []).slice(0, 8).forEach(function (p) {
+    (Array.isArray(proposals) ? proposals : []).slice(0, MAX_CARDS).forEach(function (p) {
       if (!p || typeof p !== 'object' || typeof p.type !== 'string') return;
       var view = null, key;
       if (p.needsConfirm !== true && (p.type === 'consulta' || p.type === 'pasos' || p.type === 'documento')) {
@@ -297,7 +311,7 @@
     }
     return false;
   }
-  async function confirmCard(key) {
+  async function confirmOnce(key) {
     var rec = cards[key], e = engine(), myGeneration = generation;
     if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || rec.done || !e) return;
     if (!ownerDataAllowed() && rec.p.type !== 'configuracion') { cardState(key, {state: 'failed', msg: 'Esta sesión ya no es de Admin. Vuelve a entrar como Admin y pide el cambio de nuevo.'}); return; }
@@ -327,11 +341,11 @@
           return;
         }
         cardState(key, {state: 'done', msg: 'Abrí la pantalla con el cambio listo. Revisa y pulsa Guardar.'});
-        root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
+        root.setTimeout(function () { if (myGeneration === generation) park(); }, 900);
         return;
       }
       cardState(key, {state: 'done', msg: plain(r.msg, p.type) || 'Listo.'});
-      if (p.type !== 'configuracion') root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
+      if (p.type !== 'configuracion') root.setTimeout(function () { if (myGeneration === generation) park(); }, 900);
       return;
     }
     var code = r.code || 'error';
@@ -343,6 +357,8 @@
     var C = core(), view = C && typeof C.confirmFailureView === 'function' ? C.confirmFailureView(r, {type: p.type}) : null;
     var msg = plain((view && view.msg) || r.msg, p.type) || friendly(code, r.retry_after_s);
     if (Number(r.retry_after_s) > 0 && /rate_limited|HTTP_429/.test(code)) msg = friendly(code, r.retry_after_s);
+    var Cr = core();
+    if (Cr && typeof Cr.isRateLimitResult === 'function' ? Cr.isRateLimitResult(r) : /rate_limited|HTTP_429/.test(code)) return {wait: Cr && typeof Cr.retryWaitSeconds === 'function' ? Cr.retryWaitSeconds(r, Date.now()) : 20}; // el servidor NO gastó la tarjeta: se reintenta solo
     var kind = view ? view.kind : 'other';
     if (kind === 'blocked' || kind === 'review' || kind === 'fields' || kind === 'limit') {
       cardState(key, {state: 'blocked', msg: msg.replace(/\s*Hazlo desde tu pantalla\.?/, '') + ' Ábrela en el asistente del POS.'}); return;
@@ -350,9 +366,51 @@
     if (rec.p && e.state(key) === 'denied') { cardState(key, {state: 'failed', msg: msg}); return; }
     cardState(key, {state: 'retry', msg: msg});
   }
+  // ---- 429 (tope de confirmaciones por minuto del servidor): se reintenta SOLO, con cuenta regresiva en esa tarjeta ----
+  // El Worker responde 429 ANTES de gastar el token, así que repetir con el mismo token es seguro (nunca se reintenta ante otro error).
+  // OJO: el tope (5 por minuto) está FIJO en el servidor (ASSISTANT_CONFIRMS_PER_MINUTE) y este paquete no lo adivina ni lo cambia: solo reacciona al 429
+  // con su retry_after_s. Si el dueño sube el tope en el Worker, aquí no hay que cambiar nada (no se espera de más: no hay espera antes del 429).
+  function sleep(ms) { return new Promise(function (r) { root.setTimeout(r, ms); }); }
+  // La firma dura 5 minutos: si venció (o está por vencer), no se espera ni se reintenta con ella; se pide regenerar solo esa tarjeta.
+  function tokenExpired(rec) {
+    var e = engine(), x = 0;
+    try { x = e && typeof e.expiry === 'function' ? Number(e.expiry(rec.p)) || 0 : 0; } catch (_) { x = 0; }
+    return x > 0 && Date.now() >= x - 2000;
+  }
+  // «Espera N segundos…» solo en la tarjeta que espera. true = terminó; false = WORK se cerró, cambió de sesión, el dueño canceló o la firma venció.
+  async function countdown(key, secs, gen) {
+    var C = core(), rec = cards[key];
+    for (var n = Math.max(1, Math.ceil(secs)); n > 0; n--) {
+      if (gen !== generation || !sessionReady() || !rec || rec.cancelled) return false;
+      if (tokenExpired(rec)) return false;
+      cardState(key, {state: 'waiting', msg: C && typeof C.waitText === 'function' ? C.waitText(n) : 'Espera ' + n + ' segundos…'});
+      await sleep(1000);
+    }
+    return gen === generation && sessionReady() && !rec.cancelled && !tokenExpired(rec);
+  }
+  async function confirmCard(key) {
+    var rec = cards[key], myGen = generation;
+    if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || rec.done || rec.waiting) return;
+    rec.waiting = true;
+    function stopped() { // por qué se cortó la espera: se dice claro, sin gastar nada
+      if (myGen !== generation || rec.cancelled) return true;
+      if (tokenExpired(rec)) { cardState(key, {state: 'expired', msg: 'Esta propuesta venció (la firma dura 5 minutos). Pídela otra vez.'}); return true; }
+      return false;
+    }
+    try {
+      for (var attempt = 0; attempt < 4; attempt++) {
+        if (tokenExpired(rec)) { stopped(); return; }
+        var out = await confirmOnce(key);
+        if (!out || !out.wait) return;
+        if (!(await countdown(key, out.wait, myGen))) { stopped(); return; }
+      }
+      if (myGen === generation) cardState(key, {state: 'retry', msg: 'Sigue el límite de confirmaciones por minuto. Toca Reintentar en un momento: no se hizo ningún cambio.'});
+    } finally { rec.waiting = false; }
+  }
   function cancelCard(key, why) {
     var rec = cards[key], e = engine();
     if (!rec || !rec.gated || rec.busy || !e) return;
+    rec.cancelled = true; // si estaba esperando por un 429, la cuenta regresiva se corta y no se reintenta
     try { e.cancel(key, why === 'vencida' ? 'vencida' : 'cancelada'); } catch (_) {}
     cardState(key, {state: why === 'vencida' ? 'expired' : 'cancelled', msg: why === 'vencida' ? 'Esta propuesta venció. Pídela otra vez.' : 'Cancelado. No se hizo nada.'});
   }
@@ -377,6 +435,17 @@
       // Mismo motor del asistente original: nombres de clientes tapados, contexto real de productos (costos solo del Admin) y estado de tarjetas.
       var e = await waitEngine(6000);
       if (requestGeneration !== generation || !sessionReady()) return;
+      // Pedido ambiguo («súbele un poco a las galletas»): una sola pregunta corta con opciones tocables, sin gastar una consulta al servidor.
+      var Cc = core();
+      if (e && Cc && typeof Cc.clarifyAmbiguous === 'function' && typeof e.catalog === 'function' && ownerDataAllowed()) {
+        var clar = null;
+        try { clar = Cc.clarifyAmbiguous(String(message || ''), e.catalog()); } catch (_) { clar = null; }
+        if (clar) {
+          respond(target,{action:'chat',id:id,ok:true,text:clar.question,cards:[{kind:'clarify',key:'cl-' + (++cardSeq),title:'¿Cuánto y cuáles?',
+            options:clar.options.map(function (o) { return {label:str(o.label,40),text:str(o.text,1200),fill:str(o.fill,200)}; })}]});
+          return;
+        }
+      }
       var prepared = e ? e.prepare(String(message || '')) : null;
       if (!prepared) {
         var eng = engine(), st = eng && typeof eng.accessState === 'function' ? eng.accessState() : 'pending';
@@ -389,7 +458,14 @@
         respond(target,{action:'chat',id:id,ok:true,text:'Al tapar nombres y datos privados tu mensaje quedó de ' + finalText.length + ' letras y el máximo es ' + MAX_TEXT + '. No lo envié. Acórtalo e intenta de nuevo.'});
         return;
       }
-      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:finalText,history:history.slice(),context:prepared.context,cards:prepared.cards});
+      // Progreso mientras el servidor piensa (10 a 25 s): «Pensando…», «Sigo pensando…».
+      var t0 = Date.now(), lastProg = '', prog = root.setInterval(function () {
+        var Cp = core(), tx = Cp && typeof Cp.thinkingText === 'function' ? Cp.thinkingText((Date.now() - t0) / 1000) : '';
+        if (tx && tx !== lastProg) { lastProg = tx; if (requestGeneration === generation) respond(target,{action:'progress',id:id,text:tx}); }
+      }, 1000);
+      var answer;
+      try { answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:finalText,history:history.slice(),context:prepared.context,cards:prepared.cards}); }
+      finally { if (typeof root.clearInterval === 'function') root.clearInterval(prog); }
       if (requestGeneration !== generation || !sessionReady()) return;
       var out=answer && typeof answer==='object' ? answer : {};
       if (out.error) { var codeErr = new Error(String(out.error).slice(0,80)); codeErr.data = out; throw codeErr; }
@@ -397,6 +473,7 @@
       if (typeof text!=='string') text='';
       if (!text && out.final) text=typeof out.final==='string'?out.final:out.final.text || out.final.respuesta || '';
       var views = buildCards(out.proposals);
+      var Cn = core(); if (Cn && typeof Cn.unifyActionWords === 'function') text = Cn.unifyActionWords(text);
       var hidden = (Array.isArray(out.proposals) ? out.proposals : []).filter(function (p) { return p && p.needsConfirm === true; }).length;
       if (!text && !views.length) text='El servidor respondió sin texto visible. La operación no se considera completada.';
       // Si hay cambios propuestos que no se pudieron mostrar como tarjeta, se dice claro (nunca en consultas de solo lectura).
@@ -445,7 +522,7 @@
   function mount() {
     if (!doc.body || launcher) return;
     var style=doc.createElement('style');
-    style.textContent='#naWorkLauncher{position:fixed;right:17px;bottom:18px;z-index:27;border:0;border-radius:22px;background:linear-gradient(120deg,#073958,#0a90ae);color:white;font:750 14px/1 system-ui;padding:14px 18px;box-shadow:0 8px 24px #06345155;min-height:46px}#naWorkLauncher[hidden]{display:none!important}#naWorkOverlay{position:fixed;inset:0;z-index:10050;background:#f7fbff}#naWorkOverlay iframe{display:block;width:100%;height:100%;border:0;background:#f7fbff}body.na-work-open{overflow:hidden}';
+    style.textContent='#naWorkLauncher{position:fixed;right:17px;bottom:18px;z-index:27;border:0;border-radius:22px;background:linear-gradient(120deg,#073958,#0a90ae);color:white;font:750 14px/1 system-ui;padding:14px 18px;box-shadow:0 8px 24px #06345155;min-height:46px}#naWorkLauncher[hidden]{display:none!important}#naWorkOverlay{position:fixed;inset:0;z-index:10050;background:#f7fbff}#naWorkOverlay[hidden]{display:none!important}#naWorkOverlay iframe{display:block;width:100%;height:100%;border:0;background:#f7fbff}body.na-work-open{overflow:hidden}';
     doc.head.appendChild(style);
     launcher=doc.createElement('button');
     launcher.id='naWorkLauncher';launcher.type='button';launcher.textContent='✦ WORK';

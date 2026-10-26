@@ -11,7 +11,7 @@
   var msgId=0,pending=new Map(),spoken=false,speech=null,utterance=null;
   var $msgs=$('#chatMessages'),$chat=$('#workChat'),$voice=$('#workVoice');
   function post(type,data){win.parent.postMessage(Object.assign({type:'na-work:'+type},data||{}),win.location.origin);}
-  function time(){return new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});}
+  function time(){try{return new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',timeZone:'America/Lima'});}catch(_){return new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});}}
   function bubble(kind,text){
     if(!$msgs)return null;
     var row=doc.createElement('div');row.className='chat-row '+(kind==='user'?'mine':'theirs');
@@ -192,7 +192,7 @@
     '.na-card td:last-child,.na-card th:last-child{text-align:right;white-space:nowrap;padding-left:8px}.na-card .na-warn{background:#fff6e0;border-radius:8px;padding:6px 8px;margin-top:7px;color:#7a5200}'+
     '.na-card .na-note{font-size:11.5px;color:#577086;margin-top:7px}.na-card .na-res{margin-top:7px;font-weight:650}.na-card .na-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}'+
     '.na-card button{border:0;border-radius:11px;padding:10px 14px;font:700 14px system-ui;min-height:44px}.na-card .na-ok{background:linear-gradient(120deg,#052f49,#066f87);color:#fff}'+
-    '.na-card .na-no{background:#eaf0f3;color:#16384e}.na-card button:disabled{opacity:.55}.na-card[data-st="done"]{border-color:#16a34a}.na-card[data-st="failed"],.na-card[data-st="blocked"]{border-color:#dc2626}';
+    '.na-card .na-no{background:#eaf0f3;color:#16384e}.na-card button:disabled{opacity:.55}.na-card[data-st="done"]{border-color:#16a34a}.na-card[data-st="failed"],.na-card[data-st="blocked"]{border-color:#dc2626}.na-card[data-st="waiting"]{border-color:#d97706}.na-card[data-kind="clarify"] .na-acts button{flex:1 1 auto}';
   (doc.head||doc.body).appendChild(cardCss);
   var cardEls=new Map();
   function node(tag,cls,text){var n=doc.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=String(text);return n;}
@@ -230,8 +230,20 @@
       ok=node('button','na-ok','Confirmar');ok.type='button';
       no=node('button','na-no','Cancelar');no.type='button';
       ok.addEventListener('click',function(){if(c.dataset.st!=='pending'&&c.dataset.st!=='retry')return;ok.disabled=true;no.disabled=true;send('card-confirm');});
-      no.addEventListener('click',function(){if(c.dataset.st!=='pending'&&c.dataset.st!=='retry')return;ok.disabled=true;no.disabled=true;send('card-cancel');});
+      no.addEventListener('click',function(){var st=c.dataset.st;if(st!=='pending'&&st!=='retry'&&st!=='waiting')return;ok.disabled=true;no.disabled=true;send('card-cancel');}); // «Cancelar» sigue activo durante la cuenta regresiva del 429
       acts.append(ok,no);
+    }else if(v.kind==='clarify'){
+      // Una sola pregunta con opciones tocables: tocar una opción manda ese pedido ya preciso; «Otro monto» / «Solo algunas» dejan el texto listo para completar.
+      var chips=[];
+      (v.options||[]).slice(0,8).forEach(function(o){
+        var b=node('button','na-no',o.label);b.type='button';chips.push(b);
+        b.addEventListener('click',function(){
+          if(c.dataset.st==='done')return;
+          if(o.text){c.dataset.st='done';chips.forEach(function(x){x.disabled=true;});ask(o.text);}
+          else if(o.fill){var f=$('#chatInput');if(f){f.value=o.fill;f.focus();}}
+        });
+        acts.appendChild(b);
+      });
     }else if(v.kind==='review'){
       var open=node('button','na-ok','Abrir en el asistente');open.type='button';
       open.addEventListener('click',function(){send('card-assistant');});acts.appendChild(open);
@@ -263,6 +275,7 @@
     rec.res.textContent=String(d.msg||'').slice(0,300);
     if(rec.ok){
       if(st==='working'){rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent='Guardando…';}
+      else if(st==='waiting'){rec.ok.disabled=true;rec.no.disabled=false;rec.ok.textContent='Esperando…';}
       else if(st==='retry'){rec.ok.disabled=false;rec.no.disabled=false;rec.ok.textContent='Reintentar';}
       else{rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent=({done:'Hecho',failed:'No disponible',blocked:'No disponible',expired:'Venció',cancelled:'Cancelada'})[st]||'Confirmar';}
     }
@@ -287,12 +300,17 @@
       return;
     }
     if(d.action==='card'&&typeof d.key==='string'){updateCard(d);return;}
+    if(d.action==='progress'&&pending.has(d.id)){
+      var pl=pending.get(d.id).loading,pt=pl&&pl.querySelector?pl.querySelector('.chat-bubble > div'):null;
+      if(pt)pt.textContent=String(d.text||'').slice(0,200);
+      return;
+    }
     if(d.action!=='chat'||!pending.has(d.id))return;
     var item=pending.get(d.id);pending.delete(d.id);
     if(item.loading)item.loading.remove();
     var output=d.ok?String(d.text||(Array.isArray(d.cards)&&d.cards.length?'':'Sin respuesta')):('No se completó la consulta: '+String(d.text||'Error de conexión'));
     if(output.trim()||!(Array.isArray(d.cards)&&d.cards.length))bubble('theirs',output);
-    if(d.ok&&Array.isArray(d.cards))d.cards.slice(0,8).forEach(renderCard);
+    if(d.ok&&Array.isArray(d.cards))d.cards.slice(0,30).forEach(renderCard);
     if(item.mode==='voice') {
       var cap=$('#voiceCaptionBox'),sub=$('#voiceSubtitle');
       if(cap)cap.hidden=false;

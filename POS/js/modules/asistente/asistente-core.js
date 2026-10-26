@@ -1218,7 +1218,68 @@
     if (/\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/.test(t)) return true;
     return !!previous && /^(?:s[ií]|no|hazlo|apl[ií]calo|normal|chico|grande|muy grande|azul|verde|naranja|celeste|simple|claro|noche|auto|\d{1,6}%?)[.!]?$/i.test(t);
   }
-  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+
+  // ---------- Capacidad del asistente en WORK (lógica pura, sin pantalla ni red) ----------
+  // Todo esto SOLO decide textos y esperas. Nada aquí gasta tokens, guarda datos ni salta una validación:
+  // cada cambio se sigue confirmando con SU token firmado de un solo uso en el servidor (createGate / /auth/assistant/confirm).
+  // ¿Fue el tope por minuto (429)? El servidor no gastó la tarjeta, así que reintentar es seguro.
+  function isRateLimitResult(r) { var c = r && r.code; return !!r && !r.ok && (c === 'rate_limited' || c === 'HTTP_429'); }
+  // Segundos de espera tras un 429: lo que dijo el servidor (retry_after_s, +1 de margen) o lo que falta para el próximo minuto. Nunca más de 90.
+  function retryWaitSeconds(r, now) {
+    var v = Number(r && r.retry_after_s);
+    if (isFinite(v) && v > 0) return Math.min(90, Math.ceil(v) + 1);
+    var t = isFinite(Number(now)) ? Number(now) : 0;
+    return Math.min(90, Math.max(1, Math.ceil((Math.floor(t / 60000) * 60000 + 60000 - t) / 1000)) + 1);
+  }
+  function waitText(sec) { var n = Math.max(1, Math.ceil(Number(sec) || 1)); return 'Espera ' + n + (n === 1 ? ' segundo' : ' segundos') + '…'; }
+  // Un solo nombre de acción: el servidor dice «Aplicar» en algunos textos y el botón es «Confirmar».
+  function unifyActionWords(text) {
+    return String(text == null ? '' : text).replace(/«Aplicar»/g, '«Confirmar»').replace(/\bpulsa(?:r)? Aplicar\b/gi, function (m) { return m.replace(/Aplicar/i, 'Confirmar'); });
+  }
+  // Texto de progreso mientras el servidor piensa (respuestas de 10 a 25 s). Antes de 3 s no se dice nada.
+  function thinkingText(sec) {
+    var t = Number(sec);
+    if (!isFinite(t) || t < 3) return '';
+    if (t < 10) return 'Pensando…';
+    if (t < 25) return 'Sigo pensando… (' + Math.floor(t) + ' s). Puede tardar hasta unos 25 segundos.';
+    if (t < 60) return 'Está tardando más de lo normal (' + Math.floor(t) + ' s). Sigo esperando; si no responde, vuelve a intentar.';
+    return 'Sigue sin responder (' + Math.floor(t) + ' s). Puedes volver a intentar; no se hizo ningún cambio.';
+  }
+  // Pedido ambiguo («súbele un poco a las galletas»): UNA pregunta corta con opciones tocables, en lugar de negarse o de listar.
+  // products = [{id, nombre, precio}] de este aparato (solo lectura). Devuelve null si el pedido ya trae un monto o no aplica.
+  var CL_UP = /\b(subele|subeles|sube|subir|suba|subirle|subirles|aumenta|aumentale|aumentales|aumentar|incrementa|incrementale|incrementar|alza|alzale)\b/;
+  var CL_DOWN = /\b(bajale|bajales|baja|bajar|rebaja|rebajale|rebajar|reduce|reducele|reducir|disminuye|abarata)\b/;
+  var CL_STOP = { le: 1, les: 1, lo: 1, los: 1, la: 1, las: 1, el: 1, un: 1, una: 1, unos: 1, unas: 1, poco: 1, poquito: 1, poquita: 1, algo: 1, toque: 1, tantito: 1, mas: 1, muy: 1, ligeramente: 1, de: 1, del: 1, a: 1, al: 1, para: 1, que: 1, por: 1, favor: 1, porfa: 1, todo: 1, todos: 1, todas: 1, toda: 1, producto: 1, productos: 1, precio: 1, precios: 1, y: 1, en: 1, se: 1, me: 1, mi: 1, mis: 1, ahora: 1, hoy: 1, nomas: 1, no: 1, mas: 1, pero: 1, con: 1, su: 1, sus: 1, esto: 1, eso: 1, estos: 1, esos: 1 };
+  function singularTok(w) { if (w.length > 4 && /es$/.test(w) && /(n|r|l|z|d)es$/.test(w)) return w.slice(0, -2); if (w.length > 3 && /s$/.test(w)) return w.slice(0, -1); return w; }
+  function clarifyAmbiguous(text, products) {
+    var raw = String(text == null ? '' : text).trim();
+    if (!raw || raw.length > 140 || /\d/.test(raw) || !Array.isArray(products) || !products.length) return null;
+    var t = norm(raw).replace(/[¿?¡!.,;:()«»"']/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/\b(cuanto|cuanta|como|puedo|deberia|conviene|por que|porque|que pasa|historial|cuando)\b/.test(t)) return null; // es una pregunta: no se interrumpe
+    if (/\b(dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|cien|ciento|mil|medio|media|mitad|doble|soles|sol|centimo|centimos|porciento|por ciento|igual|mismo|mismos|costo|margen)\b/.test(t)) return null; // ya dice cuánto o cómo (en palabras)
+    var dir = CL_UP.test(t) ? 'sube' : CL_DOWN.test(t) ? 'baja' : null;
+    if (!dir) return null;
+    var toks = t.split(' ').filter(function (w) { return w && !CL_STOP[w] && !CL_UP.test(w) && !CL_DOWN.test(w); }).map(singularTok).filter(function (w) { return w.length >= 3; });
+    if (!toks.length || toks.length > 4) return null;
+    var hits = [];
+    for (var i = 0; i < products.length && hits.length < 500; i++) {
+      var p = products[i]; if (!p) continue;
+      var words = norm(pname(p)).split(/[^a-z0-9ñ]+/).filter(Boolean);
+      if (toks.every(function (k) { return words.some(function (w) { return w.indexOf(k) === 0; }); })) hits.push(p);
+    }
+    if (!hits.length) return null;
+    var term = toks.join(' '), n = hits.length, verb = dir === 'sube' ? 'Sube' : 'Baja';
+    var names = hits.map(function (p) { return String(pname(p)).slice(0, 60); }), listed = names.join('; ');
+    var scope = n <= 12 && listed.length <= 900 ? 'de: ' + listed + '.' : 'de todos los productos que tengan «' + term + '» en el nombre (' + n + ').';
+    var opts = [3, 5, 10].map(function (pct) { return { label: (dir === 'sube' ? '+' : '−') + pct + '%', pct: pct, text: verb + ' ' + pct + '% el precio ' + scope }; });
+    opts.push({ label: 'Otro monto', fill: verb + ' el precio de ' + term + ' en S/ ' });
+    if (n > 1) opts.push({ label: 'Solo algunas', fill: verb + ' 5% el precio solo de: ' });
+    var shown = names.slice(0, 5).join(', ') + (n > 5 ? ' y ' + (n - 5) + ' más' : '');
+    return { dir: dir, term: term, count: n, names: names.slice(0, 12), options: opts,
+      question: '¿Cuánto ' + (dir === 'sube' ? 'les subo' : 'les bajo') + '? Hay ' + n + (n === 1 ? ' producto' : ' productos') + ' con «' + term + '»: ' + shown + '. Toca una opción.' };
+  }
+
+  var api = { isRateLimitResult: isRateLimitResult, retryWaitSeconds: retryWaitSeconds, waitText: waitText, unifyActionWords: unifyActionWords, thinkingText: thinkingText, clarifyAmbiguous: clarifyAmbiguous, configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

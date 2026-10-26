@@ -36,6 +36,8 @@ function fixture({owner=true,engine={},api,core=CORE,modals={mProd:true,mMovInv:
  return {root,nodes,listeners,sent,frames,calls,post,open};
 }
 const precio=(extra={})=>({id:'pr-1',type:'precio',needsConfirm:true,confirm_token:'SECRETO.firma',title:'Cambiar precio',nombre:'Leche',product_id:'P1',precio_actual:4.5,precio_nuevo:5.2,cambioGrande:false,bajoCosto:false,...extra});
+// WORK oculto (conserva el chat) cuenta como «se muestra la pantalla del POS»: el overlay ya no se destruye al abrir la ficha.
+const shown=f=>f.nodes.has('naWorkOverlay')&&!f.nodes.get('naWorkOverlay').hidden;
 const lastCards=f=>[...f.sent].reverse().find(m=>m.action==='chat'&&m.cards)?.cards||[];
 
 test('el chat manda productos reales y el texto ya tapado por el motor del asistente (no products: [])',async()=>{
@@ -110,14 +112,14 @@ test('con aviso de riesgo (bajo costo, cambio grande, «quisiste decir») se con
   assert.equal(lastCards(f)[0].oneTap,false);assert.ok(lastCards(f)[0].warnings.length>0);
   f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
   assert.deepEqual(f.calls.save,[],JSON.stringify(extra));
-  assert.equal(f.nodes.has('naWorkOverlay'),false,'se muestra la pantalla del POS para revisar');
+  assert.equal(shown(f),false,'se muestra la pantalla del POS para revisar');
  }
 });
 test('si el formulario no se cierra al guardar, no se fuerza: se muestra la pantalla del POS',async()=>{
  const f=fixture({saves:{prod:false},api:async()=>({reply:'ok',proposals:[precio()]})});
  f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
  f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(40);
- assert.equal(f.nodes.has('naWorkOverlay'),false);
+ assert.equal(shown(f),false);
  assert.match(f.sent.filter(m=>m.action==='card').pop().msg,/Guardar/);
 });
 test('ajuste de stock: un toque; con stock negativo conserva el segundo paso',async()=>{
@@ -129,12 +131,12 @@ test('ajuste de stock: un toque; con stock negativo conserva el segundo paso',as
  f.post({type:'na-work:chat',id:'a',text:'x'});await tick();f.post({type:'na-work:card-confirm',key:'aj-1'});await tick(30);
  assert.deepEqual(f.calls.save,[]);
 });
-test('errores de confirmar en palabras simples; 429 permite reintentar con la misma tarjeta',async()=>{
- const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>({ok:false,code:'rate_limited',msg:'Espera un momento e intenta de nuevo.'})}});
+test('errores de confirmar en palabras simples; 429 espera con cuenta regresiva y reintenta con la misma tarjeta',async()=>{
+ const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>({ok:false,code:'rate_limited',retry_after_s:60,msg:'Espera un momento e intenta de nuevo.'})}});
  f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
  f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
  const last=f.sent.filter(m=>m.action==='card').pop();
- assert.equal(last.state,'retry');assert.doesNotMatch(last.msg,/rate_limited|_/);assert.deepEqual(f.calls.save,[]);
+ assert.equal(last.state,'waiting');assert.match(last.msg,/^Espera \d+ segundos?…$/);assert.doesNotMatch(last.msg,/rate_limited|_/);assert.deepEqual(f.calls.save,[]);
 });
 test('tarjeta vencida o rol perdido: no se aplica nada y se explica',async()=>{
  let f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>({ok:false,code:'confirm_expired',msg:'x'})}});
@@ -175,7 +177,7 @@ test('«Llévame ahí» usa el motor y cierra WORK; el mensaje de confirmar ya n
  f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
  const c=lastCards(f)[0];assert.equal(c.kind,'steps');
  f.post({type:'na-work:card-open',key:c.key});await tick(20);
- assert.deepEqual(f.calls.go,['pageInventario']);assert.equal(f.nodes.has('naWorkOverlay'),false);
+ assert.deepEqual(f.calls.go,['pageInventario']);assert.equal(shown(f),false);
 });
 
 // ---- Contrato estático del motor compartido (asistente-ui.js) y de WORK ----
@@ -232,7 +234,7 @@ test('H2: los avisos se recalculan con lo que el POS tiene ahora; si no se puede
   assert.equal(c.oneTap,false,name);
   f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(40);
   assert.deepEqual(f.calls.save,[],name);
-  assert.equal(f.nodes.has('naWorkOverlay'),false,name+': se abre la ficha para revisar');
+  assert.equal(shown(f),false,name+': se abre la ficha para revisar');
  }
  const aj=(extra)=>({id:'aj-1',type:'ajuste',needsConfirm:true,confirm_token:'T.s',title:'Salida',nombre:'Leche',product_id:'P1',tipo:'salida',cantidad:5,motivo:'Merma',stock_actual:10,stock_despues:5,quedaNegativo:false,grande:false,...extra});
  const f=fixture({local:{P1:{precio:4.5,stock:3}},api:async()=>({reply:'ok',proposals:[aj()]})}); // en este aparato el stock es 3: saldría negativo
