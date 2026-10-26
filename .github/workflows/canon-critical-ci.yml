@@ -7,6 +7,8 @@ on:
       - "tests/product-fixes/**"
       - "tests/backup-*.test.mjs"
       - "tests/cloud-sync/**"
+      - "tests/asistente/**"
+      - "tests/work/**"
       - "tools/cloudflare-lab/src/**"
       - "tools/cloudflare-backup/**"
       - "tools/cloudflare-prod/**"
@@ -70,6 +72,11 @@ jobs:
         shell: bash
         run: |
           node --test tests/asistente/assistant-settings.test.mjs tests/asistente/assistant-invoice-memory.test.mjs tests/asistente/assistant-invoice-products.test.mjs tests/asistente/assistant-admin.test.mjs tests/asistente/assistant-client-gate.test.mjs tests/asistente/assistant-bot2.test.mjs tests/asistente/assistant-worker.test.mjs
+
+      - name: WORK client regressions
+        shell: bash
+        run: |
+          node --test tests/work/*.test.mjs
 
       - name: Install Cloudflare test dependencies
         working-directory: tools/cloudflare-lab
