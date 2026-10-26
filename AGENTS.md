@@ -6,7 +6,7 @@ Objetivo: que un cambio pequeño (CSS, texto, color, espaciado) sea fácil de ha
 
 ## Regla principal
 
-El pedido explícito del dueño ES la autorización. «Cambia el color de X», «aplícalo», «corrígelo», «continúa» cubren hacer el cambio, probarlo, abrir el PR, integrarlo y publicarlo, dentro de ese alcance. No pidas permiso otra vez por cada paso ni exijas validación visual previa: la captura o el preview son una ayuda, no un requisito para empezar. Si no puedes probar algo, dilo y sigue con lo demás; no te niegues a trabajar.
+El objetivo o pedido del dueño es la autorización de todo ese alcance, incluida la publicación al terminar (el dueño, en la sala, 25/10/2026: «mi pedido es la autorización, publiquen con respaldo sin preguntarme»); no pidas OK de nuevo por paso. «Cambia X», «aplícalo», «corrígelo», «continúa» cubren cambio, pruebas, PR, integración y publicación. Haz solos respaldo, pruebas y rollback; no exijas validación visual previa. Pregunta solo si sales del alcance pedido, si algo es irreversible fuera de lo pedido, o si falta un secreto o dato que solo él tiene (que lo pegue en su propio chat). Si no puedes probar algo, dilo y sigue.
 
 ## Flujo (5 pasos)
 
@@ -20,14 +20,14 @@ El pedido explícito del dueño ES la autorización. «Cambia el color de X», �
 
 BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, sin revisor externo. MEDIO = pantallas que usan una API existente: revisión técnica documentada. ALTO = ventas, pagos, crédito, caja, inventario, clientes, permisos, sincronización, migraciones, Worker: revisión independiente (puede ser automatizada) y respaldo. Se usa el riesgo mayor del cambio real.
 
-## Lo que NO se toca sin pedido explícito del dueño (protecciones que se mantienen)
+## Protecciones que se mantienen (las ejecutas tú, sin pedir OK si el pedido las cubre)
 
-- Layouts de Venta (`#pagePOS`) e Inicio (`#pageMenu`): se cambian cuando el dueño lo pide para esa pantalla; ese pedido basta.
+- Layouts de Venta (`#pagePOS`) e Inicio (`#pageMenu`): se cambian cuando el pedido nombra esa pantalla; ese pedido basta.
 - Permisos y candados: `POS/js/config/pos-permissions.js` (tabla única, denegación por defecto, `FEATURE_LOCKS`). Costos, totales y proveedores son solo del dueño. Todo cambio de permiso lleva prueba de cliente y de servidor. No abrir candados en bloque.
-- Datos de producción: migraciones solo aditivas, con respaldo previo y OK explícito del dueño; nunca borrar datos; nunca alterar ventas ni abonos pendientes (outbox).
-- Secretos: nunca escribir tokens, claves ni datos de clientes en código, docs, logs o prompts. Los cambios de secrets requieren orden explícita.
+- Datos de producción: migraciones solo aditivas, con respaldo previo de la BD obligatorio (lo haces tú, sin pedir OK); nunca borrar datos de producción (solo lo que el dueño pida borrar expresamente, y con respaldo previo); nunca alterar ventas ni abonos pendientes (outbox).
+- Secretos: nunca escribir tokens, claves ni datos de clientes en código, docs, logs o prompts. Cambiar secrets solo si el pedido lo incluye; si falta el valor, lo pone el dueño en su chat.
 - Worker de producción y backend: `tools/cloudflare-lab/**` (nombre histórico, es producción), `tools/cloudflare-prod/**`, `tools/cloudflare-backup/**`. No se borra ni se renombra por nombre.
-- Publicación: la web se publica con el manifiesto de `tools/release/web-release.mjs` (rollback, SHA de producción y CI exacta). Nada de force-push ni de workflows de cutover/migración sin orden del dueño.
+- Publicación: la web se publica con el manifiesto de `tools/release/web-release.mjs` (rollback, SHA de producción y CI exacta). Obligatorio siempre, sin pedir OK: respaldo previo de la BD antes de migraciones o Worker, el Worker se publica primero y luego la web, `rollback_ref` y SHA de producción igual a la base, los 3 CI exactos y revisión independiente en riesgo ALTO. Force-push: siempre prohibido. Workflows de cutover/migración: solo si el pedido los nombra.
 - POS-LAB está retirado: no crear ramas `lab/*` ni escribir en `laboratorio/**`. El modo SHADOW legacy sigue con `PRODUCT_WRITE = DENIED`.
 - No editar `POS/css/experience-v2/pages/*.css`. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si los sobrescribió la suite (restaurar con `git checkout`).
 

@@ -65,7 +65,7 @@ CANON define la autoridad de persistencia; **no debe equivaler a bloquear la int
 
 ## Política de autorización y revisión
 
-Aplicar `docs/DEVELOPMENT_RISK_POLICY.md`: autorización única por alcance, tres riesgos, revisión independiente automatizada válida cuando se exige. Ningún rol nominal ni humano externo es un requisito universal. Una decisión explícita posterior del propietario autoriza el rediseño de la pantalla indicada.
+Aplicar `docs/DEVELOPMENT_RISK_POLICY.md`: el objetivo o pedido del dueño es la autorización única de todo el alcance, incluida la publicación al terminar (no se pide OK por paso), tres riesgos, revisión independiente automatizada válida cuando se exige. Ningún rol nominal ni humano externo es un requisito universal. Una decisión explícita posterior del propietario autoriza el rediseño de la pantalla indicada.
 
 ## Flujo obligatorio
 
@@ -94,14 +94,14 @@ Clasifica hallazgos:
 
 Puedes parchear inmediatamente hallazgos críticos o altos que provoquen pérdida/corrupción de datos, duplicación de ventas o cobros, inyección, borrado no autorizado, inconsistencia entre venta/stock/caja o bloqueo total, siempre que la corrección sea localizada y verificable.
 
-Detente y reporta antes de:
+Detente y reporta solo si lo pedido por el dueño no lo cubre:
 
-- Borrar o migrar datos de manera irreversible.
+- Borrar datos de producción (solo si el dueño lo pidió expresamente y con respaldo previo hecho por ti) o hacer una migración irreversible que no pidió. Force-push: siempre prohibido.
 - Cambiar reglas comerciales.
 - Rediseñar módulos completos fuera de una autorización específica ya vigente.
-- Añadir backend o servicios externos.
-- Hacer una refactorización extensa.
-- Tomar una decisión cuyo comportamiento esperado no esté definido.
+- Añadir backend o servicios externos que el pedido no incluya.
+- Hacer una refactorización extensa fuera del alcance pedido.
+- Tomar una decisión cuyo comportamiento esperado no esté definido, o si falta un secreto o dato que solo el dueño tiene.
 
 Consulta `docs/05_AUDITORIA_SEGURIDAD_ISHIKAWA.md` (no está en `docs/`; vive dentro de `nuevo-amanecer-pos-engineer.zip`, carpeta `Nuevo_Amanecer_Codex_Project/docs/`).
 

@@ -44,4 +44,4 @@ No existe promoción implícita entre zonas. El cambio probado debe llegar a CAN
 
 ## Revisión proporcional y continuidad
 
-Aplicar `docs/DEVELOPMENT_RISK_POLICY.md` en Codex, OpenCode y Grokbots. Los roles son funciones, no personas obligatorias. Un agente independiente automatizado puede revisar; registrar resultado real y SHA. Si un agente no responde, sustituirlo, sin saltar pruebas ni inventar su aprobación. El coordinador mantiene las acciones remotas fuera del subagente local.
+Aplicar `docs/DEVELOPMENT_RISK_POLICY.md` en Codex, OpenCode y Grokbots. Los roles son funciones, no personas obligatorias. Un agente independiente automatizado puede revisar; registrar resultado real y SHA. Si un agente no responde, sustituirlo, sin saltar pruebas ni inventar su aprobación. El coordinador mantiene las acciones remotas fuera del subagente local. El pedido del dueño es la autorización del alcance, incluida la publicación al terminar; respaldo, pruebas y rollback los hace el coordinador sin pedir OK (ver `AGENTS.md`).
