@@ -232,9 +232,11 @@
   function load() {
     if (loaded) return; loaded = true;
     var d = root.document, l = d.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/asistente.css'; d.head.appendChild(l);
-    var a = d.createElement('script'); a.src = 'js/modules/asistente/asistente-core.js';
-    a.onload = function () { var b = d.createElement('script'); b.src = 'js/modules/asistente/asistente-ui.js'; d.body.appendChild(b); };
-    d.body.appendChild(a);
+    // core y ui se piden a la vez (antes: ui esperaba a que core terminara de bajar) y se ejecutan en este mismo orden (async=false).
+    // Si core no bajara, ui no hace nada: empieza con «if (!C) return», igual que antes, cuando ui ni se pedía.
+    var a = d.createElement('script'); a.async = false; a.src = 'js/modules/asistente/asistente-core.js';
+    var b = d.createElement('script'); b.async = false; b.src = 'js/modules/asistente/asistente-ui.js';
+    d.body.appendChild(a); d.body.appendChild(b);
   }
   // Mismo pedido que usa la UI: endpoint y Bearer de la sesión del POS, sin cookies. En el prototipo local, rol simulado.
   // Como máximo una pregunta cada 10 s (ASK_EVERY_MS). Sin internet no cuenta como pregunta, y si el pedido falla tampoco:

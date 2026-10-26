@@ -8,6 +8,18 @@ function _naSecElement(tag,className,text){
   if(text!==undefined){element.textContent=String(text);if(className&&window.NA_ICON_SWAP)window.NA_ICON_SWAP(element);} // emoji inicial -> ícono de línea (sin observador)
   return element;
 }
+// Texto de fecha, hora y cliente en Ventas: si un dato llega como objeto (p. ej. {nombre:…} o {date:…}) se muestra su texto y nunca «[object Object]».
+// Vacío (no «0», «false», «null», «NaN» ni «Invalid Date») cuando no hay dato; una fecha (Date) sale como AAAA-MM-DD local. Solo fecha, hora y cliente: no toca totales ni dinero.
+function _naSecTxt(value,depth){
+  if(value==null||typeof value==='boolean'||typeof value==='function'||typeof value==='symbol')return'';
+  if(Object.prototype.toString.call(value)==='[object Date]'){const t=value.getTime();return Number.isFinite(t)?new Date(t-value.getTimezoneOffset()*60000).toISOString().slice(0,10):'';}
+  if(typeof value==='number')return Number.isFinite(value)&&value!==0?String(value):'';
+  if(typeof value==='string'||typeof value==='bigint'){const text=String(value).replace(/\[object Object\]/g,'').trim();return/^(undefined|null|nan|false|invalid date)$/i.test(text)?'':text;} // dato ya convertido a texto por una normalización anterior
+  if((depth|0)>2)return'';
+  if(Array.isArray(value))return value.map(item=>_naSecTxt(item,(depth|0)+1)).filter(Boolean).join(' ');
+  for(const key of['nombre','name','label','text','display','date','fecha','value']){const text=_naSecTxt(value[key],(depth|0)+1);if(text)return text;}
+  return'';
+}
 function _naSecAppend(parent,tag,className,text){
   const element=_naSecElement(tag,className,text);
   parent.appendChild(element);
@@ -126,7 +138,7 @@ function _naSecRenderSaleCard(list,sale,index){
     if(prefix||itemName)itemsText.appendChild(document.createTextNode(`${prefix}${itemName}`.trim()));
   });
   const meta=_naSecAppend(info,'div','v-meta');
-  _naSecAppend(meta,'span','',`${sale.fecha||''} ${sale.hora24||sale.hora||''}`.trim());
+  _naSecAppend(meta,'span','',`${_naSecTxt(sale.fecha)} ${_naSecTxt(sale.hora24)||_naSecTxt(sale.hora)}`.trim());
   _naSecAppend(meta,'span','',`👤 ${sale.cajeroNombre||sale.cajero||'Cajero'}${sale.cajeroId?` · ${sale.cajeroId}`:''}`);
   const stateClass=sale.anulada?'cancelled':sale.estado==='credito'?'credit':'completed';
   _naSecAppend(meta,'span',`sale-state-badge ${stateClass}`,_naSaleStateLabel(sale));
@@ -157,8 +169,8 @@ function _naSecRenderSaleCard(list,sale,index){
   _naSecSaleAudit(audit,'Estado',_naSaleStateLabel(sale));
   _naSecSaleAudit(audit,'Tipo de venta',_naSaleTypeLabel(sale));
   _naSecSaleAudit(audit,'Cajero',`${sale.cajeroNombre||sale.cajero||'Cajero'}${sale.cajeroId?` · ${sale.cajeroId}`:''}`);
-  _naSecSaleAudit(audit,'Cliente',sale.clienteNombre||'Consumidor final');
-  _naSecSaleAudit(audit,'Fecha y hora',`${sale.fecha||''} · ${sale.hora24||sale.hora||''}`);
+  _naSecSaleAudit(audit,'Cliente',_naSecTxt(sale.clienteNombre)||'Consumidor final');
+  _naSecSaleAudit(audit,'Fecha y hora',`${_naSecTxt(sale.fecha)} · ${_naSecTxt(sale.hora24)||_naSecTxt(sale.hora)}`);
   _naSecSaleAudit(audit,'Operación',sale.paymentRef||sale.operation||'-');
   if(sale.nota)_naSecSaleAudit(audit,'Nota',String(sale.nota));
   const units=(Array.isArray(sale.items)?sale.items:[]).reduce((sum,item)=>sum+_naUnitsSold(item),0);
@@ -261,9 +273,9 @@ _naF10RenderSalesAdmin=function(){
   }
   rows.forEach(sale=>{
     const card=_naSecAppend(list,'div',`f10-sale${sale.anulada?' anulada':''}`),head=_naSecAppend(card,'div','f10-sale-head'),identity=_naSecAppend(head,'div');
-    _naSecAppend(identity,'strong','',`${sale.id||''} · ${sale.clienteNombre||'Consumidor final'}`);
+    _naSecAppend(identity,'strong','',`${sale.id||''} · ${_naSecTxt(sale.clienteNombre)||'Consumidor final'}`);
     const products=(Array.isArray(sale.items)?sale.items:[]).map(item=>`${item.qty||item.cantidad||1}x ${item.name||item.nombre||'Producto'}`).join(', ');
-    _naSecAppend(identity,'span','',`${sale.fecha||''} ${sale.hora24||sale.hora||''} · ${sale.cajeroNombre||sale.cajero||'Cajero'}${sale.cajeroId?` · ${sale.cajeroId}`:''}\n${products}`);
+    _naSecAppend(identity,'span','',`${_naSecTxt(sale.fecha)} ${_naSecTxt(sale.hora24)||_naSecTxt(sale.hora)} · ${sale.cajeroNombre||sale.cajero||'Cajero'}${sale.cajeroId?` · ${sale.cajeroId}`:''}\n${products}`);
     _naSecAppend(head,'span','f10-sale-total',sale.anulada?'ANULADA':fmt(totalV(sale)));
     const notes=Array.isArray(sale.adminNotes)?sale.adminNotes:[],lastNote=notes[notes.length-1];
     if(lastNote)_naSecAppend(card,'div','f10-note',`📝 ${lastNote.text||''} · ${lastNote.cashierNombre||'Admin'}`);

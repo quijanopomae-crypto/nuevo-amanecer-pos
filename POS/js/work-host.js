@@ -34,6 +34,7 @@
     var nextIdentity = sessionReady() && roles ? String(roles.role || 'unknown') + ':' + String(roles.deviceId || '') : null;
     if (identity !== nextIdentity) { identity = nextIdentity; close(); }
 
+    if (!isHome() || temporarilyLegacy || !featureEnabled || doc.getElementById('naRevoked')) releasePre();
     if (!sessionReady() || !isHome()) {
       temporarilyLegacy = false;
       if (overlay) close();
@@ -64,6 +65,24 @@
     var roles=root.NA_ROLES, owner=false;
     try { owner=!!(roles && typeof roles.isOwner==='function' && roles.isOwner()===true); } catch (_) {}
     return {action:'init',metrics:realMetrics(),activity:realActivity(),role:owner?'Dueño':'Empleado'};
+  }
+  // Marca de <html> que pone index.html en <head> para que no se vea el Inicio viejo antes de WORK (ver «na-work-pre»). Se quita en cuanto
+  // WORK cubre la pantalla, o en cuanto ya no va a abrirse (otra pantalla, ?work=0, sesión sin confirmar al tope de 3,5 s; si este archivo no carga, la libera index.html).
+  function releasePre() { try { doc.documentElement.classList.remove('na-work-pre', 'na-work-pre-dk'); } catch (_) {} }
+  // Solo se reenvían a WORK las cifras cuando cambiaron (antes: cada 10 s y dos veces al abrir, y WORK repintaba todo cada vez).
+  var lastInit = '', refreshTimer = 0;
+  function pushInit(force) {
+    if (!overlay || !frame || !isHome() || (doc.hidden && !force)) return;
+    var payload = initPayload(), sig = JSON.stringify(payload);
+    if (!force && sig === lastInit) return;
+    lastInit = sig;
+    respond(frame.contentWindow, payload);
+  }
+  // Las cifras se leen del Inicio del POS, que se pinta cuando CANON termina de sincronizar: se empujan a WORK al instante (con una pausa corta
+  // para agrupar cambios) en vez de esperar al reloj de 10 s.
+  function scheduleInit() {
+    if (!overlay || refreshTimer) return;
+    refreshTimer = root.setTimeout(function () { refreshTimer = 0; pushInit(false); }, 250);
   }
   function respond(target, data) {
     if (target && frame && target === frame.contentWindow) {
@@ -102,9 +121,14 @@
     overlay.appendChild(frame);
     doc.body.appendChild(overlay);
     doc.body.classList.add('na-work-open');
+    lastInit = '';
+    releasePre(); // WORK ya cubre la pantalla: el Inicio viejo no llega a verse
     frame.addEventListener('load',function () {
-      respond(frame.contentWindow,initPayload());
+      pushInit(false);
     });
+    // El chat necesita el motor del asistente: se pregunta al servidor ahora (misma consulta de siempre, máx. una cada 10 s) en vez de esperar
+    // al momento libre posterior a la carga (hasta 2,5 s).
+    try { var L = root.NA_ASISTENTE_LOADER; if (L && typeof L.ask === 'function' && typeof L.loaded === 'function' && !L.loaded()) L.ask(); } catch (_) {}
     syncButton();
   }
   // ---- Mensajes amables (nunca códigos crudos como rate_limited) ----
@@ -421,7 +445,7 @@
     if (!data || typeof data!=='object' || typeof data.type!=='string' || !data.type.startsWith('na-work:')) return;
     if (data.type==='na-work:reset') {resetConversation();return;}
     if (data.type==='na-work:close') {temporarilyLegacy = true;close();return;}
-    if (data.type==='na-work:metrics') {respond(event.source,initPayload());return;}
+    if (data.type==='na-work:metrics') {var first=initPayload();lastInit=JSON.stringify(first);respond(event.source,first);return;}
     if (data.type==='na-work:navigate') {
       var id=String(data.page||'');
       if (!allowedPages[id] || typeof root.goPage!=='function') return;
@@ -456,9 +480,16 @@
     if (home && root.MutationObserver) new root.MutationObserver(syncView).observe(home,{attributes:true,attributeFilter:['class']});
     root.addEventListener('pageshow', syncView);
     root.addEventListener('na:role', syncView);
+    // Sin sesión confirmada WORK no se abre: tope para que el Inicio de siempre no quede oculto (index.html lo oculta mientras WORK abre).
+    if (!featureEnabled) releasePre(); else root.setTimeout(function () { if (!overlay) releasePre(); }, 3500);
     syncView();
     // Refresh read-only figures from the POS DOM; does not query the backend or change data.
-    root.setInterval(function(){if(overlay && isHome() && frame)respond(frame.contentWindow,initPayload());},10000);
+    root.addEventListener('na:canonical-updated', scheduleInit);
+    root.addEventListener('na:canonical-sale-projection', scheduleInit);
+    var stats = home && typeof home.querySelector === 'function' ? home.querySelector('.quick-stats') : null;
+    if (stats && root.MutationObserver) new root.MutationObserver(scheduleInit).observe(stats,{subtree:true,childList:true,characterData:true});
+    root.setInterval(function(){pushInit(false);},10000);
+    if (typeof doc.addEventListener === 'function') doc.addEventListener('visibilitychange', scheduleInit);
   }
   root.NA_WORK_HOST={open:open,close:close};
   if (doc.readyState==='loading') doc.addEventListener('DOMContentLoaded',mount,{once:true}); else mount();

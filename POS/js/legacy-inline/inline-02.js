@@ -432,7 +432,7 @@ loadAllData=async function(){
   if(!chosen||seeded)await saveAllData();
 };
 loadAppState=function(){
-  const snap=_naReadLocalSnapshot()||_naReadSessionSnapshot(),legacy=_naGetJSON('na_app_state',{}),state=Object.keys(_naLoadedUIState||{}).length?_naLoadedUIState:(_naValidSnapshot(snap)?snap.ui||{}:legacy);window.NA_THEME.resolveLegacy(!!state.isDark);window.NA_THEME.apply();_naApplyConfigUI();const pageId=state.currentPage;if(pageId&&pageId!=='pageMenu'&&document.getElementById(pageId))goPage(pageId);else _naSchedulePageRender('pageMenu');
+  const snap=_naReadLocalSnapshot()||_naReadSessionSnapshot(),legacy=_naGetJSON('na_app_state',{}),state=Object.keys(_naLoadedUIState||{}).length?_naLoadedUIState:(_naValidSnapshot(snap)?snap.ui||{}:legacy);window.NA_THEME.resolveLegacy(!!state.isDark);window.NA_THEME.apply();_naApplyConfigUI();const pageId=state.currentPage;if(pageId&&pageId!=='pageMenu'&&!/[?&]work=1\b/.test(location.search)&&document.getElementById(pageId))goPage(pageId); /* ?work=1 pedido a propósito: Inicio (WORK), no la última pantalla recordada */else _naSchedulePageRender('pageMenu');
 };
 
 
