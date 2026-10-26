@@ -1,0 +1,79 @@
+{
+  "schema": "nuevo-amanecer.canon-product-image-batch/v1",
+  "batch_id": "001",
+  "approved_by_owner": true,
+  "approved_on": "2026-10-04",
+  "max_items": 10,
+  "entries": [
+    {
+      "id": "trululu-aros-90",
+      "product_name": "TRULULU AROS 90GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://trululustore.wordpress.com/home-2/gomitas-2/",
+      "image_url": "https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-aros-1.jpg?w=480"
+    },
+    {
+      "id": "trululu-fresitas-90",
+      "product_name": "TRULULU FRESITAS 90GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://trululustore.wordpress.com/home-2/gomitas-2/",
+      "image_url": "https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-fresa-1.jpg?w=480"
+    },
+    {
+      "id": "trululu-oro-90",
+      "product_name": "TRULULU ORO 90GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://trululustore.wordpress.com/home-2/gomitas-2/",
+      "image_url": "https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-oro-12b-x-90g-v3.jpg?w=480"
+    },
+    {
+      "id": "trululu-sabores-90",
+      "product_name": "TRULULU SABORES 90GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://trululustore.wordpress.com/home-2/gomitas-2/",
+      "image_url": "https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-sabores-12b-x-90g-v20.jpg?w=480"
+    },
+    {
+      "id": "trululu-dinos-90",
+      "product_name": "TRULULU DINOS 90GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://agranelados.catalog.kyte.site/gomitas-en-paquete",
+      "image_url": "https://firebasestorage.stagebeta.kyte.site/v0/b/kyte-7c484.appspot.com/o/8x5kblSeRMWUzzF9K1Awa7foUQw1%2Fthumb_280_3406a3c4-734c-4b9f-a22e-b1301cbaae69.jpg?alt=media"
+    },
+    {
+      "id": "gomitas-trululu-sabores-90",
+      "product_name": "GOMITAS TRULULU SABORES 90 GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://www.marketcircolo.com/productos/ver/trululu-sabores-90g",
+      "image_url": "https://aceleralastatic.nyc3.cdn.digitaloceanspaces.com/files/uploads/1499/1671033109-35-trululu-sabores-90g-jpg.jpg"
+    },
+    {
+      "id": "gomas-trululu-dinoss-90",
+      "product_name": "GOMAS TRULULU DINOSS 90G*",
+      "expected_presentation": "90 g",
+      "source_page": "https://agranelados.catalog.kyte.site/gomitas-en-paquete",
+      "image_url": "https://firebasestorage.stagebeta.kyte.site/v0/b/kyte-7c484.appspot.com/o/8x5kblSeRMWUzzF9K1Awa7foUQw1%2Fthumb_280_3406a3c4-734c-4b9f-a22e-b1301cbaae69.jpg?alt=media"
+    },
+    {
+      "id": "trululu-casquitos-vita-90",
+      "product_name": "TRULULU CASQUITOS VITAMINA C 90GR",
+      "expected_presentation": "90 g",
+      "source_page": "https://www.marketcircolo.com/categorias/dulces-snack-y-helados/goma-y-mashmellow",
+      "image_url": "https://firebasestorage.stagebeta.kyte.site/v0/b/kyte-7c484.appspot.com/o/8x5kblSeRMWUzzF9K1Awa7foUQw1%2Fthumb_280_b4aeab63-4486-49c3-93e3-eabf5e3e67dd.jpg?alt=media"
+    },
+    {
+      "id": "trululu-pinguinos-80",
+      "product_name": "TRULULU PINGUINOS 80GR",
+      "expected_presentation": "80 g",
+      "source_page": "https://comercialmoy.sumerlabs.com/catalogo/comercialmoy/producto/gomitas-trululu-pinguinos-g--bolsita-smr-653b5ab8700d07de69b640571a59a458378248a5",
+      "image_url": "https://domun.co/default/image-tool-lambda?new-height=480&new-quality=80&new-width=480&url-image=https%3A%2F%2Fsumerlabs.com%2Fsumer-app-90b8f.appspot.com%2Fproduct_photos%252Ffd0aa6876516aef8f062203b07b2e439%252Fe003f880-ff3c-11ec-9263-67049881eeef%3Falt%3Dmedia%26token%3D9cbe4add-c612-4f9b-b3b0-899148471547"
+    },
+    {
+      "id": "trululu-osos-oro-80",
+      "product_name": "TRULULU SNACKS OSOS ORO 80G",
+      "expected_presentation": "80 g",
+      "source_page": "https://www.efastonline.com/product/1040784",
+      "image_url": "https://caest-imagenes.s3.us-east-2.amazonaws.com/products/local/1040784_1_z.webp"
+    }
+  ]
+}
