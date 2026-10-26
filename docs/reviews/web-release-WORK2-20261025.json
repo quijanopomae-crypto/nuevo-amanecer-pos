@@ -1,0 +1,57 @@
+{
+  "reviewed_commit": "86da159cffea74ae6b218b5dd0300d21f6d14869",
+  "kind": "independent-automated",
+  "result": "pass",
+  "reviewer": "ASISTENTE 3 (revisión independiente del diff final, solo lectura) + ASISTENTE 4 (sw.js, index.html, cache-identity-guard) + CI exacta del commit",
+  "production_base": "4273e2d81b72a7fa5a0c56ebbb654e3b8871bfcd",
+  "rollback_ref": "4273e2d81b72a7fa5a0c56ebbb654e3b8871bfcd",
+  "risk": "high",
+  "authorization": "Propietario 25/10/2026: «Espera a #884 y #888 y luego publica solo la Web con respaldo de BD»; «mi pedido es la autorización, publiquen con respaldo sin preguntarme».",
+  "evidence": {
+    "veredicto_a3": "SEGURO CON OBSERVACIONES, sin bloqueantes (diff final sobre 86da159c; verificar-sha-final-a3.sh: SIN CAMBIOS RELEVANTES; alcance 20 archivos idéntico)",
+    "veredicto_a4": "APROBAR CON OBSERVACIONES para sw.js / index.html / cache-identity-guard (revision-plan-publicacion.md); el guardián es obligatorio en la instalación del SW (falla cerrada si no carga)",
+    "respaldo_bd": {
+      "workflow": "Owner Backup Recovery Drill",
+      "run_id": 40252178513,
+      "head_sha": "86da159cffea74ae6b218b5dd0300d21f6d14869",
+      "result": "success"
+    },
+    "ci_runs": {
+      "CANON Critical CI": 40252147442,
+      "E2E Smoke CI": 40252147448,
+      "OpenCode Role Map CI": 40252147489,
+      "all_on": "86da159cffea74ae6b218b5dd0300d21f6d14869",
+      "result": "success"
+    },
+    "prs_incluidos": [
+      884,
+      888,
+      1058
+    ],
+    "prs_excluidos": [
+      889,
+      883,
+      885,
+      886,
+      694
+    ],
+    "no_backend_change": true,
+    "closed_features": [
+      "cobro-qr-yape-plin",
+      "reporte-medio-pago",
+      "aviso-factura-duplicada"
+    ],
+    "pruebas_eliminadas": "2 pruebas perf-head-order (rojas), aprobadas por A4",
+    "important_findings": [
+      "#884 purga cachés locales restringidas (na_snapshot_v9 depurado, na_snapshot_v10, checkpoints, gastos/costos/cierres) al cambiar identidad/rol; no toca el outbox de ventas",
+      "el guardián cache-identity-guard.js es obligatorio en la instalación del service worker",
+      "el historial de precios conserva venta/mayorista y solo quita el costo (corrección posterior a la revisión de A4, cubierta por e2e historial-precios y CI exacta)"
+    ],
+    "limitations": [
+      "revisión local/de solo lectura; no equivale a verificación live",
+      "falta prueba manual en teléfono real (#1037, #888) con la cola de ventas pendientes vacía",
+      "A3/A4 revisaron los archivos de #884/#888 antes del último ajuste de historial de precios; la CI exacta lo cubre",
+      "este recibo cubre solo la Web, no el Worker"
+    ]
+  }
+}
