@@ -1246,7 +1246,7 @@
     doc.querySelectorAll('#naDevList').forEach(function (list) { var host = list.parentElement; if (host && !host.querySelector('.na-asst-acc')) decorateOne(host); });
   }
   function decorateOne(host) {
-    var box = el('div', 'na-asst-acc'); box.innerHTML = '<h4>Asistente en aparatos de empleado</h4><p class="na-asst-acc-n">Apagado por defecto. Al cambiar se pide tu PIN y se guarda solo. Cualquier cambio de stock, precio o compra que proponga el asistente igual necesita tu PIN.</p><div class="na-asst-acc-l">Cargando…</div>';
+    var box = el('div', 'na-asst-acc'); box.innerHTML = '<h4>Asistente en aparatos de empleado</h4><p class="na-asst-acc-n">Apagado por defecto. Al cambiar se pide tu PIN y se guarda solo. Los cambios de stock, precio o compra que proponga el asistente los confirmas tú con un toque, sin PIN (el PIN se sigue pidiendo para anular ventas, reiniciar y dar permisos).</p><div class="na-asst-acc-l">Cargando…</div>';
     host.appendChild(box);
     decorateOwners(host, box);
     get(ACCESS_PATH).then(function (d) { paintAccess(box, d); }, function () { box.querySelector('.na-asst-acc-l').textContent = 'No se pudo cargar. Revisa internet.'; });
@@ -1531,7 +1531,35 @@
     var menu = doc.getElementById('pageMenu');
     try { if (menu) new MutationObserver(function () { if (menu.classList.contains('active')) idleRefresh(); else if (heroDeferred) renderHero(); }).observe(menu, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
   }
-  root.NA_ASISTENTE = { suspend: suspend, resume: resume, open: function () { if (panelEl) openPanel(); }, close: function () { if (panelEl) closePanel(); }, setState: setState, send: send, _gate: gate, _deps: deps, get quality() { return quality; }, place: place, refreshAccess: refreshAccess, get access() { return access; } };
+  // Motor compartido con WORK (work-host.js): la misma puerta de confirmación (token firmado de un solo uso, ~5 min), el mismo contexto y la misma
+  // tapa de nombres de clientes. WORK no tiene su propia confirmación: solo pide a esta puerta. Sin rol confirmado por el servidor devuelve null.
+  var engine = {
+    owner: function () { return isOwnerAccess() && !!root.NA_ROLES && typeof root.NA_ROLES.isOwner === 'function' && root.NA_ROLES.isOwner() === true; },
+    ready: function () { return !!access && isAdmin(); },
+    // Cuerpo del chat: texto con nombres tapados, contexto de productos (máx. 25, costo solo si NA_ROLES.isOwner()) y estado de las tarjetas.
+    prepare: function (text) {
+      if (!access || !isAdmin()) return null;
+      text = String(text == null ? '' : text);
+      var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos(), deps.proveedores ? deps.proveedores() : []) : { text: text };
+      var role = engine.owner() ? 'owner' : 'empleado', screen = (doc.querySelector('.page.active') || {}).id || null;
+      var body = { text: C.redactText(masked.text), context: C.buildContext(deps.productos(), role, screen, text) };
+      if (gate.summary) body.cards = gate.summary();
+      return body;
+    },
+    canExecute: function (p) { return C.canExecute(roles(), p); },
+    expiry: function (p) { return tokenExp(p); },
+    add: function (p) { return gate.add(p); },
+    cancel: function (key, why) { return gate.cancel(key, why); },
+    forget: function (key) { return gate.forget(key); },
+    forgetAll: function () { return gate.forgetAll(); },
+    state: function (key) { return gate.state(key); },
+    // Confirmar: SOLO con confirmed:true (lo pasa el botón de la tarjeta). La puerta gasta el token en el servidor y recién entonces abre la pantalla del POS.
+    execute: function (key, opts) { return gate.execute(key, Object.assign({}, opts || {}, { confirmed: true })); },
+    // Documento local de solo lectura (misma comprobación de rol que el botón «Abrir documento» del panel).
+    go: function (p) { var perm = C.canExecute(roles(), p); if (!perm.ok) return perm; return C.EXECUTORS.pasos(p, deps); },
+    openDocument: function (p) { var perm = C.canExecute(roles(), p); if (!perm.ok) return Promise.resolve(perm); return Promise.resolve(C.EXECUTORS.documento(p, deps)); }
+  };
+  root.NA_ASISTENTE = { suspend: suspend, resume: resume, open: function () { if (panelEl) openPanel(); }, close: function () { if (panelEl) closePanel(); }, setState: setState, send: send, _gate: gate, _deps: deps, get quality() { return quality; }, place: place, refreshAccess: refreshAccess, get access() { return access; }, engine: engine };
   function later() { (root.requestIdleCallback || function (f) { setTimeout(f, 300); })(boot, { timeout: 2500 }); }
   if (doc.readyState === 'complete') later(); else root.addEventListener('load', later);
 })(window);

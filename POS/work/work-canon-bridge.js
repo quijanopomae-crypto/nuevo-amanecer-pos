@@ -99,7 +99,7 @@
     });
   }
   var disc=$('.chat-disclaimer');
-  if(disc)disc.textContent='WORK conectado a CANON · Las acciones críticas requieren confirmación en el POS.';
+  if(disc)disc.textContent='WORK conectado a CANON · Ningún cambio se aplica sin tu «Confirmar» en la tarjeta.';
   var footer=$('.voice-history-foot');
   if(footer)footer.textContent='Las respuestas se consultan en CANON. La voz disponible usa dictado y lectura por turnos; no es aún audio Live bidireccional.';
   var voiceLabel=$('.voice-eyebrow');
@@ -181,8 +181,93 @@
     if(!spoken && 'speechSynthesis' in win)win.speechSynthesis.cancel();
   });
   intercept($('#newConversation'),'click',function(){
-    post('reset');pending.clear();if($msgs)$msgs.replaceChildren();bubble('theirs','Nueva conversación de WORK. Tus datos del POS no se han modificado.');
+    post('reset');pending.clear();cardEls.clear();if($msgs)$msgs.replaceChildren();bubble('theirs','Nueva conversación de WORK. Tus datos del POS no se han modificado.');
   });
+  // ---- Tarjetas tipadas de WORK (confirmación real) ----
+  // Solo se pintan datos planos que manda el host (textContent). El token firmado nunca llega aquí: el host lo guarda y la puerta del
+  // asistente original lo gasta una sola vez en el servidor al tocar «Confirmar».
+  var cardCss=doc.createElement('style');
+  cardCss.textContent='.na-card{background:#fff;border:1px solid #cfe0ea;border-radius:14px;padding:12px 13px;margin-top:6px;font-size:13px;color:#16384e;max-width:100%}'+
+    '.na-card h4{margin:0 0 7px;font-size:14px}.na-card table{width:100%;border-collapse:collapse}.na-card td,.na-card th{padding:4px 0;text-align:left;vertical-align:top;border-bottom:1px solid #eef3f6}'+
+    '.na-card td:last-child,.na-card th:last-child{text-align:right;white-space:nowrap;padding-left:8px}.na-card .na-warn{background:#fff6e0;border-radius:8px;padding:6px 8px;margin-top:7px;color:#7a5200}'+
+    '.na-card .na-note{font-size:11.5px;color:#577086;margin-top:7px}.na-card .na-res{margin-top:7px;font-weight:650}.na-card .na-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}'+
+    '.na-card button{border:0;border-radius:11px;padding:10px 14px;font:700 13px system-ui;min-height:42px}.na-card .na-ok{background:linear-gradient(120deg,#073958,#0a90ae);color:#fff}'+
+    '.na-card .na-no{background:#eaf0f3;color:#16384e}.na-card button:disabled{opacity:.55}.na-card[data-st="done"]{border-color:#16a34a}.na-card[data-st="failed"],.na-card[data-st="blocked"]{border-color:#dc2626}';
+  (doc.head||doc.body).appendChild(cardCss);
+  var cardEls=new Map();
+  function node(tag,cls,text){var n=doc.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=String(text);return n;}
+  function renderCard(v){
+    if(!v||typeof v!=='object'||typeof v.key!=='string'||!$msgs)return;
+    var row=doc.createElement('div');row.className='chat-row theirs';
+    var body=doc.createElement('div');body.className='chat-bubble';
+    var c=node('div','na-card');c.dataset.st='pending';c.dataset.kind=String(v.kind||'');
+    c.appendChild(node('h4','',v.title||'Propuesta'));
+    var res=node('div','na-res');res.setAttribute('aria-live','polite');
+    if(v.kind==='table'){
+      if(v.text)c.appendChild(node('div','na-note',v.text));
+      if(v.rows&&v.rows.length){
+        var tb=doc.createElement('table');
+        if(v.columns&&v.columns.length){var hr=doc.createElement('tr');v.columns.forEach(function(x){hr.appendChild(node('th','',x));});tb.appendChild(hr);}
+        v.rows.forEach(function(r){var tr=doc.createElement('tr');r.forEach(function(x){tr.appendChild(node('td','',x));});tb.appendChild(tr);});
+        c.appendChild(tb);
+      }else if(!v.text)c.appendChild(node('div','na-note','Sin datos.'));
+    }else if(v.kind==='steps'){
+      var ol=doc.createElement('ol');(v.steps||[]).forEach(function(x){ol.appendChild(node('li','',x));});c.appendChild(ol);
+    }else if(v.rows&&v.rows.length){
+      var t2=doc.createElement('table');
+      v.rows.forEach(function(r){var tr=doc.createElement('tr');tr.appendChild(node('td','',r[0]));tr.appendChild(node('td','',r[1]));t2.appendChild(tr);});
+      c.appendChild(t2);
+    }
+    (v.warnings||[]).forEach(function(w){c.appendChild(node('div','na-warn',w));});
+    if(v.note)c.appendChild(node('div','na-note',v.note));
+    var left=null;
+    if(v.kind==='confirm'&&v.expiresAt){left=node('div','na-note','');c.appendChild(left);}
+    c.appendChild(res);
+    var acts=node('div','na-acts');
+    var ok=null,no=null;
+    function send(type,extra){post(type,Object.assign({key:v.key},extra||{}));}
+    if(v.kind==='confirm'){
+      ok=node('button','na-ok','Confirmar');ok.type='button';
+      no=node('button','na-no','Cancelar');no.type='button';
+      ok.addEventListener('click',function(){if(c.dataset.st!=='pending'&&c.dataset.st!=='retry')return;ok.disabled=true;no.disabled=true;send('card-confirm');});
+      no.addEventListener('click',function(){if(c.dataset.st!=='pending'&&c.dataset.st!=='retry')return;ok.disabled=true;no.disabled=true;send('card-cancel');});
+      acts.append(ok,no);
+    }else if(v.kind==='review'){
+      var open=node('button','na-ok','Abrir en el asistente');open.type='button';
+      open.addEventListener('click',function(){send('card-assistant');});acts.appendChild(open);
+    }else if(v.kind==='steps'&&v.go){
+      var go=node('button','na-ok','Llévame ahí');go.type='button';go.addEventListener('click',function(){send('card-open');});acts.appendChild(go);
+    }else if(v.kind==='doc'){
+      var dd=node('button','na-ok','Abrir documento');dd.type='button';dd.addEventListener('click',function(){send('card-open');});acts.appendChild(dd);
+    }else if(v.kind==='denied'){
+      res.textContent=v.note||'Eso lo hace el Admin.';
+    }
+    if(acts.childNodes.length)c.appendChild(acts);
+    var timer=null;
+    if(left){
+      var tick=function(){
+        var ms=v.expiresAt-Date.now();
+        if(c.dataset.st==='done'||c.dataset.st==='cancelled'||c.dataset.st==='failed'||c.dataset.st==='blocked'||c.dataset.st==='expired'){clearInterval(timer);left.textContent='';return;}
+        if(ms<=0){clearInterval(timer);left.textContent='Venció';if(c.dataset.st==='pending'||c.dataset.st==='retry'){ok.disabled=true;no.disabled=true;send('card-cancel',{why:'vencida'});}return;}
+        var sec=Math.ceil(ms/1000);left.textContent='Vence en '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
+      };
+      tick();timer=setInterval(tick,1000);
+    }
+    cardEls.set(v.key,{card:c,ok:ok,no:no,res:res});
+    body.appendChild(c);row.appendChild(body);$msgs.appendChild(row);$msgs.scrollTop=$msgs.scrollHeight;
+  }
+  function updateCard(d){
+    var rec=cardEls.get(d.key);if(!rec)return;
+    var st=String(d.state||'');
+    rec.card.dataset.st=st;
+    rec.res.textContent=String(d.msg||'').slice(0,300);
+    if(rec.ok){
+      if(st==='working'){rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent='Guardando…';}
+      else if(st==='retry'){rec.ok.disabled=false;rec.no.disabled=false;rec.ok.textContent='Reintentar';}
+      else{rec.ok.disabled=true;rec.no.disabled=true;rec.ok.textContent=({done:'Hecho',failed:'No disponible',blocked:'No disponible',expired:'Venció',cancelled:'Cancelada'})[st]||'Confirmar';}
+    }
+    if($msgs)$msgs.scrollTop=$msgs.scrollHeight;
+  }
   win.addEventListener('message',function(event){
     if(event.origin!==win.location.origin||event.source!==win.parent)return;
     var d=event.data;if(!d || d.type!=='na-work:response')return;
@@ -201,11 +286,13 @@
       });
       return;
     }
+    if(d.action==='card'&&typeof d.key==='string'){updateCard(d);return;}
     if(d.action!=='chat'||!pending.has(d.id))return;
     var item=pending.get(d.id);pending.delete(d.id);
     if(item.loading)item.loading.remove();
-    var output=d.ok?String(d.text||'Sin respuesta'):('No se completó la consulta: '+String(d.text||'Error de conexión'));
-    bubble('theirs',output);
+    var output=d.ok?String(d.text||(Array.isArray(d.cards)&&d.cards.length?'':'Sin respuesta')):('No se completó la consulta: '+String(d.text||'Error de conexión'));
+    if(output.trim()||!(Array.isArray(d.cards)&&d.cards.length))bubble('theirs',output);
+    if(d.ok&&Array.isArray(d.cards))d.cards.slice(0,8).forEach(renderCard);
     if(item.mode==='voice') {
       var cap=$('#voiceCaptionBox'),sub=$('#voiceSubtitle');
       if(cap)cap.hidden=false;

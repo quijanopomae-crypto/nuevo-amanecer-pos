@@ -70,8 +70,21 @@
       target.postMessage(Object.assign({type:'na-work:response'},data),root.location.origin);
     }
   }
-  var history = [], generation = 0, busy = false;
-  function resetConversation() { history = []; generation++; busy = false; }
+  var history = [], generation = 0, busy = false, cards = Object.create(null), cardSeq = 0;
+  var MAX_TEXT = 1500;
+  function engine() { var a = root.NA_ASISTENTE; return a && a.engine ? a.engine : null; }
+  function core() { return root.NA_ASISTENTE_CORE || null; }
+  // Las tarjetas de confirmación viven en el motor del asistente original (puerta con token firmado de un solo uso).
+  // Al cerrar o reiniciar WORK se cancelan las que sigan pendientes (no quedan tarjetas huérfanas con datos).
+  function dropCards() {
+    var e = engine();
+    Object.keys(cards).forEach(function (k) {
+      var rec = cards[k];
+      if (rec && rec.gated && e) { try { e.cancel(k, 'cancelada'); } catch (_) {} try { e.forget(k); } catch (_) {} }
+    });
+    cards = Object.create(null);
+  }
+  function resetConversation() { dropCards(); history = []; generation++; busy = false; }
   function close() {
     resetConversation();
     if (overlay) { overlay.remove(); overlay=null; frame=null; doc.body.classList.remove('na-work-open'); }
@@ -94,30 +107,241 @@
     });
     syncButton();
   }
+  // ---- Mensajes amables (nunca códigos crudos como rate_limited) ----
+  var GENERIC_ERROR = 'No se pudo completar. No se hizo ningún cambio. Intenta de nuevo en un momento.';
+  function friendly(code, retryAfter) {
+    var C = core(), c = String(code == null ? '' : code), msg = GENERIC_ERROR;
+    if (C && typeof C.friendlyError === 'function') {
+      try { msg = C.friendlyError(c, null).msg || GENERIC_ERROR; } catch (_) { msg = GENERIC_ERROR; }
+    } else if (/rate_limited|429/.test(c)) msg = 'Espera un momento e intenta de nuevo.';
+    else if (/SIN_SESION|unauthorized|401/.test(c)) msg = 'Este aparato no tiene sesión. Entra de nuevo al sistema.';
+    if (/rate_limited|HTTP_429/.test(c) && Number(retryAfter) > 0 && Number(retryAfter) <= 300) msg = 'Espera ' + Math.ceil(Number(retryAfter)) + ' segundos e intenta de nuevo.';
+    return msg;
+  }
+  function plain(text) {
+    var C = core(), t = String(text == null ? '' : text);
+    return C && typeof C.looksTechnical === 'function' && C.looksTechnical(t) ? GENERIC_ERROR : t;
+  }
+  var ACCESS_CODES = {assistant_off:1,forbidden_role:1,admin_only:1};
+  function waitEngine(ms) {
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      (function poll() {
+        var e = engine();
+        if (e && typeof e.ready === 'function' && e.ready()) { resolve(e); return; }
+        if (Date.now() - t0 >= ms) { resolve(null); return; }
+        root.setTimeout(poll, 250);
+      })();
+    });
+  }
+  function str(v, n) { return String(v == null ? '' : v).slice(0, n || 160); }
+  function money(v) {
+    var C = core(), n = Number(v);
+    if (v == null || !isFinite(n)) return '-';
+    return C && typeof C.soles === 'function' ? C.soles(n) : 'S/ ' + n.toFixed(2);
+  }
+  // Tarjeta tipada para el iframe: solo datos planos (el iframe los pinta con textContent). Nada de HTML ni del token.
+  var CONFIRMABLE = {precio:1,costo:1,ajuste:1,producto:1,compra:1,configuracion:1};
+  function needsReview(p) {
+    var C = core();
+    if (Array.isArray(p.completar) || Array.isArray(p.needFields)) return true;
+    if (p.type === 'configuracion' && C && typeof C.isRucCard === 'function' && C.isRucCard(p)) return true;
+    if (p.type === 'compra') {
+      var lines = Array.isArray(p.lineas) ? p.lineas : [];
+      if (!lines.length) return true;
+      return lines.some(function (l) { return !l || (l.revisar && l.revisar.length) || (l.limite && l.limite.length) || l.cantidad == null || l.cantidad === ''; });
+    }
+    return false;
+  }
+  // Un toque (sin segundo «Guardar») solo para precio y ajuste de stock del Admin, y solo si la tarjeta no trae avisos de riesgo:
+  // con aviso (precio ~100 veces mayor, cambio >50%, bajo costo, stock negativo, cantidad enorme) se conserva el segundo paso a propósito.
+  function oneTap(p) {
+    if (!ownerDataAllowed()) return false;
+    if (p.type === 'precio') return p.quisoDecir == null && !p.cambioGrande && !p.bajoCosto;
+    if (p.type === 'ajuste') return !p.quedaNegativo && !p.grande;
+    return false;
+  }
+  function cardRows(p) {
+    var rows = [], warn = [], i;
+    if (p.type === 'precio') {
+      rows.push([str(p.nombre, 80), money(p.precio_actual) + ' → ' + money(p.precio_nuevo)]);
+      if (p.quisoDecir != null) warn.push('¿Quisiste decir ' + money(p.quisoDecir) + '? Si es así, no confirmes y escribe el precio con punto.');
+      else if (p.cambioGrande) warn.push('Cambio grande (más de 50%). Revisa bien.');
+      if (p.bajoCosto) warn.push('El precio queda por debajo del costo.');
+    } else if (p.type === 'costo') {
+      rows.push([str(p.nombre, 80) + ' · costo', (p.costo_actual != null ? money(p.costo_actual) : 'sin costo') + ' → ' + money(p.costo_nuevo)]);
+    } else if (p.type === 'ajuste') {
+      rows.push([str(p.nombre, 80) + (p.motivo ? ' · ' + str(p.motivo, 60) : ''), (p.tipo === 'entrada' ? '+' : '−') + str(p.cantidad, 20)]);
+      if (p.stock_actual != null) rows.push(['Stock', str(p.stock_actual, 20) + ' → ' + str(p.stock_despues, 20)]);
+      if (p.quedaNegativo) warn.push('El stock quedaría negativo. Revisa la cantidad.');
+      if (p.grande) warn.push('Cantidad muy grande. Revisa bien.');
+    } else if (p.type === 'producto') {
+      rows.push(['Nombre', str(p.nombre, 80)], ['Precio', money(p.precio)], ['Costo', p.costo != null ? money(p.costo) : '-'],
+        ['Stock inicial', p.stock_inicial != null ? str(p.stock_inicial, 20) : '-'], ['Categoría', str(p.categoria || '-', 60)]);
+      if (Array.isArray(p.parecidos) && p.parecidos.length) warn.push('Ya hay productos parecidos: ' + p.parecidos.slice(0, 5).map(function (x) { return str(x, 60); }).join(', ') + '.');
+      if (p.bajoCosto) warn.push('El precio queda por debajo del costo.');
+      if (p.revisar) warn.push('Precio o costo fuera de lo normal. Revisa bien.');
+    } else if (p.type === 'compra') {
+      var lines = Array.isArray(p.lineas) ? p.lineas.slice(0, 30) : [];
+      for (i = 0; i < lines.length; i++) rows.push([str(lines[i].cantidad, 12) + ' × ' + str(lines[i].nombre, 80) + (lines[i].product_id ? '' : ' (no registrado)'), lines[i].costo_unitario != null ? money(lines[i].costo_unitario) : '-']);
+      var C = core(); if (C && typeof C.purchaseTotals === 'function') { var t = C.purchaseTotals(p); if (t && t.filas && t.filas.length !== t.sinCosto) rows.push(['Total de la compra', money(t.total)]); }
+      if (p.sinProducto) warn.push(p.sinProducto === 1 ? '1 línea no tiene producto registrado: revísala.' : p.sinProducto + ' líneas no tienen producto registrado: revísalas.');
+    } else if (p.type === 'configuracion') {
+      rows.push([str(p.nombre, 80), str(p.antes, 60) + ' → ' + str(p.valor, 60)]);
+    }
+    return {rows: rows, warnings: warn};
+  }
+  function readOnlyView(p) {
+    var r = p.result || {};
+    if (p.type === 'consulta') {
+      var filas = Array.isArray(r.filas) ? r.filas.slice(0, 30).map(function (f) { return (Array.isArray(f) ? f : []).slice(0, 8).map(function (c) { return typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : str(c, 120); }); }) : [];
+      return {kind: 'table', title: str(r.titulo || 'Consulta', 100), columns: Array.isArray(r.columnas) ? r.columnas.slice(0, 8).map(function (c) { return str(c, 40); }) : [],
+        rows: filas, text: r.error ? str(r.texto, 300) : '', warnings: r.truncado ? ['Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.'] : [],
+        note: 'Datos leídos del servidor. No cambia nada.'};
+    }
+    if (p.type === 'pasos') return {kind: 'steps', title: str(p.title || 'Cómo hacerlo', 100), steps: (Array.isArray(p.pasos) ? p.pasos : []).slice(0, 8).map(function (x) { return str(x, 200); }), go: !!p.pantalla};
+    if (p.type === 'documento') return {kind: 'doc', title: str(p.title || 'Documento', 100), note: 'Documento interno. NO es comprobante SUNAT.'};
+    return null;
+  }
+  function buildCards(proposals) {
+    var e = engine(), views = [];
+    (Array.isArray(proposals) ? proposals : []).slice(0, 8).forEach(function (p) {
+      if (!p || typeof p !== 'object' || typeof p.type !== 'string') return;
+      var view = null, key;
+      if (p.needsConfirm !== true && (p.type === 'consulta' || p.type === 'pasos' || p.type === 'documento')) {
+        view = readOnlyView(p); if (!view) return;
+        key = 'ro-' + (++cardSeq); cards[key] = {p: p, gated: false, kind: view.kind};
+        view.key = key; views.push(view); return;
+      }
+      if (!CONFIRMABLE[p.type] || p.needsConfirm !== true || !p.id || !p.confirm_token || !e) return;
+      var perm = e.canExecute(p), body = cardRows(p);
+      view = {type: p.type, title: str(p.title || 'Propuesta', 100), rows: body.rows, warnings: body.warnings};
+      if (!perm || !perm.ok) { view.kind = 'denied'; view.note = plain(perm && perm.msg); view.key = 'dn-' + (++cardSeq); views.push(view); return; }
+      key = e.add(p);
+      if (!key) return;
+      if (needsReview(p)) {
+        view.kind = 'review'; view.note = 'Esta tarjeta necesita que revises datos. Ábrela en el asistente del POS.';
+        cards[key] = {p: p, gated: true, kind: 'review'};
+      } else {
+        var tap = oneTap(p);
+        view.kind = 'confirm'; view.oneTap = tap;
+        view.expiresAt = Number(e.expiry(p)) || 0;
+        view.note = tap ? 'Al confirmar se guarda al instante. Se usa una sola vez.'
+          : (p.type === 'configuracion' ? 'Al confirmar se aplica este ajuste. Se usa una sola vez.' : 'Al confirmar se abre la pantalla del POS con los datos llenos. Revísala y guarda ahí.');
+        cards[key] = {p: p, gated: true, kind: 'confirm', busy: false};
+      }
+      view.key = key; views.push(view);
+    });
+    return views;
+  }
+  function cardState(key, extra) {
+    if (frame) respond(frame.contentWindow, Object.assign({action: 'card', key: key}, extra));
+  }
+  function closeToPos() { temporarilyLegacy = true; close(); }
+  // Guarda el formulario EXISTENTE del POS que el motor acaba de abrir y llenar (mismo camino que el botón «Guardar»; el Admin no tiene PIN aquí).
+  // Si el formulario sigue abierto después de unos segundos (validación o aviso), no se fuerza nada: se muestra el formulario para que la persona lo revise.
+  async function saveOpenForm(type) {
+    var fn = type === 'precio' ? root.guardarProd : root.guardarMovInv, modal = doc.getElementById(type === 'precio' ? 'mProd' : 'mMovInv');
+    if (typeof fn !== 'function' || !modal || !modal.classList || !modal.classList.contains('open')) return false;
+    try {
+      await Promise.race([Promise.resolve(fn()), new Promise(function (r) { root.setTimeout(r, 8000); })]);
+    } catch (_) {}
+    return !modal.classList.contains('open');
+  }
+  async function confirmCard(key) {
+    var rec = cards[key], e = engine(), myGeneration = generation;
+    if (!rec || !rec.gated || rec.kind !== 'confirm' || rec.busy || !e) return;
+    if (!ownerDataAllowed() && rec.p.type !== 'configuracion') { cardState(key, {state: 'failed', msg: 'Esta sesión ya no es de Admin. Vuelve a entrar como Admin y pide el cambio de nuevo.'}); return; }
+    rec.busy = true;
+    cardState(key, {state: 'working', msg: 'Guardando…'});
+    var r;
+    try { r = await e.execute(key, {}); } catch (err) { r = {ok: false, code: err && err.message, msg: GENERIC_ERROR}; }
+    rec.busy = false;
+    if (myGeneration !== generation || !sessionReady()) return;
+    r = r || {ok: false};
+    var p = rec.p;
+    if (r.ok) {
+      if (oneTap(p)) {
+        var saved = await saveOpenForm(p.type);
+        if (myGeneration !== generation) return;
+        if (saved) { cardState(key, {state: 'done', msg: 'Listo. Se guardó al instante.'}); return; }
+        cardState(key, {state: 'done', msg: 'Abrí la pantalla con el cambio listo. Revisa y pulsa Guardar.'});
+        root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
+        return;
+      }
+      cardState(key, {state: 'done', msg: plain(r.msg) || 'Listo.'});
+      if (p.type !== 'configuracion') root.setTimeout(function () { if (myGeneration === generation) closeToPos(); }, 900);
+      return;
+    }
+    var code = r.code || 'error';
+    if (ACCESS_CODES[code]) {
+      try { var a = root.NA_ASISTENTE; if (a && typeof a.refreshAccess === 'function') a.refreshAccess(); } catch (_) {}
+      cardState(key, {state: 'failed', msg: plain(r.msg) || friendly(code)}); return;
+    }
+    if (code === 'confirm_expired' || code === 'HTTP_410') { cardState(key, {state: 'expired', msg: 'Esta propuesta venció. Pídela otra vez.'}); return; }
+    var C = core(), view = C && typeof C.confirmFailureView === 'function' ? C.confirmFailureView(r, {type: p.type}) : null;
+    var msg = plain((view && view.msg) || r.msg) || friendly(code, r.retry_after_s);
+    if (Number(r.retry_after_s) > 0 && /rate_limited|HTTP_429/.test(code)) msg = friendly(code, r.retry_after_s);
+    var kind = view ? view.kind : 'other';
+    if (kind === 'blocked' || kind === 'review' || kind === 'fields' || kind === 'limit') {
+      cardState(key, {state: 'blocked', msg: msg + ' Ábrela en el asistente del POS.'}); return;
+    }
+    if (rec.p && e.state(key) === 'denied') { cardState(key, {state: 'failed', msg: msg}); return; }
+    cardState(key, {state: 'retry', msg: msg});
+  }
+  function cancelCard(key, why) {
+    var rec = cards[key], e = engine();
+    if (!rec || !rec.gated || rec.busy || !e) return;
+    try { e.cancel(key, why === 'vencida' ? 'vencida' : 'cancelada'); } catch (_) {}
+    cardState(key, {state: why === 'vencida' ? 'expired' : 'cancelled', msg: why === 'vencida' ? 'Esta propuesta venció. Pídela otra vez.' : 'Cancelado. No se hizo nada.'});
+  }
+  async function readOnlyAction(key) {
+    var rec = cards[key], e = engine();
+    if (!rec || rec.gated || !e) return;
+    var r;
+    try { r = rec.kind === 'doc' ? await e.openDocument(rec.p) : e.go(rec.p); } catch (_) { r = {ok: false, msg: GENERIC_ERROR}; }
+    if (!r || !r.ok) { cardState(key, {state: 'failed', msg: plain(r && r.msg) || GENERIC_ERROR}); return; }
+    closeToPos();
+  }
   async function ask(target,id,message) {
     if (busy) { respond(target,{action:'chat',id:id,ok:false,text:'Espera a que termine la consulta actual.'}); return; }
     var requestGeneration = generation;
+    if (String(message || '').length > MAX_TEXT) {
+      respond(target,{action:'chat',id:id,ok:true,text:'Tu mensaje tiene ' + String(message).length + ' letras y el máximo es ' + MAX_TEXT + '. No lo envié. Divídelo en partes más cortas.'});
+      return;
+    }
     busy = true;
     try {
       if (!sessionReady() || !root.NA_ROLES || typeof root.NA_ROLES.api!=='function') throw Error('Asistente no disponible en esta sesión');
-      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:String(message||'').slice(0,1500),history:history.slice(),context:{products:[]}});
+      // Mismo motor del asistente original: nombres de clientes tapados, contexto real de productos (costos solo del Admin) y estado de tarjetas.
+      var e = await waitEngine(6000);
+      if (requestGeneration !== generation || !sessionReady()) return;
+      var prepared = e ? e.prepare(String(message || '')) : null;
+      if (!prepared) throw Error('El asistente todavía no está listo en este aparato. Espera unos segundos e intenta de nuevo. No se envió nada.');
+      var answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:String(prepared.text||'').slice(0,MAX_TEXT),history:history.slice(),context:prepared.context,cards:prepared.cards});
       if (requestGeneration !== generation || !sessionReady()) return;
       var out=answer && typeof answer==='object' ? answer : {};
-      if (out.error) throw Error('El servidor respondió: '+String(out.error).slice(0,80));
+      if (out.error) { var codeErr = new Error(String(out.error).slice(0,80)); codeErr.data = out; throw codeErr; }
       var text=out.texto || out.text || out.reply || out.respuesta || out.answer || out.message || '';
       if (typeof text!=='string') text='';
       if (!text && out.final) text=typeof out.final==='string'?out.final:out.final.text || out.final.respuesta || '';
-      if (!text) text='El servidor respondió sin texto visible. La operación no se considera completada.';
-      if (Array.isArray(out.proposals) && out.proposals.length) text+='\n\nHay propuestas pendientes de confirmar mediante el flujo autorizado del POS. No se han ejecutado automáticamente.';
+      var views = buildCards(out.proposals);
+      var hidden = (Array.isArray(out.proposals) ? out.proposals : []).filter(function (p) { return p && p.needsConfirm === true; }).length;
+      if (!text && !views.length) text='El servidor respondió sin texto visible. La operación no se considera completada.';
+      // Si hay cambios propuestos que no se pudieron mostrar como tarjeta, se dice claro (nunca en consultas de solo lectura).
+      if (hidden > views.filter(function (v) { return v.kind === 'confirm' || v.kind === 'review' || v.kind === 'denied'; }).length) text += (text ? '\n\n' : '') + 'Hay un cambio propuesto que no pude mostrar aquí. No se hizo nada. Pídelo desde el asistente del POS.';
       // Preserve server signatures unchanged; no synthetic assistant turns enter authenticated memory.
       if (Array.isArray(out.turns) && out.turns.length === 2 && out.turns.every(function(t){return t && ['user','assistant'].indexOf(t.role)>=0 && typeof t.content==='string' && t.content.length<=12000 && typeof t.sig==='string';})) {
         history = history.concat(out.turns).slice(-24);
         while (history.length && JSON.stringify(history).length > 60000) history.splice(0,2);
       }
-      respond(target,{action:'chat',id:id,ok:true,text:String(text).slice(0,12000)});
+      respond(target,{action:'chat',id:id,ok:true,text:String(text).slice(0,12000),cards:views});
     } catch (err) {
       if (requestGeneration !== generation || !sessionReady()) return;
-      respond(target,{action:'chat',id:id,ok:false,text:err && err.message ? String(err.message).slice(0,200) : 'Error de conexión. No se ha confirmado ninguna acción.'});
+      var raw = err && err.message ? String(err.message) : '';
+      var shown = /^(El asistente|Asistente no|Este aparato)/.test(raw) ? raw.slice(0,200) : friendly(raw, err && err.data && err.data.retry_after_s);
+      if (ACCESS_CODES[raw]) { try { var a2 = root.NA_ASISTENTE; if (a2 && typeof a2.refreshAccess === 'function') a2.refreshAccess(); } catch (_) {} }
+      respond(target,{action:'chat',id:id,ok:false,text:shown});
     } finally { if (requestGeneration === generation) busy = false; }
   }
   root.addEventListener('message',function (event) {
@@ -134,6 +358,13 @@
       // The canonical navigation still checks the session/role before entering a page.
       var changed = root.goPage(id);
       if (changed !== false && !isHome()) close();
+      return;
+    }
+    if (/^na-work:card-/.test(data.type) && typeof data.key==='string' && cards[data.key]) {
+      if (data.type==='na-work:card-confirm') confirmCard(data.key);
+      else if (data.type==='na-work:card-cancel') cancelCard(data.key,data.why);
+      else if (data.type==='na-work:card-open') readOnlyAction(data.key);
+      else if (data.type==='na-work:card-assistant') { closeToPos(); try { var a3=root.NA_ASISTENTE; if (a3 && typeof a3.open==='function') a3.open(); } catch (_) {} }
       return;
     }
     if (data.type==='na-work:chat' && typeof data.id==='string' && typeof data.text==='string' && data.text.trim().length>0) {

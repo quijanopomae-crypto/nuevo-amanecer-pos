@@ -1,0 +1,207 @@
+// WORK Fase 1: tarjetas tipadas con Confirmar real (motor del asistente original), contexto real, errores amables.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const CORE=require('../../POS/js/modules/asistente/asistente-core.js');
+const source=readFileSync('POS/js/work-host.js','utf8');
+const tick=(ms=15)=>new Promise(r=>setTimeout(r,ms));
+
+function fixture({owner=true,engine={},api,core=CORE,modals={mProd:true,mMovInv:true},saves={}}={}){
+ const nodes=new Map(),listeners={},sent=[],frames=[],calls={api:[],execute:[],cancel:[],save:[],go:[]};
+ const home={classList:{contains:()=>true}};
+ const body={classList:{add(){},remove(){}},appendChild(el){if(el.id)nodes.set(el.id,el);}};
+ const create=(tag)=>{const element={setAttribute(){},appendChild(){},addEventListener(){},remove(){nodes.delete(this.id);},contentWindow:{postMessage(m){sent.push(m);}}};if(tag==='iframe')frames.push(element);return element;};
+ const open={mProd:modals.mProd,mMovInv:modals.mMovInv};
+ const modalEl=id=>({classList:{contains:c=>c==='open'&&open[id]===true}});
+ const root={document:{body,head:{appendChild(){}},readyState:'complete',createElement:create,
+   getElementById:id=>id==='pageMenu'?home:(id==='mProd'||id==='mMovInv')?modalEl(id):nodes.get(id),querySelectorAll:()=>[]},
+  location:{origin:'https://pos.test',search:'',hostname:'pos.test'},NA_HOSTED_CONFIG:{environment:'production'},
+  NA_ROLES:{confirmed:true,role:owner?'owner':'empleado',isOwner:()=>owner,api:api||(async(path,b)=>{calls.api.push(b);return {reply:'ok',turns:[]};})},
+  addEventListener:(e,fn)=>listeners[e]=fn,setInterval(){},setTimeout:fn=>setTimeout(fn,1),MutationObserver:class{observe(){}},
+  NA_ASISTENTE_CORE:core,
+  guardarProd:async()=>{calls.save.push('prod');if(saves.prod!==false)open.mProd=false;},
+  guardarMovInv:async()=>{calls.save.push('mov');if(saves.mov!==false)open.mMovInv=false;},
+  NA_ASISTENTE:{engine:{ready:()=>true,owner:()=>owner,
+    prepare:t=>({text:'[tapado] '+t,context:{screen:'pageMenu',products:[{id:'P1',nombre:'Leche',precio:4.5,stock:10}]},cards:[]}),
+    canExecute:()=>({ok:true}),expiry:()=>Date.now()+300000,add:p=>p.id,
+    cancel:(k)=>calls.cancel.push(k),forget(){},forgetAll(){},state:()=>'pending',
+    execute:async(k,o)=>{calls.execute.push([k,o]);return {ok:true,msg:'Abrí la ficha.'};},
+    go:p=>{calls.go.push(p.pantalla);return {ok:true};},openDocument:async()=>({ok:true}),...engine}}};
+ vm.runInNewContext(source,{window:root,URLSearchParams,Array,Object,String,Error,JSON,Date,Promise,Number,isFinite,Math});
+ const frameWin=frames[0].contentWindow;
+ const post=data=>listeners.message({origin:'https://pos.test',source:frameWin,data});
+ return {root,nodes,listeners,sent,frames,calls,post,open};
+}
+const precio=(extra={})=>({id:'pr-1',type:'precio',needsConfirm:true,confirm_token:'SECRETO.firma',title:'Cambiar precio',nombre:'Leche',product_id:'P1',precio_actual:4.5,precio_nuevo:5.2,...extra});
+const lastCards=f=>[...f.sent].reverse().find(m=>m.action==='chat'&&m.cards)?.cards||[];
+
+test('el chat manda productos reales y el texto ya tapado por el motor del asistente (no products: [])',async()=>{
+ const f=fixture();f.post({type:'na-work:chat',id:'a',text:'precio de la leche de Juan Perez'});await tick();
+ const b=f.calls.api[0];
+ assert.equal(b.context.products.length,1);assert.equal(b.context.products[0].id,'P1');
+ assert.match(b.text,/^\[tapado\]/);assert.ok(Array.isArray(b.cards));
+});
+test('el contexto real nunca lleva costo ni a un empleado ni sin sesión de Admin (buildContext)',()=>{
+ globalThis.NA_PERMISSIONS={canDo:(role)=>role==='owner'};
+ const prods=[{id:'1',name:'Arroz',precio:5,stock:3,costo:3.2}];
+ assert.equal(CORE.buildContext(prods,'empleado','pageMenu','arroz').products[0].costo,undefined);
+ assert.equal(CORE.buildContext(prods,'owner','pageMenu','arroz').products[0].costo,3.2);
+});
+test('un mensaje de más de 1500 letras avisa y no se envía',async()=>{
+ const f=fixture();f.post({type:'na-work:chat',id:'a',text:'x'.repeat(1501)});await tick();
+ assert.equal(f.calls.api.length,0);
+ const m=f.sent.find(x=>x.action==='chat');assert.equal(m.ok,true);assert.match(m.text,/1500/);
+});
+test('sin motor del asistente listo no se envía nada y se dice en palabras simples',async()=>{
+ const f=fixture({engine:{ready:()=>false}});f.post({type:'na-work:chat',id:'a',text:'hola'});
+ await new Promise(r=>setTimeout(r,6600));
+ assert.equal(f.calls.api.length,0);
+ const m=f.sent.find(x=>x.action==='chat');assert.equal(m.ok,false);assert.doesNotMatch(m.text,/_|HTTP/);
+});
+test('rate_limited y otros códigos salen como frase amable, nunca como código',async()=>{
+ for(const code of ['rate_limited','HTTP_429','daily_limit','upstream_busy','timeout','HTTP_500','algo_raro_xyz']){
+  const f=fixture({api:async()=>{throw Object.assign(new Error(code),{data:{}});}});
+  f.post({type:'na-work:chat',id:'a',text:'hola'});await tick();
+  const m=f.sent.find(x=>x.action==='chat');
+  assert.equal(m.ok,false,code);assert.doesNotMatch(m.text,/[a-z]+_[a-z_]+|HTTP|undefined/,code+' => '+m.text);
+ }
+ const f=fixture({api:async()=>{throw Object.assign(new Error('rate_limited'),{data:{retry_after_s:12}});}});
+ f.post({type:'na-work:chat',id:'a',text:'hola'});await tick();
+ assert.match(f.sent.find(x=>x.action==='chat').text,/12 segundos/);
+});
+test('consulta de solo lectura: tabla en la tarjeta y SIN aviso de «propuestas pendientes»',async()=>{
+ const f=fixture({api:async()=>({reply:'Tienes 2 productos con poco stock.',proposals:[{id:'q1',type:'consulta',needsConfirm:false,result:{titulo:'Poco stock',columnas:['Producto','Stock'],filas:[['Leche',2],['Arroz',1]]}}]})});
+ f.post({type:'na-work:chat',id:'a',text:'qué falta'});await tick();
+ const m=f.sent.find(x=>x.action==='chat');
+ assert.doesNotMatch(m.text,/propuestas pendientes|No se han ejecutado/);
+ assert.equal(m.cards[0].kind,'table');assert.equal(m.cards[0].rows.length,2);
+});
+test('propuesta de precio: tarjeta con Confirmar, sin token en el mensaje al iframe',async()=>{
+ const f=fixture({api:async()=>({reply:'Listo, te preparé el cambio.',proposals:[precio()]})});
+ f.post({type:'na-work:chat',id:'a',text:'sube la leche a 5.20'});await tick();
+ const c=lastCards(f)[0];
+ assert.equal(c.kind,'confirm');assert.equal(c.key,'pr-1');assert.equal(c.oneTap,true);
+ assert.ok(c.rows[0][1].includes('5.20'));
+ assert.doesNotMatch(JSON.stringify(f.sent),/SECRETO/);
+});
+test('un toque: Confirmar gasta el token en el motor y guarda el formulario abierto; sin segundo «Guardar»',async()=>{
+ const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
+ assert.equal(f.calls.execute.length,1);assert.equal(f.calls.execute[0][0],'pr-1');
+ assert.deepEqual(f.calls.save,['prod']);
+ const st=f.sent.filter(m=>m.action==='card').map(m=>m.state);
+ assert.deepEqual(st,['working','done']);
+ assert.equal(f.nodes.has('naWorkOverlay'),true,'WORK sigue abierto');
+});
+test('doble toque en Confirmar no gasta dos veces',async()=>{
+ const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>{await tick(20);return {ok:true,msg:'ok'};}}});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ f.post({type:'na-work:card-confirm',key:'pr-1'});f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(60);
+ assert.equal(f.calls.save.length,1);
+});
+test('con aviso de riesgo (bajo costo, cambio grande, «quisiste decir») se conserva el segundo paso: no guarda solo',async()=>{
+ for(const extra of [{bajoCosto:true},{cambioGrande:true},{quisoDecir:0.52}]){
+  const f=fixture({api:async()=>({reply:'ok',proposals:[precio(extra)]})});
+  f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+  assert.equal(lastCards(f)[0].oneTap,false);assert.ok(lastCards(f)[0].warnings.length>0);
+  f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
+  assert.deepEqual(f.calls.save,[],JSON.stringify(extra));
+  assert.equal(f.nodes.has('naWorkOverlay'),false,'se muestra la pantalla del POS para revisar');
+ }
+});
+test('si el formulario no se cierra al guardar, no se fuerza: se muestra la pantalla del POS',async()=>{
+ const f=fixture({saves:{prod:false},api:async()=>({reply:'ok',proposals:[precio()]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(40);
+ assert.equal(f.nodes.has('naWorkOverlay'),false);
+ assert.match(f.sent.filter(m=>m.action==='card').pop().msg,/Guardar/);
+});
+test('ajuste de stock: un toque; con stock negativo conserva el segundo paso',async()=>{
+ const aj={id:'aj-1',type:'ajuste',needsConfirm:true,confirm_token:'T.s',title:'Ajustar',nombre:'Leche',product_id:'P1',tipo:'entrada',cantidad:5,motivo:'Compra',stock_actual:3,stock_despues:8};
+ let f=fixture({api:async()=>({reply:'ok',proposals:[aj]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();f.post({type:'na-work:card-confirm',key:'aj-1'});await tick(30);
+ assert.deepEqual(f.calls.save,['mov']);
+ f=fixture({api:async()=>({reply:'ok',proposals:[{...aj,quedaNegativo:true}]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();f.post({type:'na-work:card-confirm',key:'aj-1'});await tick(30);
+ assert.deepEqual(f.calls.save,[]);
+});
+test('errores de confirmar en palabras simples; 429 permite reintentar con la misma tarjeta',async()=>{
+ const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>({ok:false,code:'rate_limited',msg:'Espera un momento e intenta de nuevo.'})}});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
+ const last=f.sent.filter(m=>m.action==='card').pop();
+ assert.equal(last.state,'retry');assert.doesNotMatch(last.msg,/rate_limited|_/);assert.deepEqual(f.calls.save,[]);
+});
+test('tarjeta vencida o rol perdido: no se aplica nada y se explica',async()=>{
+ let f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>({ok:false,code:'confirm_expired',msg:'x'})}});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
+ assert.equal(f.sent.filter(m=>m.action==='card').pop().state,'expired');
+ f=fixture({api:async()=>({reply:'ok',proposals:[precio()]}),engine:{execute:async()=>({ok:false,code:'forbidden_role',dropped:true,msg:'Esta sesión ya no es de Admin. Vuelva a entrar como Admin y pida la compra de nuevo.'})}});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(30);
+ assert.equal(f.sent.filter(m=>m.action==='card').pop().state,'failed');assert.deepEqual(f.calls.save,[]);
+});
+test('compra con filas a revisar o datos por completar no se confirma en WORK: se abre en el asistente',async()=>{
+ const compra={id:'c-1',type:'compra',needsConfirm:true,confirm_token:'T.s',title:'Compra',completar:['proveedor'],lineas:[{nombre:'Arroz',cantidad:2,costo_unitario:3,product_id:'P2'}]};
+ const f=fixture({api:async()=>({reply:'ok',proposals:[compra]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ assert.equal(lastCards(f)[0].kind,'review');
+ f.post({type:'na-work:card-confirm',key:'c-1'});await tick(20);
+ assert.equal(f.calls.execute.length,0,'review nunca gasta el token');
+});
+test('un empleado o un rol sin permiso ve la tarjeta como no permitida y no puede confirmar',async()=>{
+ const f=fixture({owner:false,api:async()=>({reply:'ok',proposals:[precio()]}),engine:{canExecute:()=>({ok:false,msg:'Los cambios los hace el Admin desde su teléfono.'})}});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ assert.equal(lastCards(f)[0].kind,'denied');
+ f.post({type:'na-work:card-confirm',key:'pr-1'});await tick(20);assert.equal(f.calls.execute.length,0);
+});
+test('el iframe no puede confirmar una clave que el host no emitió ni un mensaje de otro origen',async()=>{
+ const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ f.post({type:'na-work:card-confirm',key:'inventada'});
+ f.listeners.message({origin:'https://evil.test',source:f.frames[0].contentWindow,data:{type:'na-work:card-confirm',key:'pr-1'}});
+ await tick(20);assert.equal(f.calls.execute.length,0);
+});
+test('cerrar o reiniciar WORK cancela las tarjetas pendientes',async()=>{
+ const f=fixture({api:async()=>({reply:'ok',proposals:[precio()]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ f.post({type:'na-work:reset'});assert.deepEqual(f.calls.cancel,['pr-1']);
+});
+test('«Llévame ahí» usa el motor y cierra WORK; el mensaje de confirmar ya no sale en consultas',async()=>{
+ const f=fixture({api:async()=>({reply:'Así se hace.',proposals:[{id:'p1',type:'pasos',needsConfirm:false,title:'Cómo',pasos:['Abre Inventario'],pantalla:'pageInventario'}]})});
+ f.post({type:'na-work:chat',id:'a',text:'x'});await tick();
+ const c=lastCards(f)[0];assert.equal(c.kind,'steps');
+ f.post({type:'na-work:card-open',key:c.key});await tick(20);
+ assert.deepEqual(f.calls.go,['pageInventario']);assert.equal(f.nodes.has('naWorkOverlay'),false);
+});
+
+// ---- Contrato estático del motor compartido (asistente-ui.js) y de WORK ----
+const ui=readFileSync('POS/js/modules/asistente/asistente-ui.js','utf8');
+const host=source;
+test('el motor compartido solo confirma con confirmed:true y tapa nombres con el mismo código del asistente original',()=>{
+ const eng=ui.slice(ui.indexOf('var engine = {'),ui.indexOf('root.NA_ASISTENTE = {'));
+ assert.match(eng,/execute: function \(key, opts\) \{ return gate\.execute\(key, Object\.assign\(\{\}, opts \|\| \{\}, \{ confirmed: true \}\)\); \}/);
+ assert.match(eng,/C\.maskCustomers/);assert.match(eng,/C\.buildContext\(deps\.productos\(\), role/);
+ assert.match(eng,/NA_ROLES\.isOwner\(\) === true/);
+ assert.doesNotMatch(eng,/confirm_token/,'el motor no expone el token a WORK');
+});
+test('WORK ya no manda products: [] ni muestra el aviso engañoso de propuestas pendientes',()=>{
+ assert.doesNotMatch(host,/products:\[\]/);
+ assert.doesNotMatch(host,/Hay propuestas pendientes de confirmar mediante el flujo autorizado/);
+});
+test('WORK y su puente no llaman a /commands/ ni a /auth/assistant/confirm directamente (solo la puerta del asistente)',()=>{
+ const bridge=readFileSync('POS/work/work-canon-bridge.js','utf8');
+ for(const src of [host,bridge]){assert.doesNotMatch(src,/\/commands\//);assert.doesNotMatch(src,/assistant\/confirm/);}
+});
+test('el texto de la configuración del asistente ya no dice que los cambios «igual necesitan tu PIN»',()=>{
+ assert.doesNotMatch(ui,/igual necesita tu PIN/);
+ assert.match(ui,/los confirmas tú con un toque, sin PIN/);
+});
+test('la maqueta de WORK no trae cifras ni nombres de ejemplo fijos y el campo de texto coincide con el tope de 1500',()=>{
+ const html=readFileSync('POS/work/index.html','utf8');
+ assert.doesNotMatch(html,/DALILA|activity-title">VENTA A CRÉDITO|metric-value">(S\/|\d)/);
+ assert.equal((html.match(/maxlength="2500"/g)||[]).length,0);assert.equal((html.match(/maxlength="1500"/g)||[]).length,2);
+});
