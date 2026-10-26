@@ -221,7 +221,71 @@
       var card = pendingCard(panel, String(sale.sale_id || sale.id || ''), sale.total_cents,
         sale.payment_method || '', sale.created_at, 'Pendiente de sincronización · guardada localmente');
       if (sale.conflict === true) text(card, 'p', 'Conflicto pendiente: ' + String(sale.reason || 'CONFLICT'), 'na-canonical-conflict');
+      pendingTicketButton(card, sale.operation_id);
     });
+  }
+  // Mismo botón «🧾 Ticket» del historial (inline-10.js:162), por operation_id:
+  // el número de una venta pendiente no es único ni definitivo.
+  function pendingTicketButton(card, operationId) {
+    if (!operationId) return;
+    var actions = root.document.createElement('div');
+    actions.className = 'det-acts';
+    var button = root.document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-det btn-reimp';
+    button.textContent = '🧾 Ticket';
+    button.setAttribute('data-na-pending-ticket', String(operationId));
+    button.addEventListener('click', function () {
+      if (typeof root.verTicketPendiente === 'function') root.verTicketPendiente(String(operationId));
+    });
+    actions.appendChild(button);
+    card.appendChild(actions);
+  }
+  function shortOperation(id) { return String(id || '').replace(/[^0-9a-z]/gi, '').slice(0, 8).toUpperCase(); }
+  // Ticket de una venta que sigue en el outbox. Solo lectura: no escribe
+  // localStorage, no envía nada. El número NO es definitivo: si el servidor
+  // responde sale_id_conflict, el outbox renumera la misma operación
+  // (canonical-sale-outbox.js renumberHead), así que se imprime «PROVISIONAL»
+  // y la referencia corta del operation_id, que no cambia.
+  // Por qué no hubo ticket pendiente: 'error' (intención ilegible),
+  // 'quarantine' (pasó a «Ventas en revisión») o 'gone' (ya no está en la cola).
+  var pendingTicketMiss = null;
+  function inQuarantine(outbox, key) {
+    try {
+      var q = outbox && typeof outbox.quarantine === 'function' ? outbox.quarantine() : null;
+      return !!(q && Array.isArray(q.entries) && q.entries.some(function (entry) { return entry && entry.status === 'QUARANTINED' && entry.intent && String(entry.intent.operation_id || '') === key; }));
+    } catch (_) { return false; }
+  }
+  function pendingTicketSale(operationId) {
+    pendingTicketMiss = null;
+    var found = pendingTicketSaleUnsafe(operationId);
+    if (!found && !pendingTicketMiss) pendingTicketMiss = inQuarantine(root.NuevoAmanecerCanonicalSaleOutbox, String(operationId || '')) ? 'quarantine' : 'gone';
+    return found;
+  }
+  function pendingTicketSaleUnsafe(operationId) {
+    var canonical = root.NuevoAmanecerCanonical, outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+    if (!operationId || !enabled(canonical) || !outbox || typeof outbox.snapshot !== 'function') return null;
+    var key = String(operationId), intent = null;
+    try { intent = (outbox.snapshot().intents || []).find(function (row) { return row && String(row.operation_id || '') === key; }) || null; } catch (_) { intent = null; pendingTicketMiss = 'error'; }
+    if (!intent || confirmedOperationIds().has(key)) return null;
+    try {
+      var base = canonical.snapshot();
+      if (base && Array.isArray(base.sales) && base.sales.some(function (sale) { return sale && String(sale.operation_id || '') === key; })) return null;
+    } catch (_) {}
+    var legacy = null;
+    try { legacy = canonical.legacySnapshot(); } catch (_) { legacy = null; }
+    var sale;
+    // Intención dañada: no se abre un ticket a medias; quien llama avisa.
+    try { sale = confirmedLegacySale({ payload: copy(intent) }, legacy || {}); } catch (_) { sale = null; }
+    if (!sale) { pendingTicketMiss = 'error'; return null; }
+    sale.id = 'PROVISIONAL';
+    sale.provisionalSaleId = intent.sale_id;
+    sale.status = 'PENDING_SYNC';
+    sale.source = 'CANONICAL_OUTBOX';
+    sale.canonicalReceiptProjection = false;
+    sale.pendingSync = true;
+    sale.pendingOperationRef = shortOperation(intent.operation_id);
+    return sale;
   }
   function pendingCredits(view) {
     var confirmedSales = confirmedSaleIds();
@@ -300,7 +364,7 @@
   }
   function lastView() { return copy(last); }
 
-  var api = Object.freeze({ VERSION: VERSION, rebuild: rebuild, lastView: lastView });
+  var api = Object.freeze({ VERSION: VERSION, rebuild: rebuild, lastView: lastView, pendingTicketSale: pendingTicketSale, pendingTicketMiss: function () { return pendingTicketMiss; } });
   root.NuevoAmanecerCanonicalSaleView = api;
 
   if (typeof root.addEventListener === 'function') {
