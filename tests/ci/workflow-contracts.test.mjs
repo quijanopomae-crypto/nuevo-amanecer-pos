@@ -32,17 +32,25 @@ test('full browser suite remains available independently without holding normal 
   assert.doesNotMatch(txt,/pull_request:/);
 });
 
-test('deploy triggers on green trusted canonical push, rejects outdated HEAD and retains legacy manifest', () => {
-  const txt=read('.github/workflows/v1.3-pos-web-deploy.yml');
-  assert.match(txt,/workflow_run:/);
-  assert.match(txt,/github.event.workflow_run.event == 'push'/);
-  assert.match(txt,/head_repository.full_name == github.repository/);
+test('DIRECT deploy is one AUTO-DEV push job gated by all 3 checks and exact SHA', () => {
+  const txt=read('.github/workflows/auto-dev-ci.yml');
+  assert.match(txt,/publish-web:/);
+  assert.match(txt,/needs: \[validate, critical-regression, e2e-smoke\]/);
+  assert.match(txt,/github.event_name == 'push'/);
   assert.match(txt,/git rev-parse origin\/feature\/v1\.3-mobile-cloud/);
-  assert.match(txt,/web-release.mjs verify-auto/);
-  assert.match(txt,/POS_TARGET_SHA=\$\(git rev-parse HEAD\)/);
-  assert.match(txt,/\$POS_TARGET_SHA/);
-  assert.match(txt,/web-release.mjs verify/);
-  assert.match(txt,/Record current Cloudflare deployment for recovery/);
-  assert.match(txt,/ops\/v1\.3-pos-web-deploy-trigger.json/);
+  assert.match(txt,/web-release.mjs verify-direct/);
   assert.match(txt,/if: steps.release_gate.outputs.eligible == 'true'/);
+  assert.match(txt,/Record current Cloudflare deployment for recovery/);
+  assert.match(txt,/wrangler rollback --message/);
+  assert.match(txt,/POS_TARGET_SHA/);
+  assert.match(txt,/Verify public launcher and POS assets/);
 });
+test('legacy manifest path remains manual only and cannot compete with AUTO-DEV',()=>{
+  const txt=read('.github/workflows/v1.3-pos-web-deploy.yml');
+  const on=txt.slice(txt.indexOf('on:'),txt.indexOf('permissions:'));
+  assert.match(on,/workflow_dispatch:/);
+  assert.doesNotMatch(on,/workflow_run:/);
+  assert.doesNotMatch(on,/push:/);
+  assert.match(txt,/web-release.mjs verify/);
+});
+
