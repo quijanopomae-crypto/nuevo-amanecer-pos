@@ -1018,18 +1018,18 @@ async function profitQuery(reader, args, nowMs, base) {
     ...(truncado ? [['Aviso: hay más productos vendidos de los que el asistente suma de una vez; revise Reportes.', '']] : []),
     ['Ventas S/', soles(ventas)],
     ['Costo de lo vendido S/ (costo actual)', soles(costo)],
-    ['Ganancia S/', soles(ganancia)],
+    ['Ganancia bruta estimada S/', soles(ganancia)],
     ['Margen %', margen == null ? '—' : margen],
     ...(sinCosto ? [['Ventas sin costo registrado S/ (' + sinCostoIds.length + (sinCostoIds.length === 1 ? ' producto' : ' productos') + '; no entran en la ganancia)', soles(sinCosto)]] : []),
     ...top.map((x, i) => ['Top ' + (i + 1) + ' ganancia: ' + nm(x.product_id) + ', ' + r2(x.q) + ' unid.', soles(x.g)]),
     ...bajo.map((x) => ['Vendido bajo costo: ' + nm(x.product_id), soles(x.g)])
   ];
   const texto = ventas
-    ? sentences(['Ganancia ' + rango + ': ' + money(ganancia) + ' (ventas ' + money(conCosto) + ' menos costo ' + money(costo) + (margen == null ? '' : ', margen ' + margen + ' %') + ')',
+    ? sentences(['Ganancia bruta estimada ' + rango + ': ' + money(ganancia) + ' (ventas ' + money(conCosto) + ' menos costo ' + money(costo) + (margen == null ? '' : ', margen ' + margen + ' %') + ')',
       ...(sinCosto ? [money(sinCosto) + ' vendidos de productos sin costo no se cuentan; complete sus costos'] : []),
       ...(top.length ? ['Lo que más ganancia dejó: ' + productRef(top[0].product_id) + ' (' + money(top[0].g) + ')'] : [])])
     : 'No hay ventas registradas ' + rango + '.';
-  return { ...base, titulo: 'Ganancia ' + rango, columnas: ['Detalle', 'S/'], filas, desde: p.desde, hasta: p.hasta, texto,
+  return { ...base, titulo: 'Ganancia bruta estimada ' + rango, columnas: ['Detalle', 'S/'], filas, desde: p.desde, hasta: p.hasta, texto,
     resumen: { desde: p.desde, hasta: p.hasta, truncado, base_costo: 'costo actual del producto', ventas_soles: soles(ventas), ventas_con_costo_soles: soles(conCosto),
       costo_soles: soles(costo), ganancia_soles: soles(ganancia), margen_pct: margen, ventas_sin_costo_soles: soles(sinCosto), productos_sin_costo: sinCostoIds.length,
       top_ganancia: top.map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q), ganancia_soles: soles(x.g) })),
