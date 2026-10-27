@@ -2,41 +2,17 @@ name: CANON Critical CI
 
 on:
   pull_request:
-    paths:
-      - "POS/**"
-      - "tests/product-fixes/**"
-      - "tests/backup-*.test.mjs"
-      - "tests/cloud-sync/**"
-      - "tools/cloudflare-lab/src/**"
-      - "tools/cloudflare-backup/**"
-      - "tools/cloudflare-prod/**"
-      - "tools/pos-local/setup.html"
-      - "tools/pos-local/setup.js"
-      - "infra/database/migrations/**"
-      - "tools/cloudflare-lab/scripts/**"
-      - "tools/cloudflare-lab/test/**"
-      - "tools/pos-experience/**"
-      - "AGENTS.md"
-      - "REPO_MAP.yaml"
-      - ".opencode/**"
-      - "docs/BRANCH_PREVIEW_WORKFLOW.md"
-      - "docs/LAB_RETIREMENT.md"
-      - "tests/repo-map.test.mjs"
-      - "tests/opencode-role-map.test.mjs"
-      - "tests/security-secret-separation.test.mjs"
-      - "tools/owner-finalize-v1.3.ps1"
-      - "tests/owner-finalizer.test.mjs"
-      - "docs/V1.3_STATUS.md"
-      - "docs/OWNER_FINALIZATION.md"
-      - ".github/workflows/canon-critical-ci.yml"
-      - ".github/workflows/v1.3-prod-cutover.yml"
-      - ".github/workflows/v1.3-prod-preflight.yml"
   push:
     branches:
       - feature/v1.3-mobile-cloud
 
 permissions:
   contents: read
+
+concurrency:
+  group: canon-critical-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 
 jobs:
   critical-regression:
@@ -47,11 +23,30 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: tools/cloudflare-lab/package-lock.json
+
+      - name: Classify changes (safe on unknown history)
+        id: impact
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] &&
+             ! [[ "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$TARGET_SHA^{commit}"; then
+            git diff --no-renames --name-only "$BASE_SHA" "$TARGET_SHA" > /tmp/na-changed-paths.txt
+            node tools/ci/change-impact.mjs /tmp/na-changed-paths.txt | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "level=critical" | tee -a "$GITHUB_OUTPUT"
+          fi
 
       - name: CANON UI and repository architecture contracts
         shell: bash
@@ -67,19 +62,23 @@ jobs:
             tests/security-secret-separation.test.mjs
 
       - name: Assistant invoice and product creation regressions
+        if: steps.impact.outputs.level != 'visual'
         shell: bash
         run: |
           node --test tests/asistente/assistant-settings.test.mjs tests/asistente/assistant-invoice-memory.test.mjs tests/asistente/assistant-invoice-products.test.mjs tests/asistente/assistant-admin.test.mjs tests/asistente/assistant-client-gate.test.mjs tests/asistente/assistant-bot2.test.mjs tests/asistente/assistant-worker.test.mjs
 
       - name: Install Cloudflare test dependencies
+        if: steps.impact.outputs.level != 'visual'
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
 
       - name: Production Worker dry-run
+        if: steps.impact.outputs.level != 'visual'
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
 
       - name: CANON business regressions
+        if: steps.impact.outputs.level != 'visual'
         shell: bash
         run: |
           set -euo pipefail
@@ -89,12 +88,14 @@ jobs:
           node --test tests/backup-complete.test.mjs tests/backup-restore.test.mjs
 
       - name: Cloud sync, offline outbox and idempotency regressions
+        if: steps.impact.outputs.level != 'visual'
         shell: bash
         run: |
           set -euo pipefail
           node --test tests/cloud-sync/*.test.mjs
 
       - name: Backend harness, backup manifest and SQL snapshot contracts
+        if: steps.impact.outputs.level != 'visual'
         shell: bash
         run: |
           set -euo pipefail
@@ -106,6 +107,7 @@ jobs:
           python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
 
       - name: Apply all D1 migrations in isolated local database
+        if: steps.impact.outputs.level != 'visual'
         working-directory: tools/cloudflare-lab
         run: npx wrangler d1 migrations apply nuevo-amanecer-lab --local
 
