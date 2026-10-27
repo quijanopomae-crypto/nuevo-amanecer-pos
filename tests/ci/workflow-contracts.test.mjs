@@ -39,6 +39,8 @@ test('deploy triggers on green trusted canonical push, rejects outdated HEAD and
   assert.match(txt,/head_repository.full_name == github.repository/);
   assert.match(txt,/git rev-parse origin\/feature\/v1\.3-mobile-cloud/);
   assert.match(txt,/web-release.mjs verify-auto/);
+  assert.match(txt,/POS_TARGET_SHA=\$\(git rev-parse HEAD\)/);
+  assert.match(txt,/\$POS_TARGET_SHA/);
   assert.match(txt,/web-release.mjs verify/);
   assert.match(txt,/Record current Cloudflare deployment for recovery/);
   assert.match(txt,/ops\/v1\.3-pos-web-deploy-trigger.json/);
