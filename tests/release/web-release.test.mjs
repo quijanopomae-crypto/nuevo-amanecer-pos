@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 const module = await import('../../tools/release/web-release.mjs').catch(() => ({}));
-const { validateRelease, requireGreenRuns, validateReviewReceipt, deployedOnly, REQUIRED_CI, excludedFromScope, highRiskPaths, requireRiskForDiff, scopeWarning, autoWebReleaseEligible } = module;
+const { validateRelease, requireGreenRuns, validateReviewReceipt, deployedOnly, REQUIRED_CI, excludedFromScope, highRiskPaths, requireRiskForDiff, scopeWarning, autoWebReleaseEligible, directReleaseDecision, parseDirectIntent } = module;
 
 test('release validator exists', () => assert.equal(typeof validateRelease, 'function'));
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
@@ -163,4 +163,53 @@ test('automatic web deployment is limited to isolated CSS changes with no backen
     ['POS/css/base.css','tools/release/web-release.mjs'],
     ['POS/css/../secrets.css']
   ]) assert.equal(autoWebReleaseEligible(paths), false, JSON.stringify(paths));
+});
+
+
+test('DIRECT skips the 53 historic infrastructure commits when POS runtime did not change',()=>{
+  assert.deepEqual(directReleaseDecision(['.github/workflows/auto-dev-ci.yml','tools/release/web-release.mjs','docs/a.md']).eligible,false);
+});
+
+test('DIRECT publishes visual improvements without second PR despite prior administrative diff',()=>{
+  const d=directReleaseDecision(['.github/workflows/auto-dev-ci.yml','docs/update.md','POS/css/work.css']);
+  assert.equal(d.eligible,true);
+  assert.equal(d.risk,'low');
+  assert.deepEqual(d.files,['POS/css/work.css']);
+});
+
+test('DIRECT blocks business writes, Worker, schema, unreviewed HTML and arbitrary source',()=>{
+  for(const paths of [
+    ['POS/js/sync/outbox.js'],
+    ['POS/css/a.css','POS/js/modules/ventas-stock.js'],
+    ['POS/css/a.css','tools/cloudflare-lab/src/worker.js'],
+    ['POS/css/a.css','infra/database/migrations/0099.sql'],
+    ['POS/index.html'],
+    ['POS/work/index.html'],
+    ['POS/css/a.css','tools/cloudflare-pos-web/src/worker.js'],
+    ['POS/js/config/pos-permissions.js']
+  ]) assert.equal(directReleaseDecision(paths).eligible,false,JSON.stringify(paths));
+});
+
+test('DIRECT Work UI needs scoped recorded review from the authorized mission',()=>{
+  const intent={authorized:true,mission:'Actualizar Inicio WORK',paths:['POS/work/index.html','POS/js/work-host.js'],
+    reviewKind:'technical',reviewEvidence:'docs/reviews/work-ui.json'};
+  assert.equal(directReleaseDecision(intent.paths,intent).eligible,true);
+  assert.equal(directReleaseDecision(intent.paths,{...intent,paths:['POS/work/index.html']}).eligible,false);
+  assert.equal(directReleaseDecision(intent.paths,{...intent,mission:''}).eligible,false);
+  assert.equal(directReleaseDecision(intent.paths,{...intent,reviewKind:'self'}).eligible,false);
+  assert.equal(directReleaseDecision(intent.paths,{...intent,reviewEvidence:'../fake.json'}).eligible,false);
+  assert.throws(()=>directReleaseDecision(['POS/css/../trick.css']));
+});
+
+test('DIRECT parses exact in-commit authorization without manual release manifest',()=>{
+  const data='feat: UX\n\nNA-Direct: true\nNA-Mission: Actualizar Inicio WORK\nNA-Paths: ["POS/work/index.html"]\nNA-Review-Kind: technical\nNA-Review-Evidence: docs/reviews/work-ui.json\n';
+  assert.deepEqual(parseDirectIntent(data),{authorized:true,mission:'Actualizar Inicio WORK',paths:['POS/work/index.html'],reviewKind:'technical',reviewEvidence:'docs/reviews/work-ui.json'});
+  assert.equal(parseDirectIntent('NA-Direct: false'),null);
+  assert.equal(parseDirectIntent('NA-Direct: true\nNA-Paths: {bad json}'),null);
+});
+
+test('both legacy and direct guards read Cloudflare response body once',()=>{
+  const src=readFileSync(new URL('../../tools/release/web-release.mjs',import.meta.url),'utf8');
+  assert.match(src,/liveText\.match\(\/\\b\[a-f0-9\]\{40\}\\b\/g\)/);
+  assert.doesNotMatch(src,/const liveText=await live\.text\(\);[\s\S]{0,100}\(await live\.text\(\)\)/);
 });
