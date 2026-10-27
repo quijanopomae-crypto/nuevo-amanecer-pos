@@ -7,7 +7,7 @@ test('solo CSS o capturas y documentacion ordinaria reducen la suite', () => {
   assert.equal(classifyChanges(['docs/reviews/a.png','POS/css/base.css']), 'visual');
 });
 test('cambios de negocio, permisos y pipelines son siempre criticos', () => {
-  for (const p of ['POS/js/sync/outbox.js','POS/js/config/pos-permissions.js','POS/js/modules/ventas-stock.js','POS/js/inventory/stock-lots.js','tools/cloudflare-lab/src/worker.js','infra/database/migrations/999.sql','.github/workflows/e2e-smoke-ci.yml','tools/release/web-release.mjs']) {
+  for (const p of ['POS/js/sync/outbox.js','POS/js/config/pos-permissions.js','POS/js/modules/ventas-stock.js','POS/js/inventory/stock-lots.js','tools/cloudflare-lab/src/worker.js','infra/database/migrations/999.sql','.github/workflows/e2e-smoke-ci.yml','tools/release/web-release.mjs','tools/ci/change-impact.mjs']) {
     assert.equal(classifyChanges(['POS/css/base.css',p]), 'critical', p);
   }
 });
