@@ -1,29 +1,105 @@
+/* CANON móvil: menú lateral del diseño WORK aprobado.
+   Cambia solo presentación; el enrutador, permisos, datos y formularios siguen en CANON. */
 @media (max-width:767px) {
-  .na-mobile-drawer.na-drawer-v2 {display:flex;flex-direction:column;height:100dvh;overflow:hidden;background:#f7fafb}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-head {flex:none;grid-template-columns:40px minmax(0,1fr) 44px;gap:10px;padding:max(20px,env(safe-area-inset-top)) 16px 40px;background:linear-gradient(135deg,#14a3a8,#0b7f88)}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-logo {width:40px;height:40px;border-radius:10px;object-fit:cover;background-color:transparent}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-brand {min-width:0}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-brand strong {font-size:17px;overflow-wrap:anywhere}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-close {width:44px;height:44px;flex:none}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile {flex:none;position:relative;margin:-20px 16px 12px;padding:14px;border:1px solid #edf2f4;border-radius:14px;background:#fff;box-shadow:0 3px 12px rgba(24,51,74,.08)}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile-avatar {display:flex;align-items:center;justify-content:center;background:#e7f5f3;color:#137e81;font-size:15px;font-weight:750}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-nav {flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 12px max(16px,env(safe-area-inset-bottom))}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link {min-height:56px;border-radius:0;border-bottom:1px solid #e4ebee;color:#18334a}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label {min-width:0}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label small {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#73869b}
-  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] {background:#e7f5f3;color:#137e81}
-  .na-mobile-drawer-icon[data-icon="soon"] {background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Cellipse%20cx%3D%2220%22%20cy%3D%2236%22%20rx%3D%2213%22%20ry%3D%221.5%22%20fill%3D%22%23264454%22%20opacity%3D%22.08%22%2F%3E%3Cpath%20d%3D%22M12%2018v-7a8%208%200%200%201%2016%200v7%22%20fill%3D%22none%22%20stroke%3D%22%236596a2%22%20stroke-width%3D%224%22%2F%3E%3Crect%20x%3D%227%22%20y%3D%2216%22%20width%3D%2226%22%20height%3D%2219%22%20rx%3D%223%22%20fill%3D%22%23b5d4d6%22%20stroke%3D%22%23597e97%22%20stroke-width%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M8%2029h24v3a2%202%200%200%201-2%202H10a2%202%200%200%201-2-2Z%22%20fill%3D%22%2392b1bf%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2223%22%20r%3D%223%22%20fill%3D%22%23597e97%22%2F%3E%3Cpath%20d%3D%22M20%2025v4%22%20stroke%3D%22%23597e97%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E")}
-  .na-mobile-drawer-version {flex:none;font-size:11px;text-align:center;padding:8px 16px max(12px,env(safe-area-inset-bottom));color:#73869b}
-  body.dark .na-mobile-drawer-version {color:var(--na-dk-muted)}
-  body.dark .na-mobile-drawer.na-drawer-v2 {background:var(--na-dk-bg);color:var(--na-dk-text)}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-head {background:linear-gradient(135deg,#0f6f75,#0b5257)}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-profile {background:var(--na-dk-surface);border-color:var(--na-dk-border)}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-profile-avatar {background:var(--na-dk-surface-2);color:#5eead4}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-profile strong,
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link {color:var(--na-dk-text);border-color:var(--na-dk-border)}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-profile small,
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label small,
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-chevron {color:var(--na-dk-muted)}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link:active {background:var(--na-dk-surface-2)}
-  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] {background:rgba(94,234,212,.12);color:#5eead4}
+  .na-mobile-drawer.na-drawer-v2 {
+    display:flex;flex-direction:column;width:min(82vw,390px);height:100dvh;
+    overflow:hidden;background:#f5f9fc;color:#182e43;
+    box-shadow:12px 0 32px rgba(17,35,55,.18);
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-head {
+    display:flex;flex:none;align-items:flex-start;gap:12px;
+    min-height:150px;padding:max(27px,env(safe-area-inset-top)) 15px 25px;
+    background:linear-gradient(115deg,#103c5c 0%,#075e7b 55%,#049baa 100%);
+    color:#fff;border:0;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile {
+    flex:1;min-width:0;position:static;display:flex;align-items:center;gap:13px;
+    padding:0;margin:0;border:0;border-radius:0;background:transparent;
+    box-shadow:none;color:#fff;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile-avatar {
+    display:grid;place-items:center;flex:0 0 53px;width:53px;height:53px;
+    border-radius:50%;background-color:rgba(167,233,248,.24);
+    background-image:none!important;color:transparent;font-size:0;line-height:0;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile-avatar::before {
+    content:'';display:block;width:30px;height:30px;
+    background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f5fdff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='7.5' r='3.5'/%3E%3Cpath d='M4.5 21v-2.5a7.5 7.5 0 0 1 15 0V21'/%3E%3C/svg%3E");
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile-copy {display:flex;min-width:0;flex-direction:column;gap:5px}
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile strong {
+    display:block;color:#fff;font-size:17px;line-height:1.25;font-weight:750;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-profile small {
+    display:block;margin:0;color:#c5e6f2;font-size:12px;line-height:1.3;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-close {
+    display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;
+    padding:0;border:0;border-radius:11px;background:rgba(255,255,255,.13);
+    color:#effcff;font-size:30px;font-weight:300;line-height:1;
+    box-shadow:none;cursor:pointer;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-nav {
+    flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+    display:flex;flex-direction:column;gap:0;padding:12px 12px max(25px,env(safe-area-inset-bottom));
+    scrollbar-width:thin;scrollbar-color:#c5dce6 transparent;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link {
+    appearance:none;display:flex;flex:0 0 auto;align-items:center;gap:12px;
+    width:100%;min-height:74px;margin:0;padding:10px 9px;
+    border:0;border-bottom:1px solid #e3ebf1;border-radius:0;
+    background:transparent;color:#1b3346;text-align:left;
+    cursor:pointer;outline-offset:-2px;transition:background-color .15s ease;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link:last-child {border-bottom:0}
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] {
+    min-height:73px;margin-bottom:2px;border-color:transparent;border-radius:12px;
+    background:#ddf2fa;color:#087993;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link:active {background:#e7f3f8;border-radius:12px}
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-icon,
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-icon[data-icon] {
+    display:grid;place-items:center;flex:0 0 39px;width:39px;height:42px;
+    background:#e6eff4!important;background-image:none!important;
+    border-radius:11px;color:#446b81;font-size:0;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] .na-mobile-drawer-icon {
+    background:#c4e9f5!important;color:#087d99;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-icon svg {width:22px;height:22px;display:block}
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label {display:block;flex:1;min-width:0}
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label strong {
+    display:block;font-size:15px;line-height:1.3;font-weight:750;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label small {
+    display:block;margin-top:4px;color:#8295a1;font-size:11.5px;line-height:1.35;
+    white-space:normal;overflow-wrap:anywhere;
+  }
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-chevron {
+    flex:0 0 12px;color:#879eac;font-size:23px;line-height:1;
+  }
+  /* La versión sigue disponible en el DOM para diagnósticos, pero no duplica el menú aprobado. */
+  .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-version {display:none!important}
+  .na-mobile-drawer.na-drawer-v2 button:focus-visible {outline:2px solid #15b4cf;outline-offset:-2px}
+  body.dark .na-mobile-drawer.na-drawer-v2 {background:#111f2d;color:#e9f4fa}
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-head {
+    background:linear-gradient(115deg,#0b314f,#075069 60%,#08788e);
+  }
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link {
+    border-color:#2a4052;color:#e9f4fa;background:transparent;
+  }
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] {
+    border-color:transparent;background:#123a51;color:#91e8f8;
+  }
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-label small {color:#a8bece}
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-icon,
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-icon[data-icon] {
+    color:#bbddeb;background:#243c4d!important;
+  }
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] .na-mobile-drawer-icon {
+    color:#88e4f6;background:#245775!important;
+  }
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-profile strong {color:#fff}
+  body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-profile small {color:#c5e6f2}
 }
