@@ -14,18 +14,16 @@ test('AUTO-DEV CI is the only release-required workflow on PR and CANON push', (
   for (const key of ['validate','critical-regression','e2e-smoke']) assert.match(txt,new RegExp('  '+key+':'));
 });
 
-test('E2E is omitted for UI/WORK but full regression remains for critical risk', () => {
+test('no mandatory E2E or Playwright runs for any change, including critical business or CI', () => {
   const txt=read('.github/workflows/auto-dev-ci.yml');
-  const e2e=txt.split('  e2e-smoke:')[1]?.split('  publish-web:')[0] || '';
-  assert.match(e2e,/tools\/ci\/change-impact\.mjs/);
-  assert.match(e2e,/No browser E2E for visual or isolated WORK changes/);
-  assert.doesNotMatch(e2e,/Run targeted browser tests for ordinary changes/);
-  assert.match(e2e,/name: Setup Node inside Playwright container\n        if: steps\.impact\.outputs\.level == 'critical'/);
-  assert.match(e2e,/name: Install reproducible dependencies\n        if: steps\.impact\.outputs\.level == 'critical'\n        run: npm ci --no-audit --no-fund/);
-  assert.match(e2e,/name: Run complete regression for critical commercial or pipeline changes\n        if: steps\.impact\.outputs\.level == 'critical'\n        run: npx playwright test --workers=2/);
-  assert.match(e2e,/!cancelled\(\) && steps\.impact\.outputs\.level == 'critical'/);
+  const smoke=txt.split('  e2e-smoke:')[1]?.split('  publish-web:')[0] || '';
+  assert.match(smoke,/timeout-minutes: 5/);
+  assert.match(smoke,/Fast repository and assistant authorization smoke \(no browser\)/);
+  assert.match(smoke,/node --test tests\/ci\/change-impact\.test\.mjs tests\/asistente\/assistant-client-gate\.test\.mjs/);
+  assert.doesNotMatch(smoke,/npx playwright|mcr\.microsoft\.com\/playwright|npm ci|Run complete regression|Run targeted browser/);
   assert.match(txt,/needs: \[validate, critical-regression, e2e-smoke\]/);
-  assert.doesNotMatch(e2e,/npx playwright install --with-deps chromium/);
+  assert.match(txt,/  critical-regression:/);
+  assert.match(txt,/Cloud sync, offline outbox and idempotency regressions/);
 });
 
 test('full browser suite remains available independently without holding normal releases', () => {
