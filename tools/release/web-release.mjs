@@ -49,11 +49,16 @@ export function autoWebReleaseEligible(fullPaths) {
   if (!Array.isArray(fullPaths) || !fullPaths.length) return false;
   if (highRiskPaths(fullPaths).length) return false;
   const deployed = deployedOnly(fullPaths);
-  return deployed.length > 0 &&
-    deployed.every(p => /^POS\\/css\\/[A-Za-z0-9_./-]+\\.css$/i.test(p) && !p.split('/').includes('..'));
+  return deployed.length > 0 && deployed.every(p =>
+    p.startsWith('POS/css/') &&
+    p.endsWith('.css') &&
+    !p.includes('..') &&
+    !p.includes(String.fromCharCode(92))
+  );
 }
 function output(name,value) {
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT,name+'='+String(value)+'\\n');
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(process.env.GITHUB_OUTPUT,name+'='+String(value)+String.fromCharCode(10));
 }
 
 // Avisos de prepare: lo excluido del alcance se muestra (no bloquea) y el riesgo mínimo se deriva del diff, no solo de --risk.
@@ -98,7 +103,7 @@ async function main(){
     const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!live.ok)fail('cannot verify production SHA: HTTP '+live.status);
     const liveText=await live.text();
-    const hashes=[...new Set(liveText.match(/\b[a-f0-9]{40}\b/g)||[])];
+    const hashes=[...new Set((await live.text()).match(/[a-f0-9]{40}/g)||[])];
     if(hashes.length!==1)fail('cannot identify unique production SHA');
     validateRelease(m,{productionSha:hashes[0],base:m.approved_base,target:m.target_commit,head,paths:releasePaths(m.approved_base,m.target_commit),activationPaths:paths(m.target_commit,head)});
     if(!/^docs\/[A-Za-z0-9_./-]+\.json$/.test(m.review.evidence)||m.review.evidence.split('/').includes('..'))fail('review evidence must be a versioned docs JSON receipt');
@@ -159,7 +164,7 @@ async function main(){
     }
     if(!checked)fail('CI checks could not be verified');
     const record={mode:'css-only-auto',production_sha:base,target_commit:target,rollback_ref:base,files:deployedOnly(changed),authorization:'Owner mission: autonomous scoped development and publication',validated_at_utc:new Date().toISOString()};
-    writeFileSync('/tmp/pos-auto-release.json',JSON.stringify(record,null,2)+'\\n');
+    writeFileSync('/tmp/pos-auto-release.json',JSON.stringify(record,null,2)+String.fromCharCode(10));
     output('eligible','true');
     console.log('WEB_RELEASE_GATE_PASS automatic CSS-only target='+target+' rollback='+base);
   }else fail('use prepare, verify or verify-auto');
