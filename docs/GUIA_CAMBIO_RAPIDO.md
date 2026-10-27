@@ -36,7 +36,7 @@ Un cambio que no toca Inicio ni Venta no necesita capturas.
 ## 5. Integrar y publicar
 
 - Integrar: merge del PR cuando CI esté verde. Borra la rama.
-- Publicar la web cuando el dueño lo pidió: AUTO-DEV CI despliega automáticamente después del push CANON si el diff real es CSS/imagen segura o WORK UI con revisión técnica versionada y alcance exacto. Se compara el SHA de producción, se conserva la versión anterior y se revierte ante fallos de verificación. Cambios comerciales, de permisos o Worker permanecen bloqueados hasta validar respaldo y revisión independiente. El agente puede generar el alcance exacto con `--scope auto`, sin confundirlo con autorización. La lista de alcance incluye solo lo que se publica o define el gate: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/lock de `tools/cloudflare-lab` y el workflow AUTO-DEV CI exigido.
+- Publicar la web cuando el dueño lo pidió: AUTO-DEV CI despliega automáticamente después del push CANON si el diff real es CSS/imagen segura o WORK UI con revisión técnica versionada y alcance exacto. Se compara el SHA de producción, se conserva la versión anterior y se revierte ante fallos de verificación. Cambios comerciales, de permisos o Worker permanecen bloqueados hasta validar respaldo y revisión independiente.
 
 ## Lo que no se toca (sigue protegido)
 
