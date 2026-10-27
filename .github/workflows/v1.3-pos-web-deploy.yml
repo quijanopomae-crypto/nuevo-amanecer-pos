@@ -52,6 +52,7 @@ jobs:
           fi
           git fetch origin feature/v1.3-mobile-cloud
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          echo "POS_TARGET_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -104,16 +105,16 @@ jobs:
           cp -a POS/. tools/cloudflare-pos-web/_site/app/
           cp tools/cloudflare-pos-web/public/index.html tools/cloudflare-pos-web/_site/index.html
           cp tools/cloudflare-pos-web/public/activate.js tools/cloudflare-pos-web/_site/activate.js
-          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/index.html
-          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
+          sed -i "s/__BUILD_HASH__/$POS_TARGET_SHA/g" tools/cloudflare-pos-web/_site/index.html
+          sed -i "s/__BUILD_HASH__/$POS_TARGET_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
           BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g; s/__BUILD_DATE__/$BUILD_DATE/g" tools/cloudflare-pos-web/_site/app/js/config/build-info.js
+          sed -i "s/__BUILD_HASH__/$POS_TARGET_SHA/g; s/__BUILD_DATE__/$BUILD_DATE/g" tools/cloudflare-pos-web/_site/app/js/config/build-info.js
           if grep -Eq '__BUILD_HASH__|__BUILD_DATE__' tools/cloudflare-pos-web/_site/app/sw.js tools/cloudflare-pos-web/_site/index.html tools/cloudflare-pos-web/_site/app/js/config/build-info.js; then
             echo "Service Worker build hash placeholder was not replaced" >&2
             exit 1
           fi
-          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/app/sw.js
-          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/index.html
+          grep -Fq "$POS_TARGET_SHA" tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$POS_TARGET_SHA" tools/cloudflare-pos-web/_site/index.html
 
       - name: Hosted POS safety tests
         if: steps.release_gate.outputs.eligible == 'true'
@@ -140,7 +141,7 @@ jobs:
         if: steps.release_gate.outputs.eligible == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: pos-web-release-${{ github.sha }}
+          name: pos-web-release-${{ github.event.workflow_run.head_sha || github.sha }}
           path: |
             /tmp/pos-web-before-deploy.txt
             /tmp/pos-auto-release.json
@@ -175,7 +176,7 @@ jobs:
                grep -Fiq 'cache-control: no-store' /tmp/pos-root.headers &&
                grep -Fq 'Nuevo Amanecer — ERP &amp; POS' /tmp/pos-app.html &&
                grep -Fq '"ok":true' /tmp/pos-health.json &&
-               grep -Fq "$GITHUB_SHA" /tmp/pos-sw.js; then
+               grep -Fq "$POS_TARGET_SHA" /tmp/pos-sw.js; then
               echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"
               exit 0
             fi
@@ -196,5 +197,5 @@ jobs:
             echo "- Local server required: NO"
             echo "- Activation secret embedded: NO"
             echo "- Backend CANON: nuevo-amanecer-pos-prod"
-            echo "- Commit: $GITHUB_SHA"
+            echo "- Commit: $POS_TARGET_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
