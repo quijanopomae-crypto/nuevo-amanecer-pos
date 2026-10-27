@@ -7,6 +7,13 @@ on:
     paths:
       - "ops/v1.3-pos-web-deploy-trigger.json"
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - E2E Smoke CI
+    types:
+      - completed
+    branches:
+      - feature/v1.3-mobile-cloud
 
 permissions:
   contents: read
@@ -18,32 +25,31 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'feature/v1.3-mobile-cloud' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POS_WEB_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
 
     steps:
-      - name: Require Cloudflare credentials
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
-          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
-
       - name: Checkout exact authorized HEAD
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Require exact active branch head
         shell: bash
         run: |
           set -euo pipefail
-          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            test "${{ github.event.workflow_run.head_branch }}" = "feature/v1.3-mobile-cloud"
+          else
+            test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          fi
           git fetch origin feature/v1.3-mobile-cloud
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
 
@@ -53,9 +59,145 @@ jobs:
           node-version: "22"
 
       - name: Verify scoped release and exact target CI
+        id: release_gate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node tools/release/web-release.mjs verify
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            node tools/release/web-release.mjs verify-auto
+          else
+            node tools/release/web-release.mjs verify
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require Cloudflare credentials
+        if: steps.release_gate.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}
+      - name: Verify CANON experience contract
+        if: steps.release_gate.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            tests/product-fixes/canon-motion-bootstrap.test.mjs \
+            tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
+            tests/product-fixes/canonical-ui-contract.test.mjs
+
+      - name: Install pinned Wrangler
+        if: steps.release_gate.outputs.eligible == 'true'
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Assemble hosted POS
+        if: steps.release_gate.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/cloudflare-pos-web/_site
+          mkdir -p tools/cloudflare-pos-web/_site/app
+          cp -a POS/. tools/cloudflare-pos-web/_site/app/
+          cp tools/cloudflare-pos-web/public/index.html tools/cloudflare-pos-web/_site/index.html
+          cp tools/cloudflare-pos-web/public/activate.js tools/cloudflare-pos-web/_site/activate.js
+          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/index.html
+          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g; s/__BUILD_DATE__/$BUILD_DATE/g" tools/cloudflare-pos-web/_site/app/js/config/build-info.js
+          if grep -Eq '__BUILD_HASH__|__BUILD_DATE__' tools/cloudflare-pos-web/_site/app/sw.js tools/cloudflare-pos-web/_site/index.html tools/cloudflare-pos-web/_site/app/js/config/build-info.js; then
+            echo "Service Worker build hash placeholder was not replaced" >&2
+            exit 1
+          fi
+          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/index.html
+
+      - name: Hosted POS safety tests
+        if: steps.release_gate.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/v1.3-pos-web-deploy.test.mjs
+          test -f tools/cloudflare-pos-web/_site/app/index.html
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/canonical-client.js
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/canonical-sale-integration.js
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/hosted-canonical-guard.js
+
+      - name: Static Worker dry-run
+        if: steps.release_gate.outputs.eligible == 'true'
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Record current Cloudflare deployment for recovery
+        if: steps.release_gate.outputs.eligible == 'true'
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deployments list --config ../cloudflare-pos-web/wrangler.jsonc > /tmp/pos-web-before-deploy.txt
+
+      - name: Preserve release and rollback evidence
+        if: steps.release_gate.outputs.eligible == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pos-web-release-${{ github.sha }}
+          path: |
+            /tmp/pos-web-before-deploy.txt
+            /tmp/pos-auto-release.json
+            ops/v1.3-pos-web-deploy-trigger.json
+          retention-days: 30
+
+      - name: Deploy hosted POS
+        if: steps.release_gate.outputs.eligible == 'true'
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Verify public launcher and POS assets
+        if: steps.release_gate.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            ROOT_CODE="$(curl -sS -D /tmp/pos-root.headers -o /tmp/pos-root.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/" || true)"
+            APP_CODE="$(curl -sS -o /tmp/pos-app.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/" || true)"
+            JS_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/canonical-client.js" || true)"
+            GUARD_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/hosted-canonical-guard.js" || true)"
+            SW_CODE="$(curl -sS -o /tmp/pos-sw.js -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/sw.js" || true)"
+            API_PROXY_CODE="$(curl -sS -o /tmp/pos-health.json -w '%{http_code}' --max-time 15 "$POS_WEB_URL/health" || true)"
+            echo "probe attempt=$attempt root=$ROOT_CODE app=$APP_CODE canonical_client=$JS_CODE guard=$GUARD_CODE sw=$SW_CODE api_proxy=$API_PROXY_CODE"
+            if test "$ROOT_CODE" = "200" &&
+               test "$APP_CODE" = "200" &&
+               test "$JS_CODE" = "200" &&
+               test "$GUARD_CODE" = "200" &&
+               test "$SW_CODE" = "200" &&
+               test "$API_PROXY_CODE" = "200" &&
+               grep -Fq 'Nuevo Amanecer POS' /tmp/pos-root.html &&
+               grep -Fiq 'cache-control: no-store' /tmp/pos-root.headers &&
+               grep -Fq 'Nuevo Amanecer — ERP &amp; POS' /tmp/pos-app.html &&
+               grep -Fq '"ok":true' /tmp/pos-health.json &&
+               grep -Fq "$GITHUB_SHA" /tmp/pos-sw.js; then
+              echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Hosted POS public verification failed" >&2
+          exit 1
+
+      - name: Deployment summary
+        if: steps.release_gate.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          {
+            echo "## Nuevo Amanecer POS V1.3 — Hosted Web"
+            echo "- Status: DEPLOYED"
+            echo "- Public URL: $POS_WEB_URL/"
+            echo "- App path: $POS_WEB_URL/app/"
+            echo "- Local server required: NO"
+            echo "- Activation secret embedded: NO"
+            echo "- Backend CANON: nuevo-amanecer-pos-prod"
+            echo "- Commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
 
       - name: Verify CANON experience contract
         shell: bash
