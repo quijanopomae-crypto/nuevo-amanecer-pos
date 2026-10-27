@@ -17,7 +17,7 @@ node --test tests/product-fixes/canonical-ui-contract.test.mjs   # contrato de U
 node --test tests/<carpeta>/<prueba-del-archivo>.test.mjs        # la prueba del módulo tocado
 ```
 
-No hay más pasos locales. En cambios visuales o WORK aislado, AUTO-DEV comprueba contratos, UI y permisos sin instalar ni ejecutar Playwright/E2E. El job E2E finaliza en modo rápido, sin impedir la publicación. Para cambios de ventas, pagos, caja, stock, permisos, sincronización, infraestructura o CI, E2E completo sigue obligatorio. La suite de navegador integral también continúa disponible semanalmente y manualmente.
+No hay más pasos locales. AUTO-DEV no ejecuta Playwright/E2E en PR, push ni despliegue: el trabajo llamado `e2e-smoke` conserva su nombre por compatibilidad con las reglas existentes de GitHub, pero ahora solo realiza una verificación rápida de contratos y permisos. Las pruebas de negocio, sincronización, idempotencia y respaldo siguen en `critical-regression` cuando corresponde. La batería completa de navegador (982 pruebas en octubre de 2026) solo se ejecuta en `.github/workflows/e2e-full-regression.yml`, de forma programada o manual, y no condiciona cada publicación.
 
 ## 3. Revisión según riesgo
 
