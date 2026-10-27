@@ -101,23 +101,23 @@ jobs:
             tests/security-secret-separation.test.mjs
 
       - name: Assistant invoice and product creation regressions
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         shell: bash
         run: |
           node --test tests/asistente/assistant-settings.test.mjs tests/asistente/assistant-invoice-memory.test.mjs tests/asistente/assistant-invoice-products.test.mjs tests/asistente/assistant-admin.test.mjs tests/asistente/assistant-client-gate.test.mjs tests/asistente/assistant-bot2.test.mjs tests/asistente/assistant-worker.test.mjs
 
       - name: Install Cloudflare test dependencies
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
 
       - name: Production Worker dry-run
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
 
       - name: CANON business regressions
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         shell: bash
         run: |
           set -euo pipefail
@@ -127,14 +127,14 @@ jobs:
           node --test tests/backup-complete.test.mjs tests/backup-restore.test.mjs
 
       - name: Cloud sync, offline outbox and idempotency regressions
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         shell: bash
         run: |
           set -euo pipefail
           node --test tests/cloud-sync/*.test.mjs
 
       - name: Backend harness, backup manifest and SQL snapshot contracts
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         shell: bash
         run: |
           set -euo pipefail
@@ -146,9 +146,16 @@ jobs:
           python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
 
       - name: Apply all D1 migrations in isolated local database
-        if: steps.impact.outputs.level != 'visual'
+        if: steps.impact.outputs.level == 'critical'
         working-directory: tools/cloudflare-lab
         run: npx wrangler d1 migrations apply nuevo-amanecer-lab --local
+
+      - name: WORK UI targeted regressions and assistant authorization
+        if: steps.impact.outputs.level == 'work-ui'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/work/*.test.mjs tests/asistente/assistant-client-gate.test.mjs
 
       - name: Tests must not modify tracked repository state
         shell: bash
@@ -273,6 +280,10 @@ jobs:
             tests/product-fixes/canon-motion-bootstrap.test.mjs \
             tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
             tests/product-fixes/canonical-ui-contract.test.mjs
+
+      - name: Verify connected WORK UI and assistant protections
+        if: steps.release_gate.outputs.eligible == 'true'
+        run: node --test tests/work/*.test.mjs tests/asistente/assistant-client-gate.test.mjs
 
       - name: Install pinned Wrangler
         if: steps.release_gate.outputs.eligible == 'true'
