@@ -84,7 +84,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   }
   if (/como|ayuda|donde|que hago/.test(t)) {
     if (/caja/.test(t)) return { content: 'Así se abre la caja:', calls: [call('explicar_pasos', { tema: 'Abrir caja', pantalla: 'pageCaja', pasos: ['Toca Caja en el menú.', 'Pulsa «Abrir caja».', 'Escribe el dinero inicial.', 'Confirma.'] })] };
-    if (/abono|credito|deuda/.test(t)) return { content: 'Así registras un abono:', calls: [call('explicar_pasos', { tema: 'Registrar un abono', pantalla: 'pageClientes', pasos: ['Toca Clientes.', 'Abre la ficha del cliente.', 'Pulsa «Abonar».', 'Escribe el monto y elige la deuda.', 'Pulsa Confirmar.'] })] };
+    if (/abono|credito|deuda/.test(t)) return { content: 'Así registras un abono:', calls: [call('explicar_pasos', { tema: 'Registrar un abono', pantalla: 'pageClientes', pasos: ['Toca Clientes.', 'Toca al cliente (Ficha financiera).', 'En CUENTAS Y CRÉDITOS abre la cuenta y pulsa «Registrar pago» en el crédito.', 'Escribe el monto y elige cómo pagó.', 'Pulsa Confirmar.'] })] };
     return { content: 'Así registras una compra:', calls: [call('explicar_pasos', { tema: 'Registrar una compra', pantalla: 'pageInventario', pasos: ['Toca Inventario.', 'Pulsa «Registrar compra».', 'Elige proveedor y documento.', 'Agrega productos, cantidades y costos.', 'Pulsa «Registrar compra».'] })] };
   }
   return { content: 'Hola, soy Burbuja. Te ayudo a ver stock y ventas, registrar compras, ajustar stock, cambiar precios, crear productos y armar documentos.', calls: [] };
