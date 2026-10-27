@@ -11,10 +11,15 @@ test('cambios de negocio, permisos y pipelines son siempre criticos', () => {
     assert.equal(classifyChanges(['POS/css/base.css',p]), 'critical', p);
   }
 });
-test('cambios funcionales de UI y pruebas no pueden presentarse como visuales', () => {
-  assert.equal(classifyChanges(['POS/index.html']), 'standard');
-  assert.equal(classifyChanges(['POS/work/index.html']), 'standard');
-  assert.equal(classifyChanges(['tests/e2e/work-default.spec.ts']), 'standard');
+test('WORK aislado tiene pruebas específicas, nunca se confunde con CSS', () => {
+  for (const p of ['POS/work/index.html','POS/work/work-canon-bridge.js','POS/js/work-host.js','tests/e2e/work-default.spec.ts']) {
+    assert.equal(classifyChanges([p]), 'work-ui', p);
+    assert.equal(classifyChanges(['POS/css/base.css',p]), 'work-ui', p);
+  }
+  assert.equal(classifyChanges(['POS/index.html']), 'critical');
+  assert.equal(classifyChanges(['POS/js/sync/outbox.js','POS/work/index.html']), 'critical');
+  assert.equal(classifyChanges(['POS/work/new-tool.js']), 'critical');
+  assert.equal(classifyChanges(['POS/js/unknown-business.js']), 'critical');
 });
 test('sin diff o rutas sospechosas: seguridad por defecto', () => {
   assert.equal(classifyChanges([]), 'critical');
