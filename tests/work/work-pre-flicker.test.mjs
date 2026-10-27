@@ -81,10 +81,12 @@ test('al liberar se quitan las dos marcas (claro y oscuro)', () => {
   assert.match(wh, /classList\.remove\('na-work-pre', 'na-work-pre-dk'\)/);
 });
 
-test('sin marca: ?work=0, sin internet, sin sesión, sin token, otro dominio, fuera de /app, config no productiva', () => {
-  for (const o of [{search: '?work=0'}, {online: false}, {creds: null}, {creds: {}}, {creds: {token: ''}},
+test('sin marca: sin internet, sin sesión, sin token, otro dominio, fuera de /app, config no productiva', () => {
+  for (const o of [{online: false}, {creds: null}, {creds: {}}, {creds: {token: ''}},
     {host: 'localhost'}, {host: 'x.evil.workers.dev'}, {host: 'nuevo-amanecer-pos.workers.dev.evil.com'}, {path: '/otra'}, {env: 'staging'}, {env: ''}]) {
     assert.equal(run(o).set.size, 0, JSON.stringify(o));
   }
   assert.ok(run({search: '?work=1'}).set.has('na-work-pre'));
+  // El Inicio heredado ya no es alcanzable con ?work=0 en producción: la marca se mantiene.
+  assert.ok(run({search: '?work=0'}).set.has('na-work-pre'));
 });
