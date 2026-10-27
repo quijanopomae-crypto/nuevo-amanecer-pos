@@ -4,19 +4,18 @@ import { readFileSync } from 'node:fs';
 
 const read = f => readFileSync(f,'utf8');
 
-test('all three exact-SHA release checks run on every pull request and on CANON push', () => {
-  for (const path of ['e2e-smoke-ci.yml','canon-critical-ci.yml','opencode-config-ci.yml']) {
-    const txt=read('.github/workflows/'+path);
-    const trigger=txt.slice(txt.indexOf('on:'),txt.indexOf('permissions:'));
-    assert.match(trigger,/pull_request:/,path);
-    assert.match(trigger,/push:/,path);
-    assert.doesNotMatch(trigger,/paths:/,path);
-    assert.match(trigger,/feature\/v1\.3-mobile-cloud/,path);
-  }
+test('AUTO-DEV CI is the only release-required workflow on PR and CANON push', () => {
+  const txt=read('.github/workflows/auto-dev-ci.yml');
+  const trigger=txt.slice(txt.indexOf('on:'),txt.indexOf('permissions:'));
+  assert.match(trigger,/pull_request:/);
+  assert.match(trigger,/push:/);
+  assert.doesNotMatch(trigger,/paths:/);
+  assert.match(trigger,/feature\/v1\.3-mobile-cloud/);
+  for (const key of ['validate','critical-regression','e2e-smoke']) assert.match(txt,new RegExp('  '+key+':'));
 });
 
 test('smoke has selected tests, commercial full path and reproducible dependencies', () => {
-  const txt=read('.github/workflows/e2e-smoke-ci.yml');
+  const txt=read('.github/workflows/auto-dev-ci.yml');
   assert.match(txt,/tools\/ci\/change-impact\.mjs/);
   assert.match(txt,/level == 'critical'/);
   assert.match(txt,/npx playwright test --workers=2/);
