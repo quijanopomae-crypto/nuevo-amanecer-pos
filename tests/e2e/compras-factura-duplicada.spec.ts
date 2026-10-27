@@ -23,6 +23,10 @@ async function setup(page: Page, role: 'owner' | 'empleado', dark = false, opts:
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed, role);
+  // Esperar a que la purga de identidad confirmada termine: evita invalidar despues el catalogo sintetico.
+  await page.waitForFunction(role => {
+    try { const t = JSON.parse(localStorage.getItem('na_cache_identity_v1') || 'null'); return !!t && t.why === 'confirmed' && t.role === role; } catch (_) { return false; }
+  }, role);
   await page.evaluate(({ dark, locked }) => {
     const w = window as any;
     // El candado sigue en true en pos-permissions.js; solo la prueba lo abre.

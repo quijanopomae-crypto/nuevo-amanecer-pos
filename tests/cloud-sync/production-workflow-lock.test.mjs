@@ -14,8 +14,7 @@ const productionWriters = [
 ];
 
 const readOnlyWorkflows = [
-  '.github/workflows/canon-critical-ci.yml',
-  '.github/workflows/opencode-config-ci.yml',
+  '.github/workflows/auto-dev-ci.yml',
   '.github/workflows/v1.3-owner-validation-readonly.yml',
   '.github/workflows/v1.3-prod-preflight.yml',
 ];

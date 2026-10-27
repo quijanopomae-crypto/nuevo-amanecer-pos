@@ -116,9 +116,9 @@ v1_3_runtime:
 
 ci:
   workflows:
-    canon_critical: .github/workflows/canon-critical-ci.yml
-    e2e_smoke: .github/workflows/e2e-smoke-ci.yml
-    opencode_and_repo_map: .github/workflows/opencode-config-ci.yml
+    auto_dev: .github/workflows/auto-dev-ci.yml
+    e2e_full_scheduled: .github/workflows/e2e-full-regression.yml
+    change_impact: tools/ci/change-impact.mjs
   policy:
     actions_pinned_to_sha: true
     branch_preview_required: true
@@ -127,6 +127,8 @@ ci:
     production_deploy_separate_from_merge: true
     web_release_manifest: ops/v1.3-pos-web-deploy-trigger.json
     web_release_guard: tools/release/web-release.mjs
+    web_release_auto_css_only: true
+    web_release_auto_requires_all_3_ci: true
     owner_authorization_covers_scoped_merge_and_deploy: true
     independent_automated_review_allowed: true
 

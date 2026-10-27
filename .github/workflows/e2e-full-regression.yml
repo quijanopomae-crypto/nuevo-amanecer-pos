@@ -1,0 +1,45 @@
+name: E2E Full Regression (informativo)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 0' # domingos 04:00 America/Lima (UTC-5)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-full-regression
+  cancel-in-progress: false
+
+jobs:
+  full-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    container: mcr.microsoft.com/playwright:v1.47.2-jammy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node inside Playwright container
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run 100 percent of browser E2E tests
+        run: npx playwright test --workers=2
+
+      - name: Upload report even when tests fail
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-full-report
+          path: playwright-report/
+          retention-days: 14

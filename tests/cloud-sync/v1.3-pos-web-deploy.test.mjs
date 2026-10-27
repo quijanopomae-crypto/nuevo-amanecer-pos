@@ -92,9 +92,9 @@ test('hosted app refuses silent local mode and loads the guard before canonical 
 });
 
 test('hosted deploy replaces the service-worker build hash and verifies it remotely', () => {
-  assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$GITHUB_SHA\/g"/);
+  assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$POS_TARGET_SHA\/g"/);
   assert.match(workflow, /Service Worker build hash placeholder was not replaced/);
-  assert.match(workflow, /grep -Fq "\$GITHUB_SHA" \/tmp\/pos-sw\.js/);
+  assert.match(workflow, /grep -Fq "\$POS_TARGET_SHA" \/tmp\/pos-sw\.js/);
   assert.match(workflow, /hosted-canonical-guard\.js/);
 });
 
@@ -160,8 +160,8 @@ test('network shell responses are no-store so recovery cannot reuse stale HTTP a
 
 test('deploy versions the launcher activation script with the exact hosted build hash', () => {
   assert.match(workflow, /_site\/index\.html/);
-  assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$GITHUB_SHA\/g" tools\/cloudflare-pos-web\/_site\/index\.html/);
-  assert.match(workflow, /grep -Fq "\$GITHUB_SHA" tools\/cloudflare-pos-web\/_site\/index\.html/);
+  assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$POS_TARGET_SHA\/g" tools\/cloudflare-pos-web\/_site\/index\.html/);
+  assert.match(workflow, /grep -Fq "\$POS_TARGET_SHA" tools\/cloudflare-pos-web\/_site\/index\.html/);
 });
 
 

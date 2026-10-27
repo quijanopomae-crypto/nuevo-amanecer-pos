@@ -1,0 +1,218 @@
+name: AUTO-DEV CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-dev-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Una sola verificacion externa. Los tres trabajos se ejecutan en paralelo:
+# contratos y permisos, negocio, navegador. El workflow es SUCCESS solo si todos lo son.
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Fast CI and deployment contracts
+        run: node --test tests/ci/*.test.mjs
+
+      - name: Role, command and repository-map boundaries
+        run: node --test tests/opencode-role-map.test.mjs tests/repo-map.test.mjs
+
+      - name: Final repository boundaries
+        run: node --test tests/final-repository-boundaries.test.mjs tests/security-secret-separation.test.mjs tests/cloud-sync/canon-dormant-schema.test.mjs
+
+      - name: Owner finalizer safety
+        run: node --test tests/owner-finalizer.test.mjs
+
+      - name: Scoped release safety regressions
+        run: node --test tests/release/*.test.mjs
+
+      - name: Python validator syntax
+        run: python -m py_compile orchestrator/project_validation.py orchestrator/snapshot.py tests/infrastructure/test_shadow_mode.py
+
+      - name: Working tree remains clean
+        run: |
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+  critical-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tools/cloudflare-lab/package-lock.json
+
+      - name: Classify changes (safe on unknown history)
+        id: impact
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] &&
+             ! [[ "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$TARGET_SHA^{commit}"; then
+            git diff --no-renames --name-only "$BASE_SHA" "$TARGET_SHA" > /tmp/na-changed-paths.txt
+            node tools/ci/change-impact.mjs /tmp/na-changed-paths.txt | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "level=critical" | tee -a "$GITHUB_OUTPUT"
+          fi
+
+      - name: CANON UI and repository architecture contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            tests/product-fixes/canon-motion-bootstrap.test.mjs \
+            tests/product-fixes/canonical-ui-contract.test.mjs \
+            tests/product-fixes/canon-whatsapp-receipts.test.mjs \
+            tests/repo-map.test.mjs \
+            tests/opencode-role-map.test.mjs \
+            tests/owner-finalizer.test.mjs \
+            tests/security-secret-separation.test.mjs
+
+      - name: Assistant invoice and product creation regressions
+        if: steps.impact.outputs.level != 'visual'
+        shell: bash
+        run: |
+          node --test tests/asistente/assistant-settings.test.mjs tests/asistente/assistant-invoice-memory.test.mjs tests/asistente/assistant-invoice-products.test.mjs tests/asistente/assistant-admin.test.mjs tests/asistente/assistant-client-gate.test.mjs tests/asistente/assistant-bot2.test.mjs tests/asistente/assistant-worker.test.mjs
+
+      - name: Install Cloudflare test dependencies
+        if: steps.impact.outputs.level != 'visual'
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Production Worker dry-run
+        if: steps.impact.outputs.level != 'visual'
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
+
+      - name: CANON business regressions
+        if: steps.impact.outputs.level != 'visual'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/product-fixes/fix*/*.test.mjs
+          node --test tests/product-fixes/canon-ticket-unified-editor.test.mjs
+          node --test tests/product-fixes/sales-reports.test.mjs tests/product-fixes/review-fixes.test.mjs tests/cloud-sync/canonical-expense-revisions.test.mjs
+          node --test tests/backup-complete.test.mjs tests/backup-restore.test.mjs
+
+      - name: Cloud sync, offline outbox and idempotency regressions
+        if: steps.impact.outputs.level != 'visual'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/*.test.mjs
+
+      - name: Backend harness, backup manifest and SQL snapshot contracts
+        if: steps.impact.outputs.level != 'visual'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            tools/cloudflare-lab/test/canon-backup-manifest.test.mjs \
+            tools/cloudflare-lab/test/lab-workspace.test.mjs \
+            tools/cloudflare-lab/test/turso-d1-adapter.test.mjs \
+            tools/cloudflare-lab/test/d1-remote-compat.test.mjs
+          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
+
+      - name: Apply all D1 migrations in isolated local database
+        if: steps.impact.outputs.level != 'visual'
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler d1 migrations apply nuevo-amanecer-lab --local
+
+      - name: Tests must not modify tracked repository state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    container: mcr.microsoft.com/playwright:v1.47.2-jammy
+    steps:
+      - name: Checkout with comparison history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Node inside Playwright container
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install reproducible dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Determine regression scope
+        id: impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] &&
+             ! [[ "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$TARGET_SHA^{commit}"; then
+            git diff --no-renames --name-only "$BASE_SHA" "$TARGET_SHA" > /tmp/na-changed-paths.txt
+            node tools/ci/change-impact.mjs /tmp/na-changed-paths.txt | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "level=critical" | tee -a "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run targeted browser tests for ordinary changes
+        if: steps.impact.outputs.level != 'critical'
+        run: |
+          npx playwright test --workers=4 \
+            tests/e2e/work-default.spec.ts \
+            tests/e2e/canon-mobile-home.spec.ts \
+            tests/e2e/canon-mobile-clientes-caja.spec.ts \
+            tests/e2e/canon-module-header-taps.spec.ts \
+            tests/e2e/stock-negativo.spec.ts \
+            tests/e2e/ticket-venta-pendiente.spec.ts
+
+      - name: Run complete regression for critical commercial or pipeline changes
+        if: steps.impact.outputs.level == 'critical'
+        run: npx playwright test --workers=2
+
+      - name: Upload Playwright report (on failures too)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

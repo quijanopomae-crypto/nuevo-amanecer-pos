@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
 const map = readFileSync('REPO_MAP.yaml', 'utf8');
-const criticalWorkflow = readFileSync('.github/workflows/canon-critical-ci.yml', 'utf8');
+const criticalWorkflow = readFileSync('.github/workflows/auto-dev-ci.yml', 'utf8');
 
 function nodeTestPathsByStep(workflow) {
   const lines = workflow.split(/\r?\n/);
@@ -134,11 +134,11 @@ test('REPO_MAP declares branch-preview as active development model and POS-LAB a
   assert.doesNotMatch(map, /pages_lab:/);
 });
 
-test('CANON Critical CI references existing literal Node test paths', () => {
+test('AUTO-DEV critical job references existing literal Node test paths', () => {
   assertWorkflowTestPathsExist(criticalWorkflow, existsSync);
 });
 
-test('CANON Critical CI path guard rejects missing literals and ignores globs', () => {
+test('AUTO-DEV critical job path guard rejects missing literals and ignores globs', () => {
   const workflow = [
     'jobs:',
     '  tests:',
