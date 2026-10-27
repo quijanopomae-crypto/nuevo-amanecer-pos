@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('WORK hosted design integration (synthetic browser, no production writes)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('WORK is the default-design candidate while ?work=0 safely preserves the legacy shell', async ({ page }) => {
+  test('WORK is the primary home and does not expose the retired POS landing', async ({ page }) => {
     await page.goto('/index.html?work=1');
     await expect(page.locator('#naWorkOverlay iframe')).toBeVisible();
     const work = page.frameLocator('#naWorkOverlay iframe');
@@ -12,9 +12,9 @@ test.describe('WORK hosted design integration (synthetic browser, no production 
     await expect(work.locator('#workChat')).toHaveCount(1);
     await expect(work.locator('.metric-value').first()).not.toHaveText('S/ 28.30');
     await expect(work.locator('.activity')).toHaveCount(0);
-    await page.goto('/index.html?work=0');
-    await expect(page.locator('#naWorkOverlay iframe')).toHaveCount(0);
-    await expect(page.locator('#pageMenu')).toBeVisible();
+    await expect(work.getByRole('button', { name: 'Volver al POS' })).toHaveCount(0);
+    // The original business-page DOM remains behind WORK to feed the live summary.
+    await expect(page.locator('#pageMenu')).toHaveCount(1);
   });
 
   test('WORK drawer navigates to the original protected Inventario without replacing the POS', async ({ page }) => {

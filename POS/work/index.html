@@ -1368,6 +1368,12 @@ $('#voiceTypeForm').addEventListener('submit',e=>{
   chatSend.setAttribute('title', hasText ? 'Enviar mensaje' : 'Iniciar modo voz');
  }
  function sendMessage(raw){
+  // No presentar una respuesta ficticia si el puente autenticado con CANON no se cargó.
+  if(window.parent!==window){
+   const aviso=document.querySelector('.chat-disclaimer');
+   if(aviso)aviso.textContent='WORK no ha conectado con CANON. Recarga el POS antes de consultar.';
+   return;
+  }
   const text=String(raw||'').trim();if((!text&&!attachments.length)||pending)return;
   const included=attachments.slice();messages.push({who:'user',text:text||'Adjunto archivos para revisión',time:timeStamp(),mode:selectedModel,attachments:included});attachments=[];renderAttachments();save();render();chatInput.value='';resizeInput();updateComposerVisual();heroPrompt.value='';
   pending=true;setThinking(true);
