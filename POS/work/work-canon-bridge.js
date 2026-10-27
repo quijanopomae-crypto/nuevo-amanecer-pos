@@ -355,13 +355,8 @@
     rows.forEach(function(row){var text=row.querySelector('.chat-bubble > div');if(!text)return;var item=doc.createElement('p');item.textContent=(row.classList.contains('mine')?'Tú: ':'WORK: ')+text.textContent;list.appendChild(item);});
     if(count)count.textContent=String(rows.filter(function(r){return r.classList.contains('mine');}).length);
   });
-  // WORK closes to the existing POS without destroying app state.
+  // WORK is the primary Inicio. The drawer still routes to authenticated CANON modules.
+  // Do not offer a second button that exposes the retired home screen.
   var closeBtn=$('#chatBack');if(closeBtn)closeBtn.title='Volver a WORK';
-  var closeMain=doc.createElement('button');
-  closeMain.type='button';closeMain.textContent='Volver al POS';
-  closeMain.style.cssText='position:fixed;right:8px;bottom:8px;z-index:13;background:#073d59;color:#fff;border:0;border-radius:12px;padding:8px 12px;font-size:11px;box-shadow:0 2px 7px #0003';
-  closeMain.setAttribute('aria-label','Volver al punto de venta');
-  closeMain.addEventListener('click',function(){stopRealVoice();post('close');});
-  doc.body.appendChild(closeMain);
   post('metrics');
 })(window);
