@@ -1,19 +1,7 @@
 name: V1.3 Hosted POS Web Deploy
 
 on:
-  push:
-    branches:
-      - feature/v1.3-mobile-cloud
-    paths:
-      - "ops/v1.3-pos-web-deploy-trigger.json"
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - AUTO-DEV CI
-    types:
-      - completed
-    branches:
-      - feature/v1.3-mobile-cloud
 
 permissions:
   contents: read
@@ -25,7 +13,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'feature/v1.3-mobile-cloud' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
