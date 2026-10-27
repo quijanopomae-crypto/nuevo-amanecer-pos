@@ -19,6 +19,14 @@ const critical = [
   /^ops\//,
   /\.sql$/i,
 ];
+// WORK UI is an isolated client surface. Keep it distinct from business scripts.
+const workUi = [
+  /^POS\/work\/[A-Za-z0-9_./-]+\.(?:html|css|png|jpe?g|gif|webp|svg)$/i,
+  /^POS\/work\/work-canon-bridge\.js$/,
+  /^POS\/js\/work-host\.js$/,
+  /^tests\/work\/[A-Za-z0-9_.-]+\.test\.mjs$/,
+  /^tests\/e2e\/work-default\.spec\.ts$/,
+];
 const visual = [
   /^POS\/css\/.*\.css$/i,
   /^POS\/(?:images?|icons?|assets)\/.*\.(?:png|jpe?g|webp|svg|gif)$/i,
@@ -31,7 +39,9 @@ export function classifyChanges(paths) {
   if (!files.length || files.some(p => p.startsWith('/') || p.includes('..') || p.includes('\\'))) return 'critical';
   if (files.some(p => critical.some(re => re.test(p)))) return 'critical';
   if (files.every(p => visual.some(re => re.test(p)))) return 'visual';
-  return 'standard';
+  if (files.every(p => visual.some(re => re.test(p)) || workUi.some(re => re.test(p)))) return 'work-ui';
+  // Fail closed: unknown UI or commercial changes still run the full suite.
+  return 'critical';
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (!process.argv[2]) { console.error('usage: change-impact.mjs PATHS_FILE'); process.exitCode = 2; }
