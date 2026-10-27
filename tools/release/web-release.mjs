@@ -60,6 +60,11 @@ export function autoWebReleaseEligible(fullPaths) {
 // Solo el bootstrap visual de WORK ya aprobado (#1088) puede formar parte de un DIRECT.
 // Otras ediciones de POS/index.html quedan protegidas por el flujo de riesgo alto.
 export const PINNED_WORK_BOOTSTRAP_BLOB='0c3e3c919da1055254777515f3d6f2e2daa93254';
+export const APPROVED_WORK_CUTOVER_SHA='8f8e56cd7995d08be604f94cbac1930881a802af';
+const approvedScopedUiIntent=(intent,runtime)=>intent?.authorized===true &&
+  typeof intent.mission==='string' && !!intent.mission.trim() && intent.reviewKind==='auto-ci' &&
+  Array.isArray(intent.paths) && intent.paths.length===runtime.length &&
+  new Set(intent.paths).size===runtime.length && intent.paths.every(p=>runtime.includes(p));
 export function directReleaseDecision(fullDiff, intent=null, context={}) {
   if (!Array.isArray(fullDiff)) fail('invalid direct diff');
   const safe = p => typeof p === 'string' && p.length>0 && !p.startsWith('/') &&
@@ -80,8 +85,9 @@ export function directReleaseDecision(fullDiff, intent=null, context={}) {
     return {eligible:false,reason:'deleted WORK runtime file',files:runtime};
   // El CI autenticado de CANON verifica contratos, permisos, negocio y navegador.
   // No se le pide un recibo al dueño para cada cambio WORK dentro de esta lista cerrada.
-  if (!intent && context.autoReviewed===true)
-    return {eligible:true,risk:'medium',reason:'CI-reviewed isolated WORK UI',files:runtime,autoReviewed:true};
+  if (context.autoReviewed===true &&
+      (context.previouslyApprovedWorkCutover===true || approvedScopedUiIntent(intent,runtime)))
+    return {eligible:true,risk:'medium',reason:'owner-scoped WORK UI verified by CI',files:runtime,autoReviewed:true};
   if (!intent || intent.authorized!==true || !intent.mission?.trim() ||
       !['technical','independent-automated','independent-human'].includes(intent.reviewKind) ||
       !/^docs\/[A-Za-z0-9_./-]+\.json$/.test(intent.reviewEvidence||'') ||
@@ -232,8 +238,16 @@ async function main(){
     const deleted=git('diff','--no-renames','--name-only','--diff-filter=D',base,target,'--','POS/').split('\n').filter(Boolean);
     const workBootstrapPinned=!changed.includes('POS/index.html') ||
       git('rev-parse','HEAD:POS/index.html')===PINNED_WORK_BOOTSTRAP_BLOB;
+    // #1088 es la única excepción inicial: no admitir nuevos archivos POS
+    // desde aquel commit sin una misión NA-Direct que cubra el diff completo.
+    let previouslyApprovedWorkCutover=false;
+    try {
+      ancestor(APPROVED_WORK_CUTOVER_SHA,target);
+      previouslyApprovedWorkCutover=paths(APPROVED_WORK_CUTOVER_SHA,target)
+        .filter(p=>p.startsWith('POS/')).length===0;
+    } catch (_) { previouslyApprovedWorkCutover=false; }
     const decision=directReleaseDecision(changed,intent,{
-      autoReviewed:true,workBootstrapPinned,deleted
+      autoReviewed:true,workBootstrapPinned,deleted,previouslyApprovedWorkCutover
     });
     if(!decision.eligible){
       output('eligible','false');
