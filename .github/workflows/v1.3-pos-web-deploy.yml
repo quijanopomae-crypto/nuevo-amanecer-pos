@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   workflow_run:
     workflows:
-      - E2E Smoke CI
+      - AUTO-DEV CI
     types:
       - completed
     branches:
