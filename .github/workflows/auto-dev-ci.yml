@@ -336,7 +336,12 @@ jobs:
         id: deploy_web
         if: steps.release_gate.outputs.eligible == 'true'
         working-directory: tools/cloudflare-lab
-        run: npx wrangler deploy --config ../cloudflare-pos-web/wrangler.jsonc
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/v1.3-mobile-cloud
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          npx wrangler deploy --config ../cloudflare-pos-web/wrangler.jsonc
 
       - name: Verify public launcher and POS assets
         if: steps.release_gate.outputs.eligible == 'true'
