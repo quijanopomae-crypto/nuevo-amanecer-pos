@@ -310,44 +310,6 @@
     return navigate(pageId);
   }
 
-  // The canonical drawer reuses WORK's line-icon language without borrowing its demo navigation.
-  // Keep icons as local SVG nodes: no external assets, no HTML injection, no data access.
-  function drawerLineIcon(name) {
-    var ns = 'http://www.w3.org/2000/svg';
-    var graphics = {
-      home: [['path','M3 10 12 3l9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z'],['path','M9 21v-8h6v8']],
-      sale: [['circle','9','20','1'],['circle','19','20','1'],['path','M2 3h2l2.4 12.1a2 2 0 0 0 2 1.6h10.5a2 2 0 0 0 2-1.6L23 7H5']],
-      sales: [['path','M5 20v-5M12 20V9M19 20V4']],
-      stock: [['path','m12 2 9 5v10l-9 5-9-5V7z'],['path','m3 7 9 5 9-5M12 12v10']],
-      search: [['circle','9','8','3'],['path','M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v1']],
-      cash: [['rect','3','5','18','15','2'],['path','M3 9h18M16 14h5M16 17h2']],
-      expense: [['path','M6 3h12v18l-3-2-3 2-3-2-3 2V3z'],['path','M9 8h6M9 12h6']],
-      soon: [['rect','5','11','14','10','2'],['path','M8 11V8a4 4 0 0 1 8 0v3'],['circle','12','16','1']],
-      settings: [['path','M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z'],['circle','12','12','3']]
-    };
-    var svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '1.85');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    svg.setAttribute('aria-hidden', 'true');
-    (graphics[name] || graphics.home).forEach(function (shape) {
-      var element = document.createElementNS(ns, shape[0]);
-      if (shape[0] === 'path') element.setAttribute('d', shape[1]);
-      else if (shape[0] === 'circle') {
-        element.setAttribute('cx', shape[1]);element.setAttribute('cy', shape[2]);element.setAttribute('r', shape[3]);
-      } else {
-        element.setAttribute('x', shape[1]);element.setAttribute('y', shape[2]);
-        element.setAttribute('width', shape[3]);element.setAttribute('height', shape[4]);
-        element.setAttribute('rx', shape[5]);
-      }
-      svg.appendChild(element);
-    });
-    return svg;
-  }
-
   function drawerItem(label, icon, pageId, description) {
     var button = node('button', 'na-mobile-drawer-link');
     button.type = 'button';
@@ -356,7 +318,6 @@
     var iconNode = node('span', 'na-mobile-drawer-icon');
     iconNode.setAttribute('data-icon', icon);
     iconNode.setAttribute('aria-hidden', 'true');
-    iconNode.appendChild(drawerLineIcon(icon));
     button.appendChild(iconNode);
     var copy = node('span', 'na-mobile-drawer-label');
     copy.appendChild(node('strong', '', label));
@@ -746,25 +707,35 @@
       drawer.setAttribute('aria-hidden', 'true');
       drawer.inert = true;
 
-      // WORK-approved drawer: one profile header, no duplicated business brand.
       var drawerHead = node('div', 'na-mobile-drawer-head');
-      var profile = node('div', 'na-mobile-profile');
-      var avatar = node('span', 'na-mobile-profile-avatar');
-      avatar.id = 'naMobileProfileAvatar';
-      avatar.setAttribute('aria-hidden', 'true');
-      profile.appendChild(avatar);
-      var profileCopy = node('div', 'na-mobile-profile-copy');
-      var profileName = node('strong'); profileName.id = 'naMobileProfileName';
-      var profileRole = node('small'); profileRole.id = 'naMobileProfileRole';
-      profileCopy.appendChild(profileName); profileCopy.appendChild(profileRole);
-      profile.appendChild(profileCopy);
-      drawerHead.appendChild(profile);
-      var close = node('button', 'na-mobile-drawer-close', '×');
+      // Same sun mark as the top bar logo (styled via .na-mobile-drawer-brand-icon).
+      var logo = node('span', 'na-mobile-drawer-logo na-mobile-drawer-brand-icon');
+      logo.setAttribute('aria-hidden', 'true');
+      drawerHead.appendChild(logo);
+      var brand = node('div', 'na-mobile-drawer-brand');
+      var businessName = document.getElementById('topBusinessName');
+      var businessSub = document.getElementById('topBusinessSub');
+      brand.appendChild(node('strong', '', businessName && businessName.textContent.trim() || 'Nuevo Amanecer'));
+      brand.appendChild(node('span', '', businessSub && businessSub.textContent.trim() || 'Sistema de gestión comercial'));
+      drawerHead.appendChild(brand);
+      var close = node('button', 'na-mobile-drawer-close', '✕');
       close.type = 'button';
       close.setAttribute('aria-label', 'Cerrar menú');
       close.addEventListener('click', closeMobileDrawer);
       drawerHead.appendChild(close);
       drawer.appendChild(drawerHead);
+
+      var profile = node('div', 'na-mobile-profile');
+      var avatar = node('span', 'na-mobile-profile-avatar');
+      avatar.id = 'naMobileProfileAvatar';
+      avatar.setAttribute('aria-hidden', 'true');
+      profile.appendChild(avatar);
+      var profileCopy = node('div');
+      var profileName = node('strong'); profileName.id = 'naMobileProfileName';
+      var profileRole = node('small'); profileRole.id = 'naMobileProfileRole';
+      profileCopy.appendChild(profileName); profileCopy.appendChild(profileRole);
+      profile.appendChild(profileCopy);
+      drawer.appendChild(profile);
       var navigation = node('nav', 'na-mobile-drawer-nav');
       drawer.appendChild(navigation);
       var version = node('small', 'na-mobile-drawer-version', 'Versión local');
