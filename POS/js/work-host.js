@@ -9,17 +9,12 @@
     'pageProximamente':true,'pageConfig':true
   });
   function isHome() { var p=doc.getElementById('pageMenu'); return !!(p && p.classList.contains('active')); }
-  // WORK is the default Inicio experience; ?work=0 is a reversible legacy fallback.
-  // The fallback does not affect sales, cash, local outbox or canonical storage.
-  // Only the authenticated hosted CANON opens WORK by default.
-  // Local tests retain the current screens; ?work=1 exercises the new interface.
-  var featureEnabled = !!(root.NA_HOSTED_CONFIG &&
-    root.NA_HOSTED_CONFIG.environment === 'production'), temporarilyLegacy = false;
-  try {
-    var mode = new URLSearchParams(root.location.search).get('work');
-    if (mode === '1') featureEnabled = true;
-    if (mode === '0') featureEnabled = false;
-  } catch (_) {}
+  // WORK is the primary visible Inicio for authenticated hosted CANON.
+  // Keep the old pageMenu DOM behind WORK: canonical modules and read-only metrics need it.
+  // ?work=1 opts into local UI tests; ?work=0 must never expose the retired Inicio in production.
+  var hosted = !!(root.NA_HOSTED_CONFIG && root.NA_HOSTED_CONFIG.environment === 'production');
+  var featureEnabled = hosted, temporarilyLegacy = false;
+  try { if (new URLSearchParams(root.location.search).get('work') === '1') featureEnabled = true; } catch (_) {}
   function sessionReady() {
     return !(root.NA_HOSTED_CONFIG && root.NA_HOSTED_CONFIG.environment === 'production') ||
       !!(root.NA_ROLES && root.NA_ROLES.confirmed === true);
@@ -696,7 +691,11 @@
     var data=event.data;
     if (!data || typeof data!=='object' || typeof data.type!=='string' || !data.type.startsWith('na-work:')) return;
     if (data.type==='na-work:reset') {resetConversation();return;}
-    if (data.type==='na-work:close') {temporarilyLegacy = true;close();return;}
+    if (data.type==='na-work:close') {
+      // A stale cached WORK iframe must not reopen the retired Inicio in production.
+      if (hosted) return;
+      temporarilyLegacy = true;close();return;
+    }
     if (data.type==='na-work:metrics') {var first=initPayload();lastInit=JSON.stringify(first);respond(event.source,first);return;}
     if (data.type==='na-work:navigate') {
       var id=String(data.page||'');
