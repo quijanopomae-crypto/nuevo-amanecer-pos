@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../../tools/cloudflare-lab/src/worker.js';
+import { runAssistantQuery, memoryReader } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import {
   assistantChatRoute, assistantConfirmRoute, createMemoryUsageStore, toolsForRole, redactText,
   buildDeepSeekRequest, sanitizeContext, DEEPSEEK_MODEL, CONFIRM_TTL_MS, readConfirmToken, verifyOwnerApproval
@@ -393,4 +394,25 @@ test('sin PIN: sin sesión dueño sigue bloqueado (sin rol, empleado apagado, em
   // Rol de la base = dueño pero la sesión del POS no es dueño (posRole empleado): assistantAccess no da 'owner' -> bloqueado.
   const c = await confirm(p, { store, auth: { ...OWNER, posRole: 'empleado' } }); assert.equal(c.status, 403);
   const good = await confirm(p, { store }); assert.equal(good.status, 200); assert.equal(good.body.already_confirmed, undefined);
+});
+
+test('WORK: ganancia calculada con costo actual aparece como bruta estimada en texto, título y tabla', async () => {
+  // Datos sintéticos: no se consulta ni modifica el negocio real.
+  const reader = memoryReader({
+    products: [{ id: 'TEST-1', nombre: 'Producto de prueba', precio: 10, costo: 6, stock: 20, min: 1, controla: true }],
+    sales: [{ sale_id: 'VENTA-TEST-1', created_at: '2026-10-26T13:00:00.000Z', metodo: 'efectivo', total_cents: 2000 }],
+    saleItems: [{ sale_id: 'VENTA-TEST-1', product_id: 'TEST-1', quantity: 2, line_total_cents: 2000 }],
+    cashMovements: [], payments: []
+  });
+  const r = await runAssistantQuery(reader, { tipo: 'ganancia', periodo: 'hoy' }, Date.parse('2026-10-26T20:00:00Z'));
+  assert.equal(r.resumen.ventas_soles, 20);
+  assert.equal(r.resumen.costo_soles, 12);
+  assert.equal(r.resumen.ganancia_soles, 8, 'no altera la aritmética');
+  assert.equal(r.resumen.base_costo, 'costo actual del producto', 'no simula costo histórico');
+  assert.match(r.titulo, /Ganancia bruta estimada/);
+  assert.match(r.texto, /Ganancia bruta estimada/);
+  const fila = r.filas.find((f) => /^Ganancia/.test(String(f[0])));
+  assert.ok(fila, 'la fila de ganancia existe');
+  assert.equal(fila[0], 'Ganancia bruta estimada S/');
+  assert.equal(fila[1], 8);
 });
