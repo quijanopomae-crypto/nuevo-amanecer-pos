@@ -22,7 +22,11 @@ Usar el riesgo mayor del diff real. Presentar información privada o alterar el 
 
 Conservar default-deny, aislamiento de entornos, secretos fuera de Git, validaciones, pruebas negativas y pendientes recuperables. Nunca modificar datos de negocio para probar ni debilitar assertions para obtener verde. Un fallo se diagnostica y aísla; no paraliza cambios independientes seguros.
 
-## Publicación web con un manifiesto
+## Publicación web: CSS seguro automático y manifiesto para los demás cambios
+
+**Excepción automática, solo CSS puro:** al finalizar los tres CI de un push a `feature/v1.3-mobile-cloud`, `v1.3-pos-web-deploy.yml` verifica que el SHA alojado es ancestro del candidato, que todas las diferencias desplegables son exclusivamente archivos `POS/css/*.css`, que no hay cambios de Worker/SQL/infraestructura, que no quedan CI obligatorios pendientes y que el commit es el HEAD actual. Solo entonces publica automáticamente, sin segundo PR ni manifiesto manual. Conserva artefacto con versión anterior y comprueba health/assets/hash. Si un requisito no se cumple, no publica por esa vía. Una revisión del diseño o cambio CSS no autoriza eliminar verificaciones de acceso/datos.
+
+**Demás cambios:** continúa el procedimiento de manifiesto que sigue, con revisión técnica según riesgo y respaldo antes de modificar datos. El agente puede usar `--scope auto` para generar automáticamente la lista exacta del diff desplegable, sin asumir que todos los archivos están autorizados.
 
 Un deploy publica todo el árbol POS del target, no solo el último PR. Antes de preparar la publicación, comparar el **SHA observado en producción** con el target y revisar todos los commits y archivos, incluidos eliminados. Si hay cambios ajenos al alcance pedido, no incorporarlos por conveniencia: aislarlos o resolver la dependencia.
 
