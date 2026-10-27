@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 const module = await import('../../tools/release/web-release.mjs').catch(() => ({}));
-const { validateRelease, requireGreenRuns, validateReviewReceipt, deployedOnly, REQUIRED_CI, excludedFromScope, highRiskPaths, requireRiskForDiff, scopeWarning } = module;
+const { validateRelease, requireGreenRuns, validateReviewReceipt, deployedOnly, REQUIRED_CI, excludedFromScope, highRiskPaths, requireRiskForDiff, scopeWarning, autoWebReleaseEligible } = module;
 
 test('release validator exists', () => assert.equal(typeof validateRelease, 'function'));
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
@@ -148,4 +148,18 @@ test('prepare CLI warns about excluded files without blocking and requires --ris
   assert.notEqual(r.status,0,f);assert.match(r.stderr,/--risk high is required/,f);
  }
  }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test('automatic web deployment is limited to isolated CSS changes with no backend, secrets or release gate edits', () => {
+  assert.equal(typeof autoWebReleaseEligible, 'function');
+  assert.equal(autoWebReleaseEligible(['POS/css/base.css','docs/reviews/note.md']), true);
+  assert.equal(autoWebReleaseEligible(['docs/reviews/note.md']), false);
+  for (const paths of [
+    [],['POS/index.html'],['POS/js/sync/outbox.js'],['POS/css/base.css','POS/js/work-host.js'],
+    ['POS/css/base.css','tools/cloudflare-lab/src/worker.js'],
+    ['POS/css/base.css','infra/database/migrations/0020.sql'],
+    ['POS/css/base.css','.github/workflows/v1.3-pos-web-deploy.yml'],
+    ['POS/css/base.css','tools/release/web-release.mjs'],
+    ['POS/css/../secrets.css']
+  ]) assert.equal(autoWebReleaseEligible(paths), false, JSON.stringify(paths));
 });
