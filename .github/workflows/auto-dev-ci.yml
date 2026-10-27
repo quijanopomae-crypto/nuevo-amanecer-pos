@@ -175,16 +175,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node inside Playwright container
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install reproducible dependencies
-        run: npm ci --no-audit --no-fund
-
       - name: Determine regression scope
         id: impact
         env:
@@ -201,23 +191,29 @@ jobs:
             echo "level=critical" | tee -a "$GITHUB_OUTPUT"
           fi
 
-      - name: Run targeted browser tests for ordinary changes
+      - name: No browser E2E for visual or isolated WORK changes
         if: steps.impact.outputs.level != 'critical'
         run: |
-          npx playwright test --workers=4 \
-            tests/e2e/work-default.spec.ts \
-            tests/e2e/canon-mobile-home.spec.ts \
-            tests/e2e/canon-mobile-clientes-caja.spec.ts \
-            tests/e2e/canon-module-header-taps.spec.ts \
-            tests/e2e/stock-negativo.spec.ts \
-            tests/e2e/ticket-venta-pendiente.spec.ts
+          echo "FAST_LANE_NO_E2E: scoped UI and permission tests run in validate and critical-regression"
+
+      - name: Setup Node inside Playwright container
+        if: steps.impact.outputs.level == 'critical'
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install reproducible dependencies
+        if: steps.impact.outputs.level == 'critical'
+        run: npm ci --no-audit --no-fund
 
       - name: Run complete regression for critical commercial or pipeline changes
         if: steps.impact.outputs.level == 'critical'
         run: npx playwright test --workers=2
 
       - name: Upload Playwright report (on failures too)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.impact.outputs.level == 'critical' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
