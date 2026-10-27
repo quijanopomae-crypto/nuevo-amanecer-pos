@@ -2,39 +2,19 @@ name: OpenCode Role Map CI
 
 on:
   pull_request:
-    paths:
-      - ".opencode/**"
-      - ".agents/skills/**"
-      - "tools/release/**"
-      - "tests/release/**"
-      - "docs/DEVELOPMENT_RISK_POLICY.md"
-      - ".github/workflows/v1.3-pos-web-deploy.yml"
-      - "AGENTS.md"
-      - "AGENTS_Nuevo_Amanecer.md"
-      - "README.md"
-      - "REPO_MAP.yaml"
-      - "docs/V1.3_STATUS.md"
-      - "docs/REMEDIATION_FINAL_VERIFICATION.md"
-      - "MANIFEST.yaml"
-      - "opencode.json"
-      - "tests/opencode-role-map.test.mjs"
-      - "tests/repo-map.test.mjs"
-      - "tests/final-repository-boundaries.test.mjs"
-      - "tests/owner-finalizer.test.mjs"
-      - "tools/owner-finalize-v1.3.ps1"
-      - "docs/OWNER_FINALIZATION.md"
-      - ".github/workflows/owner-backup-recovery-drill.yml"
-      - "tests/owner-finalizer.test.mjs"
-      - "tools/owner-finalize-v1.3.ps1"
-      - "docs/OWNER_FINALIZATION.md"
-      - ".github/workflows/owner-backup-recovery-drill.yml"
-      - ".github/workflows/opencode-config-ci.yml"
   push:
     branches:
       - feature/v1.3-mobile-cloud
 
+  workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: role-map-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 
 jobs:
   validate:
