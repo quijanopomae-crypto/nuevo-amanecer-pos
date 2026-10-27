@@ -164,61 +164,24 @@ jobs:
           git diff --exit-code
           test -z "$(git status --porcelain --untracked-files=all)"
 
+  # Nombre legado conservado para reglas de GitHub existentes: NO ejecuta E2E ni Playwright.
+  # La batería E2E completa queda exclusivamente en e2e-full-regression.yml (programada/manual).
   e2e-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
-    container: mcr.microsoft.com/playwright:v1.47.2-jammy
+    timeout-minutes: 5
     steps:
-      - name: Checkout with comparison history
+      - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          fetch-depth: 0
 
-      - name: Determine regression scope
-        id: impact
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] &&
-             ! [[ "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$TARGET_SHA^{commit}"; then
-            git diff --no-renames --name-only "$BASE_SHA" "$TARGET_SHA" > /tmp/na-changed-paths.txt
-            node tools/ci/change-impact.mjs /tmp/na-changed-paths.txt | tee -a "$GITHUB_OUTPUT"
-          else
-            echo "level=critical" | tee -a "$GITHUB_OUTPUT"
-          fi
-
-      - name: No browser E2E for visual or isolated WORK changes
-        if: steps.impact.outputs.level != 'critical'
-        run: |
-          echo "FAST_LANE_NO_E2E: scoped UI and permission tests run in validate and critical-regression"
-
-      - name: Setup Node inside Playwright container
-        if: steps.impact.outputs.level == 'critical'
+      - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
 
-      - name: Install reproducible dependencies
-        if: steps.impact.outputs.level == 'critical'
-        run: npm ci --no-audit --no-fund
-
-      - name: Run complete regression for critical commercial or pipeline changes
-        if: steps.impact.outputs.level == 'critical'
-        run: npx playwright test --workers=2
-
-      - name: Upload Playwright report (on failures too)
-        if: ${{ !cancelled() && steps.impact.outputs.level == 'critical' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
+      - name: Fast repository and assistant authorization smoke (no browser)
+        run: node --test tests/ci/change-impact.test.mjs tests/asistente/assistant-client-gate.test.mjs
 
   publish-web:
     needs: [validate, critical-regression, e2e-smoke]
