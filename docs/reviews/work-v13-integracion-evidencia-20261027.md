@@ -41,3 +41,17 @@ Las pruebas `tests/work/*.test.mjs` **no están en el CI crítico**. Aplicado #1
 ## Reversión
 
 Revertir este PR (un solo `git revert` del merge) restaura el comportamiento previo; no hay migraciones, Worker, BD ni outbox involucrados.
+
+## Actualización 27/10/2026 (segunda pasada, SHA `9acd70ebe4166a94846f4c74b824a622a7d641b1`)
+
+**Workflows de GitHub:** CANON Critical CI, E2E Smoke CI y Visual Regression de este SHA (y del anterior `47c0448b`) están en `action_required`: **no se ejecutaron**; un mantenedor debe aprobarlos en la pestaña Actions. **No hay CI real de este SHA y no se declara aprobado.**
+
+**`vendedores-mismo-nombre.spec.ts:341`:** aislado pasa 22/22 en 49 s (6 workers no necesarios). En la corrida completa local (982 pruebas, 6 workers, `CI=1`) el runner se quedó inactivo (~2 % CPU) tras los reintentos de esas últimas pruebas, dos veces seguidas, sin emitir el resumen final; no hay evidencia de fallo de la prueba y se interpreta como cuelgue del runner local al cierre (no demostrado). **El E2E completo sigue sin resumen final: PENDIENTE.** Antes del cuelgue hubo reintentos (retry #1) en pruebas de empleado y de rendimiento/visuales bajo carga (cliente-historial-compras, clientes-reporte-deuda, costo-ausente-guion, dark-auditoria-contraste, inventory-thumbnails-scroll, product-image-review, reporte-productos-vencer); su resultado final no se pudo confirmar. Debe decidirlo el E2E Smoke CI oficial.
+
+**Responsivo (capturas en `docs/reviews/capturas-work-20261027/`):** WORK en iframe con `?work=1`, Chromium de escritorio, anchos 320, 360, 390, 430, 768, 1024, 1366 y 1920: `scrollWidth == innerWidth` en los 8 (sin desbordamiento horizontal) y iframe presente. En 390 px se ve un solo Inicio, esfera Aurora, KPIs en 0 sin datos de demostración y «no se mostrarán operaciones de ejemplo». Datos sin sesión: es estado honesto, no datos reales.
+
+**No realizado / no aprobado:** Chrome Android real y teclado virtual; auditoría de accesibilidad (axe/lector); comparación visual contra `Nuevo_Amanecer_WORK_Vista_Previa.html` (no está en el repo); prueba autenticada real de permisos/KPIs/chat con CANON; Visual Regression oficial; CodeQL (agotó el tiempo en la sesión anterior). Permisos empleado/dueño: solo cubiertos por las pruebas existentes (`work-*.spec.ts` 9/9, `tests/work` 134/134), no por una prueba nueva.
+
+**Riesgos:** el E2E completo y CI oficial sin confirmar; Flash/Pro/Ultra y adjuntos siguen sin enrutamiento real; `tests/work/*.test.mjs` no está en el CI crítico (propuesta: añadirlo en un PR aparte).
+
+**Reversión:** `git revert` del merge de este PR; sin migraciones, Worker, BD ni outbox.
