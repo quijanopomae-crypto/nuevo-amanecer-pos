@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: visual-regression-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+
 jobs:
   visual:
     runs-on: ubuntu-latest
@@ -24,8 +29,14 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Setup Node with cached npm
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Compare screenshots (informativo; renovar capturas según docs/GUIA_CAMBIO_RAPIDO.md)
         continue-on-error: true
         run: npx playwright test -c playwright.visual.config.ts
