@@ -103,7 +103,7 @@ async function main(){
     const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!live.ok)fail('cannot verify production SHA: HTTP '+live.status);
     const liveText=await live.text();
-    const hashes=[...new Set((await live.text()).match(/[a-f0-9]{40}/g)||[])];
+    const hashes=[...new Set((await live.text()).match(/\b[a-f0-9]{40}\b/g)||[])];
     if(hashes.length!==1)fail('cannot identify unique production SHA');
     validateRelease(m,{productionSha:hashes[0],base:m.approved_base,target:m.target_commit,head,paths:releasePaths(m.approved_base,m.target_commit),activationPaths:paths(m.target_commit,head)});
     if(!/^docs\/[A-Za-z0-9_./-]+\.json$/.test(m.review.evidence)||m.review.evidence.split('/').includes('..'))fail('review evidence must be a versioned docs JSON receipt');
