@@ -5,6 +5,11 @@ import { pathToFileURL } from 'node:url';
 
 const critical = [
   /^POS\/js\/sync\//,
+  /^POS\/js\/modules\//,
+  /^POS\/js\/legacy-inline\//,
+  /^POS\/js\/adapters\//,
+  /^POS\/js\/compat\//,
+  /^POS\/js\/config\//,
   /^POS\/js\/config\/pos-permissions\.js$/,
   /^POS\/js\/modules\/(?:ventas|stock|caja|credito|clientes|compras|pago)/i,
   /^POS\/js\/inventory\//,
