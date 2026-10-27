@@ -3,6 +3,72 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
 const map = readFileSync('REPO_MAP.yaml', 'utf8');
+const criticalWorkflow = readFileSync('.github/workflows/canon-critical-ci.yml', 'utf8');
+
+function nodeTestPathsByStep(workflow) {
+  const lines = workflow.split(/\r?\n/);
+  const stepMarkers = lines
+    .map((line, index) => {
+      const match = line.match(/^(\s*)-\s+name:\s*(.+?)\s*$/);
+      return match ? { indent: match[1].length, index, name: match[2] } : null;
+    })
+    .filter(Boolean);
+  const paths = [];
+
+  for (let stepIndex = 0; stepIndex < stepMarkers.length; stepIndex += 1) {
+    const step = stepMarkers[stepIndex];
+    const nextStep = stepMarkers
+      .slice(stepIndex + 1)
+      .find((candidate) => candidate.indent === step.indent);
+    const stepLines = lines.slice(step.index + 1, nextStep?.index ?? lines.length);
+    const runIndex = stepLines.findIndex((line) => /^\s*run:\s*/.test(line));
+    if (runIndex === -1) continue;
+
+    const runLine = stepLines[runIndex];
+    const runIndent = runLine.match(/^\s*/)[0].length;
+    const runValue = runLine.replace(/^\s*run:\s*/, '');
+    let runScript = runValue === '|' || runValue === '>' ? '' : runValue;
+
+    if (!runScript) {
+      for (const line of stepLines.slice(runIndex + 1)) {
+        if (line.trim() && line.match(/^\s*/)[0].length <= runIndent) break;
+        runScript += `${line}\n`;
+      }
+    }
+
+    const commands = runScript
+      .replace(/\\\r?\n[ \t]*/g, ' ')
+      .split(/\r?\n|&&|\|\||;/);
+    for (const command of commands) {
+      const testCommand = command.match(/(?:^|\s)node\s+--test(?:\s+|$)(.*)$/);
+      if (!testCommand) continue;
+
+      const tokens = [...testCommand[1].matchAll(/"([^"]*)"|'([^']*)'|([^\s]+)/g)]
+        .map((match) => match[1] ?? match[2] ?? match[3]);
+      for (const path of tokens) {
+        if (
+          path.startsWith('tests/') &&
+          path.endsWith('.test.mjs') &&
+          !/[*?\[\]]/.test(path)
+        ) {
+          paths.push({ path, step: step.name });
+        }
+      }
+    }
+  }
+
+  return paths;
+}
+
+function assertWorkflowTestPathsExist(workflow, pathExists) {
+  for (const { path, step } of nodeTestPathsByStep(workflow)) {
+    assert.equal(
+      pathExists(path),
+      true,
+      `CANON test workflow step "${step}" references missing test path: ${path}`,
+    );
+  }
+}
 
 test('REPO_MAP identifies current authority and release boundary', () => {
   assert.match(map, /active_branch: feature\/v1\.3-mobile-cloud/);
@@ -66,4 +132,30 @@ test('REPO_MAP declares branch-preview as active development model and POS-LAB a
   assert.match(map, /preview_must_match_pr_sha: true/);
   assert.doesNotMatch(map, /lab_mirror:/);
   assert.doesNotMatch(map, /pages_lab:/);
+});
+
+test('CANON Critical CI references existing literal Node test paths', () => {
+  assertWorkflowTestPathsExist(criticalWorkflow, existsSync);
+});
+
+test('CANON Critical CI path guard rejects missing literals and ignores globs', () => {
+  const workflow = [
+    'jobs:',
+    '  tests:',
+    '    steps:',
+    '      - name: Synthetic CI regressions',
+    '        run: |',
+    '          node --test \\',
+    '            tests/asistente/no-existe.test.mjs',
+    '          node --test tests/work/*.test.mjs',
+  ].join('\n');
+
+  assert.throws(
+    () => assertWorkflowTestPathsExist(workflow, () => false),
+    /CANON test workflow step "Synthetic CI regressions" references missing test path: tests\/asistente\/no-existe\.test\.mjs/,
+  );
+  assert.deepEqual(
+    nodeTestPathsByStep(workflow),
+    [{ path: 'tests/asistente/no-existe.test.mjs', step: 'Synthetic CI regressions' }],
+  );
 });
