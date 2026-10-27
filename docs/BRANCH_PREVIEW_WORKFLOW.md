@@ -15,7 +15,7 @@ CANON HEAD
   -> pruebas focalizadas
   -> regresiones
   -> Draft PR
-  -> CANON Critical CI / E2E Smoke CI
+  -> AUTO-DEV CI
   -> clasificación de riesgo
   -> revisión proporcional BAJO / MEDIO / ALTO (docs/DEVELOPMENT_RISK_POLICY.md)
   -> preview temporal del mismo SHA, cuando aplique
