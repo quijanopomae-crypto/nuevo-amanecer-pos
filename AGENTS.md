@@ -38,7 +38,6 @@ Siempre: hora de Lima (`America/Lima`), sin `innerHTML` (usa `textContent` o `cr
 Teléfono primero (390 px). Revisa como mínimo 390, 768 y 1366 px cuando el cambio es visual. Los 8 anchos de `AGENTS_Nuevo_Amanecer.md` son referencia para trabajo grande, no requisito de un cambio de 1 línea.
 
 La misión es única: no crear auditorías extensas, PR alternativos ni informes repetidos cuando el diff y el resultado de CI basten. Nunca saltarse verificaciones de integridad o permisos para acelerar.
-
 Para cambios WORK de riesgo medio, el agente incluye internamente en el commit final los campos `NA-Direct: true`, `NA-Mission: descripción de la orden`, `NA-Paths: ["POS/work/index.html"]`, `NA-Review-Kind: technical` y `NA-Review-Evidence: docs/reviews/revision.json`; la evidencia debe vincularse al commit revisado. No son pasos para el propietario.
 
 ## Contexto adicional (leer solo si hace falta)
