@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 const trigger='ops/v1.3-pos-web-deploy-trigger.json';
 const sha = value => typeof value==='string' && /^[a-f0-9]{40}$/.test(value);
@@ -42,6 +42,20 @@ const paths=(base,target)=>execFileSync('git',['diff','--no-renames','--name-onl
 export const DEPLOYED_PREFIXES=['POS/','tools/cloudflare-pos-web/','tools/release/','.github/workflows/v1.3-pos-web-deploy.yml','tools/cloudflare-lab/package.json','tools/cloudflare-lab/package-lock.json',...Object.values(REQUIRED_CI)];
 export const deployedOnly=list=>list.filter(p=>DEPLOYED_PREFIXES.some(x=>p===x||p.startsWith(x)));
 const releasePaths=(base,target)=>deployedOnly(paths(base,target));
+// Solo una diferencia EXCLUSIVAMENTE visual puede publicarse sin segundo PR.
+// Aun si los cambios fuera de POS no se publican, Worker, migraciones y secretos
+// nunca pueden viajar en una promocion automatica de CSS.
+export function autoWebReleaseEligible(fullPaths) {
+  if (!Array.isArray(fullPaths) || !fullPaths.length) return false;
+  if (highRiskPaths(fullPaths).length) return false;
+  const deployed = deployedOnly(fullPaths);
+  return deployed.length > 0 &&
+    deployed.every(p => /^POS\\/css\\/[A-Za-z0-9_./-]+\\.css$/i.test(p) && !p.split('/').includes('..'));
+}
+function output(name,value) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT,name+'='+String(value)+'\\n');
+}
+
 // Avisos de prepare: lo excluido del alcance se muestra (no bloquea) y el riesgo mínimo se deriva del diff, no solo de --risk.
 export const excludedFromScope=list=>list.filter(p=>!deployedOnly([p]).length);
 export const HIGH_RISK_PREFIXES=['tools/cloudflare-lab/','tools/cloudflare-prod/','tools/cloudflare-backup/','infra/database/migrations/','ops/canon-migration'];
@@ -69,8 +83,9 @@ async function main(){
     if(!sha(base)||!sha(rollback)) fail('full base and rollback SHA required');
     ancestor(base,target);ancestor(rollback,target);
     if(git('status','--porcelain'))fail('prepare requires clean worktree');
-    const m={format:'nuevo-amanecer-web-release-v2',authorized:true,authorization:args.authorization,risk:args.risk,approved_base:base,target_commit:target,rollback_ref:rollback,allowed_paths:JSON.parse(readFileSync(args.scope,'utf8')),review:{kind:args['review-kind'],evidence:args.review},requested_at_utc:new Date().toISOString()};
     const fullDiff=paths(base,target);
+    const approvedPaths=args.scope==='auto' ? deployedOnly(fullDiff) : JSON.parse(readFileSync(args.scope,'utf8'));
+    const m={format:'nuevo-amanecer-web-release-v2',authorized:true,authorization:args.authorization,risk:args.risk,approved_base:base,target_commit:target,rollback_ref:rollback,allowed_paths:approvedPaths,review:{kind:args['review-kind'],evidence:args.review},requested_at_utc:new Date().toISOString()};
     requireRiskForDiff(m.risk,fullDiff);
     const warning=scopeWarning(fullDiff);if(warning)console.warn(warning);
     validateRelease(m,{base,target,head:target,productionSha:base,paths:deployedOnly(fullDiff),activationPaths:[trigger]});
@@ -103,6 +118,50 @@ async function main(){
     }
     requireGreenRuns(runs,m.target_commit);
     console.log('WEB_RELEASE_GATE_PASS target='+m.target_commit+' rollback='+m.rollback_ref);
-  }else fail('use prepare or verify');
+
+  }else if(command==='verify-auto'){
+    // Invocado solo tras un E2E de push al CANON; el workflow verifica ademas
+    // que HEAD coincide exactamente con la rama activa y que el actor es confiable.
+    const target=git('rev-parse','HEAD');
+    const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!live.ok) fail('cannot verify production SHA: HTTP '+live.status);
+    const hashes=[...new Set((await live.text()).match(/\\b[a-f0-9]{40}\\b/g)||[])];
+    if(hashes.length!==1) fail('cannot identify unique production SHA');
+    const base=hashes[0];
+    if(base===target){output('eligible','false');console.log('AUTO_WEB_SKIP already published');return;}
+    ancestor(base,target);
+    const changed=paths(base,target);
+    if(!autoWebReleaseEligible(changed)){
+      output('eligible','false');
+      console.log('AUTO_WEB_SKIP requires the scoped manifest for non-CSS changes');
+      return;
+    }
+    const repository=process.env.GITHUB_REPOSITORY;
+    if(!repository||!process.env.GH_TOKEN)fail('authenticated GitHub CI verification required');
+    const getRuns=async()=>{
+      const runs=[];
+      for(let page=1;;page++){
+        const response=await fetch('https://api.github.com/repos/'+repository+'/actions/runs?head_sha='+target+'&per_page=100&page='+page,{signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'}});
+        if(!response.ok) fail('cannot verify CI: HTTP '+response.status);
+        const data=await response.json();runs.push(...data.workflow_runs);
+        if(data.workflow_runs.length<100)return runs;
+        if(page>=20)fail('too many CI runs; unable to verify completely');
+      }
+    };
+    let checked=false;
+    for(let i=0;i<90;i++){
+      try { requireGreenRuns(await getRuns(),target);checked=true;break; }
+      catch(err) {
+        // Fallar cerrado, no desplegar tras timeout. Nunca inventar un SUCCESS.
+        if(i===89)throw err;
+        await new Promise(resolve=>setTimeout(resolve,10000));
+      }
+    }
+    if(!checked)fail('CI checks could not be verified');
+    const record={mode:'css-only-auto',production_sha:base,target_commit:target,rollback_ref:base,files:deployedOnly(changed),authorization:'Owner mission: autonomous scoped development and publication',validated_at_utc:new Date().toISOString()};
+    writeFileSync('/tmp/pos-auto-release.json',JSON.stringify(record,null,2)+'\\n');
+    output('eligible','true');
+    console.log('WEB_RELEASE_GATE_PASS automatic CSS-only target='+target+' rollback='+base);
+  }else fail('use prepare, verify or verify-auto');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error(e.message);process.exitCode=1;});
