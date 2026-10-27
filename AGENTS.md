@@ -13,8 +13,8 @@ El objetivo o pedido del dueño es la autorización de todo ese alcance, incluid
 1. Parte del HEAD de `feature/v1.3-mobile-cloud` y crea una rama `feature/*`, `fix/*` o `perf/*`.
 2. Haz el cambio mínimo, solo del alcance pedido.
 3. Corre las pruebas del archivo tocado (Node 22: `node --test tests/<carpeta>/<archivo>.test.mjs`); compara con la base: cero fallos nuevos.
-4. Abre PR; que pase CANON Critical CI y E2E Smoke CI. Un fallo se clasifica como regresión real o prueba obsoleta; nunca se tapa ni se debilita una prueba para dar verde.
-5. Integra y, si el dueño lo pidió, publica (ver guía). Borra la rama.
+4. Abre un solo PR por misión; deja que CANON Critical CI, E2E Smoke CI y OpenCode Role Map CI corran automáticamente. CSS/recursos visuales usan pruebas focalizadas; lógica comercial conserva regresión completa. Un fallo se clasifica como regresión real o prueba obsoleta; nunca se tapa ni se debilita una prueba para dar verde.
+5. Integra una vez estén verdes los controles aplicables. CSS puro posterior a una versión publicada activa despliegue automático tras el CI de CANON (sin segundo PR). Para cambios funcionales sigue el manifiesto verificado hasta que exista una sustitución probada. Borra la rama cuando sea seguro.
 
 ## Riesgo, en una línea
 
@@ -27,7 +27,7 @@ BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, 
 - Datos de producción: migraciones solo aditivas, con respaldo previo de la BD obligatorio (lo haces tú, sin pedir OK); nunca borrar datos de producción (solo lo que el dueño pida borrar expresamente, y con respaldo previo); nunca alterar ventas ni abonos pendientes (outbox).
 - Secretos: nunca escribir tokens, claves ni datos de clientes en código, docs, logs o prompts. Cambiar secrets solo si el pedido lo incluye; si falta el valor, lo pone el dueño en su chat.
 - Worker de producción y backend: `tools/cloudflare-lab/**` (nombre histórico, es producción), `tools/cloudflare-prod/**`, `tools/cloudflare-backup/**`. No se borra ni se renombra por nombre.
-- Publicación: la web se publica con el manifiesto de `tools/release/web-release.mjs` (rollback, SHA de producción y CI exacta). Obligatorio siempre, sin pedir OK: respaldo previo de la BD antes de migraciones o Worker, el Worker se publica primero y luego la web, `rollback_ref` y SHA de producción igual a la base, los 3 CI exactos y revisión independiente en riesgo ALTO. Force-push: siempre prohibido. Workflows de cutover/migración: solo si el pedido los nombra.
+- Publicación: CSS exclusivamente visual se publica mediante `verify-auto` sin PR adicional, con SHA de producción, 3 CI exactos y rollback registrado. Cambios funcionales o de infraestructura siguen usando manifiesto `tools/release/web-release.mjs` y revisión proporcional, sin pedir OK adicional: respaldo previo de la BD antes de migraciones o Worker, el Worker se publica primero y luego la web, `rollback_ref` y SHA de producción igual a la base, los 3 CI exactos y revisión independiente en riesgo ALTO. Force-push: siempre prohibido. Workflows de cutover/migración: solo si el pedido los nombra.
 - POS-LAB está retirado: no crear ramas `lab/*` ni escribir en `laboratorio/**`. El modo SHADOW legacy sigue con `PRODUCT_WRITE = DENIED`.
 - No editar `POS/css/experience-v2/pages/*.css`. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si los sobrescribió la suite (restaurar con `git checkout`).
 
@@ -36,6 +36,8 @@ BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, 
 Siempre: hora de Lima (`America/Lima`), sin `innerHTML` (usa `textContent` o `createElement`), no uses el puerto 4173 (E2E en otro puerto libre) y dinero, costos y TOTAL son solo del dueño: no cambian sin él.
 
 Teléfono primero (390 px). Revisa como mínimo 390, 768 y 1366 px cuando el cambio es visual. Los 8 anchos de `AGENTS_Nuevo_Amanecer.md` son referencia para trabajo grande, no requisito de un cambio de 1 línea.
+
+La misión es única: no crear auditorías extensas, PR alternativos ni informes repetidos cuando el diff y el resultado de CI basten. Nunca saltarse verificaciones de integridad o permisos para acelerar.
 
 ## Contexto adicional (leer solo si hace falta)
 
