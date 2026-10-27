@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Fast CI and deployment contracts
+        run: node --test tests/ci/*.test.mjs
+
       - name: Role, command and repository-map boundaries
         run: node --test tests/opencode-role-map.test.mjs tests/repo-map.test.mjs
 
