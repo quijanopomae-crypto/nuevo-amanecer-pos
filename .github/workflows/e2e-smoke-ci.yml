@@ -1,46 +1,73 @@
 name: E2E Smoke CI
 
 on:
+  pull_request:
   push:
     branches:
       - feature/v1.3-mobile-cloud
-  pull_request:
-    paths:
-      - "tests/e2e/**"
-      - "POS/**"
-      - "playwright.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/e2e-smoke-ci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# Los PR antiguos se sustituyen; una publicacion en CANON nunca se cancela por esta regla.
+concurrency:
+  group: e2e-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   e2e-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    container: mcr.microsoft.com/playwright:v1.47.2-jammy
     steps:
-      - name: Checkout
+      - name: Checkout with comparison history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Setup Node with npm cache
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install reproducible dependencies
+        run: npm ci --no-audit --no-fund
 
-      - name: Install Playwright browser (chromium)
-        run: npx playwright install --with-deps chromium
+      - name: Determine regression scope
+        id: impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$TARGET_SHA" =~ ^[a-f0-9]{40}$ ]] &&
+             ! [[ "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$TARGET_SHA^{commit}"; then
+            git diff --no-renames --name-only "$BASE_SHA" "$TARGET_SHA" > /tmp/na-changed-paths.txt
+            node tools/ci/change-impact.mjs /tmp/na-changed-paths.txt | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "level=critical" | tee -a "$GITHUB_OUTPUT"
+          fi
 
-      - name: Run E2E smoke tests
-        run: npm run test:e2e
+      - name: Run targeted browser tests for ordinary changes
+        if: steps.impact.outputs.level != 'critical'
+        run: |
+          npx playwright test --workers=4 \
+            tests/e2e/work-default.spec.ts \
+            tests/e2e/canon-mobile-home.spec.ts \
+            tests/e2e/canon-mobile-clientes-caja.spec.ts \
+            tests/e2e/canon-module-header-taps.spec.ts \
+            tests/e2e/stock-negativo.spec.ts \
+            tests/e2e/ticket-venta-pendiente.spec.ts
 
-      - name: Upload Playwright report
+      - name: Run complete regression for critical commercial or pipeline changes
+        if: steps.impact.outputs.level == 'critical'
+        run: npx playwright test --workers=2
+
+      - name: Upload Playwright report (on failures too)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
