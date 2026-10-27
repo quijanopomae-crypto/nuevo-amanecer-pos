@@ -11,7 +11,7 @@ const source=readFileSync('POS/js/work-host.js','utf8');
 const tick=(ms=15)=>new Promise(r=>setTimeout(r,ms));
 const FIXED=1700000010000; // 30 s dentro de un minuto de reloj: los tests de espera no dependen de la hora real
 
-function fixture({owner=true,engine={},api,catalog,execute,products=3,access,approve,src=source,expiries={}}={}){
+function fixture({owner=true,engine={},api,catalog,execute,products=3,access,approve,src=source,expiries={},hosted=false}={}){
  const nodes=new Map(),listeners={},sent=[],frames=[],props={},calls={api:[],execute:[],cancel:[],save:[],toast:[],forget:[]};let clock=FIXED;const forgotten=new Set(); // como la puerta real: si la tarjeta se «olvida» con la petición en vuelo, al volver la respuesta no hay propuesta que aplicar
 
  const local={};for(let i=1;i<=products;i++)local['P'+i]={precio:4.5,costo:2,stock:3,controla:true};
@@ -23,7 +23,7 @@ function fixture({owner=true,engine={},api,catalog,execute,products=3,access,app
  class FakeDate extends Date{static now(){return clock;}}
  const root={document:{body,head:{appendChild(){}},readyState:'complete',createElement:create,
    getElementById:id=>id==='pageMenu'?home:(id==='mProd'||id==='mMovInv')?modalEl(id):nodes.get(id),querySelectorAll:()=>[]},
-  location:{origin:'https://pos.test',search:'',hostname:'pos.test'},NA_HOSTED_CONFIG:{environment:'production'},
+  location:{origin:'https://pos.test',search:hosted?'':'?work=1',hostname:'pos.test'},...(hosted?{NA_HOSTED_CONFIG:{environment:'production'}}:{}),
   toast:(m,k)=>calls.toast.push([k,m]),
   NA_ROLES:{confirmed:true,role:owner?'owner':'empleado',isOwner:()=>owner,...(approve?{approve}:{}),api:api||(async(path,b)=>{calls.api.push(b);return {reply:'ok',turns:[]};})},
   addEventListener:(e,fn)=>listeners[e]=fn,setInterval(){},setTimeout:(fn,ms)=>setTimeout(fn,ms===1000?8:1),MutationObserver:class{observe(){}},
@@ -468,4 +468,11 @@ test('H-1 (A3 N-4): con REQUIRE_PIN_FOR_BATCH=true, si approve LANZA un error o 
   f.post({type:'na-work:card-confirm-all',key:lk});await tick(250);
   assert.equal(asked,2);assert.deepEqual(f.calls.execute,['pr-1','pr-2','pr-3']);
  }
+});
+
+test('hospedado (producción): un na-work:close del iframe no cierra WORK ni reabre el Inicio retirado',async()=>{
+ const f=fixture({hosted:true});
+ assert.ok(shown(f));
+ f.post({type:'na-work:close'});await tick(30);
+ assert.ok(shown(f));
 });
