@@ -20,15 +20,15 @@ test('rejects old authorization format, absent rollback, wildcard scope and unkn
 test('high risk needs genuine independent evidence', () => {
   assert.throws(()=>validateRelease({...valid(),risk:'high',review:{kind:'self',evidence:'docs/review.md'}},changes),/independent/);
 });
-test('missing, failed or newest pending CI cannot be called green', () => {
- const runs=[{name:'CANON Critical CI',head_sha:b,status:'completed',conclusion:'success',run_number:1,path:'.github/workflows/canon-critical-ci.yml',event:'push'},{name:'E2E Smoke CI',head_sha:b,status:'completed',conclusion:'success',run_number:1,path:'.github/workflows/e2e-smoke-ci.yml',event:'push'},{name:'OpenCode Role Map CI',head_sha:b,status:'completed',conclusion:'success',run_number:1,path:'.github/workflows/opencode-config-ci.yml',event:'push'}];
- assert.equal(requireGreenRuns(runs,b),true);
- assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,path:'.github/workflows/fake.yml'})),b),/CI/);
- assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,event:'untrusted'})),b),/CI/);
- assert.throws(()=>requireGreenRuns(runs.slice(0,1),b),/CI/);
- assert.throws(()=>requireGreenRuns([...runs,{...runs[0],run_number:2,status:'in_progress',conclusion:null}],b),/CI/);
- assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,head_sha:a})),b),/CI/);
- assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,conclusion:'failure'})),b),/CI/);
+test('missing, failed, untrusted or pending unified CI cannot be called green', () => {
+  const runs=[{name:'AUTO-DEV CI',head_sha:b,status:'completed',conclusion:'success',run_number:1,path:'.github/workflows/auto-dev-ci.yml',event:'push'}];
+  assert.equal(requireGreenRuns(runs,b),true);
+  assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,path:'.github/workflows/fake.yml'})),b),/CI/);
+  assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,event:'untrusted'})),b),/CI/);
+  assert.throws(()=>requireGreenRuns([],b),/CI/);
+  assert.throws(()=>requireGreenRuns([...runs,{...runs[0],run_number:2,status:'in_progress',conclusion:null}],b),/CI/);
+  assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,head_sha:a})),b),/CI/);
+  assert.throws(()=>requireGreenRuns(runs.map(r=>({...r,conclusion:'failure'})),b),/CI/);
 });
 
 test('release base must match the SHA served in production', () => {
@@ -63,22 +63,23 @@ test('prepare CLI validates real Git diff and generates one activation file',()=
 });
 
 test('release scope lists only what the web deploy publishes or gates; tests, docs and deleted lab files are excluded',()=>{
- const inScope=['POS/css/x.css','POS/js/sync/outbox.js','tools/cloudflare-pos-web/src/worker.js','tools/release/web-release.mjs','.github/workflows/v1.3-pos-web-deploy.yml','tools/cloudflare-lab/package.json','tools/cloudflare-lab/package-lock.json','.github/workflows/canon-critical-ci.yml','.github/workflows/e2e-smoke-ci.yml','.github/workflows/opencode-config-ci.yml'];
+ const inScope=['POS/css/x.css','POS/js/sync/outbox.js','tools/cloudflare-pos-web/src/worker.js','tools/release/web-release.mjs','.github/workflows/v1.3-pos-web-deploy.yml','tools/cloudflare-lab/package.json','tools/cloudflare-lab/package-lock.json','.github/workflows/auto-dev-ci.yml','.github/workflows/canon-critical-ci.yml','.github/workflows/e2e-smoke-ci.yml','.github/workflows/opencode-config-ci.yml'];
  const out=['tests/e2e/a.spec.ts','docs/a.md','laboratorio/pos-lab/index.html','tools/cloudflare-lab/src/worker.js','infra/database/migrations/0034.sql','.github/workflows/visual-regression.yml'];
  assert.deepEqual(deployedOnly([...out.slice(0,2),...inScope,...out.slice(2)]),inScope);
  // un archivo de POS no declarado en el alcance sigue bloqueando la publicación
  assert.throws(()=>validateRelease(valid(),{...changes,paths:deployedOnly(['POS/js/work-host.js','POS/js/sync/outbox.js'])}),/scope/);
 });
 
-test('the 3 workflows that define the required CI checks are in the release scope, so editing one cannot slip through',()=>{
- assert.deepEqual(Object.values(REQUIRED_CI).sort(),['.github/workflows/canon-critical-ci.yml','.github/workflows/e2e-smoke-ci.yml','.github/workflows/opencode-config-ci.yml']);
- for(const wf of Object.values(REQUIRED_CI)){
-  const diff=deployedOnly(['POS/js/work-host.js',wf]);
-  assert.deepEqual(diff,['POS/js/work-host.js',wf]);
-  assert.throws(()=>validateRelease(valid(),{...changes,paths:diff}),/scope/);
-  assert.equal(validateRelease({...valid(),allowed_paths:diff},{...changes,paths:diff}),true);
- }
- assert.deepEqual(deployedOnly(['tools/cloudflare-lab/package.json']),['tools/cloudflare-lab/package.json']);
+test('unified CI plus historical gate removals are included in complete release scope',()=>{
+  assert.deepEqual(Object.values(REQUIRED_CI),['.github/workflows/auto-dev-ci.yml']);
+  const gatePaths=['.github/workflows/auto-dev-ci.yml','.github/workflows/canon-critical-ci.yml','.github/workflows/e2e-smoke-ci.yml','.github/workflows/opencode-config-ci.yml'];
+  for(const wf of gatePaths){
+    const diff=deployedOnly(['POS/js/work-host.js',wf]);
+    assert.deepEqual(diff,['POS/js/work-host.js',wf]);
+    assert.throws(()=>validateRelease(valid(),{...changes,paths:diff}),/scope/);
+    assert.equal(validateRelease({...valid(),allowed_paths:diff},{...changes,paths:diff}),true);
+  }
+  assert.deepEqual(deployedOnly(['tools/cloudflare-lab/package.json']),['tools/cloudflare-lab/package.json']);
 });
 
 test('changes after the independent review are checked against the full diff, never the filtered scope',()=>{
