@@ -17,7 +17,7 @@ node --test tests/product-fixes/canonical-ui-contract.test.mjs   # contrato de U
 node --test tests/<carpeta>/<prueba-del-archivo>.test.mjs        # la prueba del módulo tocado
 ```
 
-No hay más pasos locales. AUTO-DEV CI ejecuta validación, regresiones críticas y E2E dirigido. La regresión Playwright completa se conserva para cambios críticos, revisión semanal y ejecución manual. Si una prueba ya fallaba en la base, no cuenta como fallo tuyo (compara con la base).
+No hay más pasos locales. En cambios visuales o WORK aislado, AUTO-DEV comprueba contratos, UI y permisos sin instalar ni ejecutar Playwright/E2E. El job E2E finaliza en modo rápido, sin impedir la publicación. Para cambios de ventas, pagos, caja, stock, permisos, sincronización, infraestructura o CI, E2E completo sigue obligatorio. La suite de navegador integral también continúa disponible semanalmente y manualmente.
 
 ## 3. Revisión según riesgo
 
