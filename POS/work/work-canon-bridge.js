@@ -99,7 +99,7 @@
     });
   }
   var disc=$('.chat-disclaimer');
-  if(disc)disc.textContent='WORK conectado a CANON · Ningún cambio se aplica sin tu «Confirmar» en la tarjeta.';
+  if(disc)disc.textContent='WORK conectado a CANON · Flash, Pro y Ultra son solo visuales; el modelo lo elige el servidor. Cada cambio requiere «Confirmar».';
   var footer=$('.voice-history-foot');
   if(footer)footer.textContent='Las respuestas se consultan en CANON. La voz disponible usa dictado y lectura por turnos; no es aún audio Live bidireccional.';
   var voiceLabel=$('.voice-eyebrow');
