@@ -27,11 +27,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node with npm cache
+      - name: Setup Node inside Playwright container
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          cache: npm
 
       - name: Install reproducible dependencies
         run: npm ci --no-audit --no-fund
