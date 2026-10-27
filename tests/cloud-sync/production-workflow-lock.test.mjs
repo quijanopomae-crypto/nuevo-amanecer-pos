@@ -8,13 +8,13 @@ const PRODUCTION_LOCK = 'nuevo-amanecer-production-change';
 const productionWriters = [
   '.github/workflows/owner-backup-recovery-drill.yml',
   '.github/workflows/v1.3-first-live-sale.yml',
+  '.github/workflows/auto-dev-ci.yml',
   '.github/workflows/v1.3-pos-web-deploy.yml',
   '.github/workflows/v1.3-prod-browser-cors-hotfix.yml',
   '.github/workflows/v1.3-prod-cutover.yml',
 ];
 
 const readOnlyWorkflows = [
-  '.github/workflows/auto-dev-ci.yml',
   '.github/workflows/v1.3-owner-validation-readonly.yml',
   '.github/workflows/v1.3-prod-preflight.yml',
 ];

@@ -10,11 +10,11 @@ El objetivo o pedido del dueño es la autorización de todo ese alcance, incluid
 
 ## Flujo (5 pasos)
 
-1. Parte del HEAD de `feature/v1.3-mobile-cloud` y crea una rama `feature/*`, `fix/*` o `perf/*`.
+1. Trabaja desde el HEAD de `feature/v1.3-mobile-cloud`. Usa una rama/PR de integración solo cuando GitHub lo exija o si la misión modifica infraestructura crítica; nunca abras otro PR solo para publicar.
 2. Haz el cambio mínimo, solo del alcance pedido.
 3. Corre las pruebas del archivo tocado (Node 22: `node --test tests/<carpeta>/<archivo>.test.mjs`); compara con la base: cero fallos nuevos.
-4. Abre un solo PR por misión; deja que AUTO-DEV CI (validación de permisos, negocio y navegador) corran automáticamente. CSS/recursos visuales usan pruebas focalizadas; lógica comercial conserva regresión completa. Un fallo se clasifica como regresión real o prueba obsoleta; nunca se tapa ni se debilita una prueba para dar verde.
-5. Integra una vez estén verdes los controles aplicables. CSS puro posterior a una versión publicada activa despliegue automático tras el CI de CANON (sin segundo PR). Para cambios funcionales sigue el manifiesto verificado hasta que exista una sustitución probada. Borra la rama cuando sea seguro.
+4. Haz una sola integración por misión y deja que AUTO-DEV CI (permisos, negocio y navegador) ejecute la validación. CSS/recursos visuales usan pruebas focalizadas; lógica comercial conserva regresión completa. Un fallo se clasifica como regresión real o prueba obsoleta; nunca se tapa ni se debilita una prueba para dar verde.
+5. Una vez integrado el código en CANON, AUTO-DEV CI publica automáticamente los cambios web de riesgo bajo elegibles. Para pantallas WORK exige misión exacta y revisión verificable; cambios de negocio/Worker siguen bloqueados hasta disponer de respaldo y revisión independiente. No se crea segundo PR ni manifiesto manual para los elegibles.
 
 ## Riesgo, en una línea
 
@@ -27,7 +27,7 @@ BAJO = solo CSS/texto/iconos sin datos: autorrevisión del diff + pruebas + CI, 
 - Datos de producción: migraciones solo aditivas, con respaldo previo de la BD obligatorio (lo haces tú, sin pedir OK); nunca borrar datos de producción (solo lo que el dueño pida borrar expresamente, y con respaldo previo); nunca alterar ventas ni abonos pendientes (outbox).
 - Secretos: nunca escribir tokens, claves ni datos de clientes en código, docs, logs o prompts. Cambiar secrets solo si el pedido lo incluye; si falta el valor, lo pone el dueño en su chat.
 - Worker de producción y backend: `tools/cloudflare-lab/**` (nombre histórico, es producción), `tools/cloudflare-prod/**`, `tools/cloudflare-backup/**`. No se borra ni se renombra por nombre.
-- Publicación: CSS exclusivamente visual se publica mediante `verify-auto` sin PR adicional, con SHA de producción, 3 CI exactos y rollback registrado. Cambios funcionales o de infraestructura siguen usando manifiesto `tools/release/web-release.mjs` y revisión proporcional, sin pedir OK adicional: respaldo previo de la BD antes de migraciones o Worker, el Worker se publica primero y luego la web, `rollback_ref` y SHA de producción igual a la base, el AUTO-DEV CI exacto y revisión independiente en riesgo ALTO. Force-push: siempre prohibido. Workflows de cutover/migración: solo si el pedido los nombra.
+- Publicación: el trabajo `publish-web` de AUTO-DEV CI usa `verify-direct` sin segundo PR/manifiesto para CSS, imágenes y WORK UI revisado; exige SHA real de producción, commit CANON vigente, las tres verificaciones internas exitosas, versión previa y reversión si falla la comprobación. Cambios funcionales de alto riesgo/infraestructura NO se autopublican sin revisión y respaldo reales: respaldo previo de la BD antes de migraciones o Worker, el Worker se publica primero y luego la web, `rollback_ref` y SHA de producción igual a la base, el AUTO-DEV CI exacto y revisión independiente en riesgo ALTO. Force-push: siempre prohibido. Workflows de cutover/migración: solo si el pedido los nombra.
 - POS-LAB está retirado: no crear ramas `lab/*` ni escribir en `laboratorio/**`. El modo SHADOW legacy sigue con `PRODUCT_WRITE = DENIED`.
 - No editar `POS/css/experience-v2/pages/*.css`. No commitear `POS/index.html`, `POS/css/base.css`, `POS/css/components.css`, `POS/css/layout.css` ni `evidence/**` si los sobrescribió la suite (restaurar con `git checkout`).
 
@@ -38,6 +38,7 @@ Siempre: hora de Lima (`America/Lima`), sin `innerHTML` (usa `textContent` o `cr
 Teléfono primero (390 px). Revisa como mínimo 390, 768 y 1366 px cuando el cambio es visual. Los 8 anchos de `AGENTS_Nuevo_Amanecer.md` son referencia para trabajo grande, no requisito de un cambio de 1 línea.
 
 La misión es única: no crear auditorías extensas, PR alternativos ni informes repetidos cuando el diff y el resultado de CI basten. Nunca saltarse verificaciones de integridad o permisos para acelerar.
+Para cambios WORK de riesgo medio, el agente incluye internamente en el commit final los campos `NA-Direct: true`, `NA-Mission: descripción de la orden`, `NA-Paths: ["POS/work/index.html"]`, `NA-Review-Kind: technical` y `NA-Review-Evidence: docs/reviews/revision.json`; la evidencia debe vincularse al commit revisado. No son pasos para el propietario.
 
 ## Contexto adicional (leer solo si hace falta)
 

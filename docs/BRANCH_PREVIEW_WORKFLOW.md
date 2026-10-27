@@ -4,26 +4,16 @@
 
 Eliminar la segunda copia funcional permanente del producto y trabajar con una sola fuente de verdad: `POS/**` en CANON.
 
-Cada cambio se desarrolla en una rama aislada y se valida sobre el mismo SHA que luego se propone para merge.
+El flujo ordinario es **DIRECTO**: la misión autorizada se integra en CANON, AUTO-DEV CI prueba y publica automáticamente solo superficies web elegibles. Una rama temporal y un único PR de código son opcionales para riesgo alto o cuando GitHub lo exija. No existe segundo PR de publicación.
 
-## Flujo obligatorio
+## Flujo de una misión
 
 ```text
-CANON HEAD
-  -> rama aislada
-  -> implementación mínima
-  -> pruebas focalizadas
-  -> regresiones
-  -> Draft PR
-  -> AUTO-DEV CI
-  -> clasificación de riesgo
-  -> revisión proporcional BAJO / MEDIO / ALTO (docs/DEVELOPMENT_RISK_POLICY.md)
-  -> preview temporal del mismo SHA, cuando aplique
-  -> veredicto READY FOR MERGE
-  -> comprobar que el pedido del owner cubre el alcance (no pedir OK nuevo)
-  -> merge
-  -> deploy incluido en el alcance autorizado si corresponde
-  -> borrar rama
+Orden del propietario
+ -> editar CANON (o una sola rama de integración si hace falta)
+ -> AUTO-DEV CI: contratos + negocio + navegador
+ -> gate exacto de alcance/riesgo y SHA servido
+ -> deploy web elegible + comprobación + rollback al fallar
 ```
 
 ## Nombres de rama
@@ -50,10 +40,10 @@ Si el SHA cambia, la validación del preview debe repetirse.
 
 ## Gates
 
-Un PR no puede solicitar merge con:
+Un cambio no puede publicarse con:
 
-- CANON Critical CI rojo;
-- E2E requerido rojo;
+- AUTO-DEV CI rojo;
+- E2E crítico requerido rojo;
 - P0/P1 abierto;
 - falta de revisión técnica y evidencias exigidas por la categoría de riesgo; se admite revisión independiente automatizada real, sin dependencia de Reviewer/Forensic nominal;
 - divergencia entre SHA revisado y SHA servido;
@@ -72,7 +62,7 @@ Crear rama, commit y Draft PR no equivale a:
 - escritura de producción;
 - cambio de secrets.
 
-La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. El force-push está siempre prohibido. Borrados de datos de producción (solo si el dueño los pide expresamente y con respaldo previo), migraciones destructivas, cambios de secrets no incluidos en el pedido y ampliaciones de alcance requieren autorización explícita específica; un secreto que falta solo lo puede dar el dueño en su chat. Se conservan respaldo, pruebas, revisión proporcional según `docs/DEVELOPMENT_RISK_POLICY.md` y verificación posterior. Los cambios estrictamente visuales, sin exposición ni escritura de datos, pueden avanzar con aprobación de diseño del owner, pruebas y preview del mismo SHA; la clasificación y las evidencias se anotan en el PR.
+La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. El force-push está siempre prohibido. Borrados de datos de producción (solo si el dueño los pide expresamente y con respaldo previo), migraciones destructivas, cambios de secrets no incluidos en el pedido y ampliaciones de alcance requieren autorización explícita específica; un secreto que falta solo lo puede dar el dueño en su chat. Se conservan respaldo, pruebas, revisión proporcional según `docs/DEVELOPMENT_RISK_POLICY.md` y verificación posterior. Los cambios estrictamente visuales, sin exposición ni escritura de datos, pueden avanzar con aprobación de diseño del owner, pruebas y preview del mismo SHA; la clasificación y las evidencias se registran en el commit/recibo versionado cuando corresponda, sin PR adicional.
 
 ## Fuente de verdad
 

@@ -56,6 +56,42 @@ export function autoWebReleaseEligible(fullPaths) {
     !p.includes(String.fromCharCode(92))
   );
 }
+// DIRECT: el diff se mide desde el SHA que realmente sirve Cloudflare.
+export function directReleaseDecision(fullDiff, intent=null) {
+  if (!Array.isArray(fullDiff)) fail('invalid direct diff');
+  const safe = p => typeof p === 'string' && p.length>0 && !p.startsWith('/') &&
+    !p.includes('..') && !p.includes('\\') && !p.includes('\n');
+  if (fullDiff.some(p=>!safe(p))) fail('invalid direct path');
+  const runtime=fullDiff.filter(p=>p.startsWith('POS/')||p.startsWith('tools/cloudflare-pos-web/'));
+  if (!runtime.length) return {eligible:false,reason:'no web-runtime changes',files:[]};
+  if (highRiskPaths(fullDiff).length) return {eligible:false,reason:'backend or database changes',files:runtime};
+  const low = p => /^POS\/css\/[A-Za-z0-9_./-]+\.css$/i.test(p) ||
+    /^POS\/(?:img|images|icons|assets)\/[A-Za-z0-9_./-]+\.(?:png|jpe?g|gif|webp|svg)$/i.test(p);
+  const medium = p => /^POS\/work\/[A-Za-z0-9_./-]+\.(?:html|css|png|jpe?g|gif|webp|svg)$/i.test(p) ||
+    p==='POS/js/work-host.js';
+  if (runtime.some(p=>!low(p)&&!medium(p)))
+    return {eligible:false,reason:'sensitive or unreviewed web-runtime path',files:runtime};
+  if (runtime.every(low)) return {eligible:true,risk:'low',reason:'visual-only',files:runtime};
+  if (!intent || intent.authorized!==true || !intent.mission?.trim() ||
+      !['technical','independent-automated','independent-human'].includes(intent.reviewKind) ||
+      !/^docs\/[A-Za-z0-9_./-]+\.json$/.test(intent.reviewEvidence||'') ||
+      !Array.isArray(intent.paths))
+    return {eligible:false,reason:'reviewed scoped mission required',files:runtime};
+  const expected=new Set(runtime);
+  if(new Set(intent.paths).size!==expected.size || intent.paths.some(p=>!expected.has(p)))
+    return {eligible:false,reason:'scope differs from complete runtime diff',files:runtime};
+  return {eligible:true,risk:'medium',reason:'reviewed Work UI',files:runtime,evidence:intent.reviewEvidence};
+}
+export function parseDirectIntent(message) {
+  if (typeof message!=='string') return null;
+  const get=k=>message.match(new RegExp('^'+k+': (.+)$','m'))?.[1]?.trim();
+  if (get('NA-Direct')!=='true') return null;
+  try {
+    return {authorized:true,mission:get('NA-Mission'),paths:JSON.parse(get('NA-Paths')||'null'),
+      reviewKind:get('NA-Review-Kind'),reviewEvidence:get('NA-Review-Evidence')};
+  } catch { return null; }
+}
+
 function output(name,value) {
   if (process.env.GITHUB_OUTPUT)
     appendFileSync(process.env.GITHUB_OUTPUT,name+'='+String(value)+String.fromCharCode(10));
@@ -103,7 +139,7 @@ async function main(){
     const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!live.ok)fail('cannot verify production SHA: HTTP '+live.status);
     const liveText=await live.text();
-    const hashes=[...new Set((await live.text()).match(/\b[a-f0-9]{40}\b/g)||[])];
+    const hashes=[...new Set(liveText.match(/\b[a-f0-9]{40}\b/g)||[])];
     if(hashes.length!==1)fail('cannot identify unique production SHA');
     validateRelease(m,{productionSha:hashes[0],base:m.approved_base,target:m.target_commit,head,paths:releasePaths(m.approved_base,m.target_commit),activationPaths:paths(m.target_commit,head)});
     if(!/^docs\/[A-Za-z0-9_./-]+\.json$/.test(m.review.evidence)||m.review.evidence.split('/').includes('..'))fail('review evidence must be a versioned docs JSON receipt');
@@ -130,7 +166,7 @@ async function main(){
     const target=git('rev-parse','HEAD');
     const live=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',{cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!live.ok) fail('cannot verify production SHA: HTTP '+live.status);
-    const hashes=[...new Set((await live.text()).match(/\\b[a-f0-9]{40}\\b/g)||[])];
+    const hashes=[...new Set((await live.text()).match(/\b[a-f0-9]{40}\b/g)||[])];
     if(hashes.length!==1) fail('cannot identify unique production SHA');
     const base=hashes[0];
     if(base===target){output('eligible','false');console.log('AUTO_WEB_SKIP already published');return;}
@@ -167,6 +203,41 @@ async function main(){
     writeFileSync('/tmp/pos-auto-release.json',JSON.stringify(record,null,2)+String.fromCharCode(10));
     output('eligible','true');
     console.log('WEB_RELEASE_GATE_PASS automatic CSS-only target='+target+' rollback='+base);
-  }else fail('use prepare, verify or verify-auto');
+  }else if(command==='verify-direct'){
+    if(process.env.GITHUB_WORKFLOW!=='AUTO-DEV CI' ||
+       process.env.GITHUB_REF!=='refs/heads/feature/v1.3-mobile-cloud' ||
+       process.env.GITHUB_EVENT_NAME!=='push') fail('DIRECT requires trusted CANON push CI');
+    const target=git('rev-parse','HEAD');
+    if(process.env.GITHUB_SHA!==target) fail('checkout differs from event target');
+    const response=await fetch('https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev/app/js/config/build-info.js',
+      {cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!response.ok)fail('production SHA probe failed HTTP '+response.status);
+    const hashes=[...new Set((await response.text()).match(/\b[a-f0-9]{40}\b/g)||[])];
+    if(hashes.length!==1)fail('unique production SHA required');
+    const base=hashes[0];
+    if(base===target){output('eligible','false');console.log('DIRECT_SKIP already published');return;}
+    ancestor(base,target);
+    const changed=paths(base,target);
+    const intent=parseDirectIntent(git('log','-1','--format=%B',target));
+    const decision=directReleaseDecision(changed,intent);
+    if(!decision.eligible){
+      output('eligible','false');
+      console.log('DIRECT_SKIP '+decision.reason);
+      return;
+    }
+    if(decision.risk==='medium'){
+      const receipt=JSON.parse(git('show',target+':'+decision.evidence));
+      if(!sha(receipt.reviewed_commit) || receipt.kind!==intent.reviewKind)fail('review receipt mismatch');
+      ancestor(receipt.reviewed_commit,target);
+      validateReviewReceipt(receipt,{review:{kind:intent.reviewKind,evidence:decision.evidence}},
+        paths(receipt.reviewed_commit,target));
+    }
+    const record={mode:'direct-web',risk:decision.risk,production_sha:base,target_commit:target,
+      rollback_ref:base,files:decision.files,mission:intent?.mission||'Authorized visual improvement',
+      review:decision.evidence||null,validated_at_utc:new Date().toISOString()};
+    writeFileSync('/tmp/pos-auto-release.json',JSON.stringify(record,null,2)+'\n');
+    output('eligible','true');
+    console.log('DIRECT_WEB_GATE_PASS target='+target+' prior='+base+' files='+decision.files.length);
+  }else fail('use prepare, verify, verify-auto or verify-direct');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(e=>{console.error(e.message);process.exitCode=1;});
