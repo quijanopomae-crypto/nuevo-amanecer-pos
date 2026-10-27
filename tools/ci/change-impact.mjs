@@ -14,6 +14,7 @@ const critical = [
   /^tools\/cloudflare-(?:lab|prod|backup)\//,
   /^infra\/database\/migrations\//,
   /^tools\/release\//,
+  /^tools\/ci\//,
   /^\.github\/workflows\//,
   /^ops\//,
   /\.sql$/i,
