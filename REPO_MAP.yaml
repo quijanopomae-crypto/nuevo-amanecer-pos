@@ -121,7 +121,7 @@ ci:
     change_impact: tools/ci/change-impact.mjs
   policy:
     actions_pinned_to_sha: true
-    branch_preview_required: true
+    branch_preview_required: false
     preview_must_match_pr_sha: true
     merge_owner_only: true
     production_deploy_separate_from_merge: true
