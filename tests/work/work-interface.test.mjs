@@ -43,3 +43,10 @@ test('WORK cannot create unapproved operations from the iframe',()=>{
   assert.match(bridge,/Generación de imágenes pendiente/);
   assert.match(bridge,/VOZ POR TURNOS/);
 });
+
+test('WORK embebido no responde con el simulador ni promete cambiar modelos',()=>{
+  assert.match(html,/if\(window\.parent!==window\)\{/);
+  assert.match(html,/WORK no ha conectado con CANON/);
+  assert.match(bridge,/Flash, Pro y Ultra son solo visuales/);
+  assert.match(bridge,/modelo lo elige el servidor/);
+});
