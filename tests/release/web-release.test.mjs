@@ -213,3 +213,32 @@ test('both legacy and direct guards read Cloudflare response body once',()=>{
   assert.match(src,/liveText\.match\(\/\\b\[a-f0-9\]\{40\}\\b\/g\)/);
   assert.doesNotMatch(src,/const liveText=await live\.text\(\);[\s\S]{0,100}\(await live\.text\(\)\)/);
 });
+
+test('DIRECT WORK UI uses the completed CANON CI instead of repeated owner receipts',()=>{
+  const changed=['.github/workflows/auto-dev-ci.yml','tools/release/web-release.mjs',
+    'POS/index.html','POS/js/work-host.js','POS/work/index.html','POS/work/work-canon-bridge.js'];
+  const accepted=directReleaseDecision(changed,null,{autoReviewed:true,workBootstrapPinned:true,previouslyApprovedWorkCutover:true,deleted:[]});
+  assert.equal(accepted.eligible,true);
+  assert.equal(accepted.risk,'medium');
+  assert.equal(accepted.autoReviewed,true);
+  assert.deepEqual(accepted.files,changed.filter(p=>p.startsWith('POS/')));
+  assert.equal(directReleaseDecision(changed,null,{autoReviewed:true,workBootstrapPinned:false,previouslyApprovedWorkCutover:true}).eligible,false);
+  assert.equal(directReleaseDecision(changed,null,{autoReviewed:true,workBootstrapPinned:true}).eligible,false);
+  const scoped={authorized:true,mission:'Cambiar visual WORK',reviewKind:'auto-ci',paths:changed.filter(p=>p.startsWith('POS/'))};
+  assert.equal(directReleaseDecision(changed,scoped,{autoReviewed:true,workBootstrapPinned:true}).eligible,true);
+  assert.equal(directReleaseDecision(changed,{...scoped,paths:['POS/work/index.html']},{autoReviewed:true,workBootstrapPinned:true}).eligible,false);
+  assert.equal(directReleaseDecision(changed).eligible,false);
+  assert.equal(directReleaseDecision(['POS/work/index.html'],null,{autoReviewed:true,previouslyApprovedWorkCutover:true,deleted:['POS/work/index.html']}).eligible,false);
+  assert.equal(directReleaseDecision(['POS/js/sync/outbox.js','POS/work/index.html'],null,{autoReviewed:true}).eligible,false);
+  assert.equal(directReleaseDecision(['POS/js/config/pos-permissions.js','POS/work/index.html'],null,{autoReviewed:true}).eligible,false);
+  assert.equal(directReleaseDecision(['POS/work/new-auth.js'],null,{autoReviewed:true}).eligible,false);
+  assert.equal(directReleaseDecision(['POS/work/index.html'],{authorized:true,mission:'fake',paths:[]},{autoReviewed:true}).eligible,false);
+});
+
+test('trusted visual bootstrap is pinned to the exact approved POS file, not arbitrary HTML',()=>{
+  const src=readFileSync(new URL('../../tools/release/web-release.mjs',import.meta.url),'utf8');
+  assert.match(src,/PINNED_WORK_BOOTSTRAP_BLOB='0c3e3c919da1055254777515f3d6f2e2daa93254'/);
+  assert.match(src,/git\('rev-parse','HEAD:POS\/index.html'\)===PINNED_WORK_BOOTSTRAP_BLOB/);
+  assert.match(src,/GITHUB_EVENT_NAME!=='push'/);
+  assert.match(src,/diff-filter=D/);
+});

@@ -36,7 +36,7 @@ Un cambio que no toca Inicio ni Venta no necesita capturas.
 ## 5. Integrar y publicar
 
 - Integrar: merge del PR cuando CI esté verde. Borra la rama.
-- Publicar la web cuando el dueño lo pidió: AUTO-DEV CI despliega automáticamente después del push CANON si el diff real es CSS/imagen segura o WORK UI con revisión técnica versionada y alcance exacto. Se compara el SHA de producción, se conserva la versión anterior y se revierte ante fallos de verificación. Cambios comerciales, de permisos o Worker permanecen bloqueados hasta validar respaldo y revisión independiente.
+- Publicar la web cuando el dueño lo pidió: AUTO-DEV CI despliega tras push CANON si el diff desde la web publicada contiene solo CSS/imágenes seguros o WORK UI aislada. Para WORK, el agente incluye `NA-Direct: true`, `NA-Mission: pedido del dueño`, `NA-Paths: ["POS/work/index.html"]` (todos los archivos web pendientes) y `NA-Review-Kind: auto-ci` **en el mensaje del último commit**; no hay formulario, recibo manual ni segundo PR. AUTO-DEV valida el SHA y permisos, conserva versión anterior y revierte ante fallos. `POS/index.html` solo pasa si coincide exactamente con el arranque WORK aprobado en #1088; ventas, permisos, Worker o SQL no usan esta vía rápida.
 
 ## Lo que no se toca (sigue protegido)
 

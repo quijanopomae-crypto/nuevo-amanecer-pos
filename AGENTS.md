@@ -14,7 +14,7 @@ El objetivo o pedido del dueño es la autorización de todo ese alcance, incluid
 2. Haz el cambio mínimo, solo del alcance pedido.
 3. Corre las pruebas del archivo tocado (Node 22: `node --test tests/<carpeta>/<archivo>.test.mjs`); compara con la base: cero fallos nuevos.
 4. Haz una sola integración por misión y deja que AUTO-DEV CI (permisos, negocio y navegador) ejecute la validación. CSS/recursos visuales usan pruebas focalizadas; lógica comercial conserva regresión completa. Un fallo se clasifica como regresión real o prueba obsoleta; nunca se tapa ni se debilita una prueba para dar verde.
-5. Una vez integrado el código en CANON, AUTO-DEV CI publica automáticamente los cambios web de riesgo bajo elegibles. Para pantallas WORK exige misión exacta y revisión verificable; cambios de negocio/Worker siguen bloqueados hasta disponer de respaldo y revisión independiente. No se crea segundo PR ni manifiesto manual para los elegibles.
+5. Tras integrar en CANON, AUTO-DEV publica CSS/recursos seguros y WORK UI aislada, si sus pruebas pasan. En WORK el agente añade por su cuenta al último commit `NA-Direct: true`, `NA-Mission: ...`, `NA-Paths: [...] ` (diff web completo) y `NA-Review-Kind: auto-ci`; el dueño no entrega recibos ni llena manifiestos. `POS/index.html` solo se autopublica con el blob de bootstrap WORK exacto del #1088. Negocio/Worker siguen protegidos.
 
 ## Riesgo, en una línea
 
@@ -38,7 +38,7 @@ Siempre: hora de Lima (`America/Lima`), sin `innerHTML` (usa `textContent` o `cr
 Teléfono primero (390 px). Revisa como mínimo 390, 768 y 1366 px cuando el cambio es visual. Los 8 anchos de `AGENTS_Nuevo_Amanecer.md` son referencia para trabajo grande, no requisito de un cambio de 1 línea.
 
 La misión es única: no crear auditorías extensas, PR alternativos ni informes repetidos cuando el diff y el resultado de CI basten. Nunca saltarse verificaciones de integridad o permisos para acelerar.
-Para cambios WORK de riesgo medio, el agente incluye internamente en el commit final los campos `NA-Direct: true`, `NA-Mission: descripción de la orden`, `NA-Paths: ["POS/work/index.html"]`, `NA-Review-Kind: technical` y `NA-Review-Evidence: docs/reviews/revision.json`; la evidencia debe vincularse al commit revisado. No son pasos para el propietario.
+Para cambios WORK de riesgo medio y aislados, el agente usa `NA-Direct: true`, `NA-Mission: descripción de la orden`, `NA-Paths: ["POS/work/index.html"]` (archivos web pendientes completos) y `NA-Review-Kind: auto-ci` en el commit final. Los checks de CANON son la revisión automática; no pedir recibos al propietario. Fuera de esa lista cerrada, mantener revisión técnica independiente cuando corresponda.
 
 ## Contexto adicional (leer solo si hace falta)
 
