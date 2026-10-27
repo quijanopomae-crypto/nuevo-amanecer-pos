@@ -116,11 +116,9 @@ v1_3_runtime:
 
 ci:
   workflows:
-    canon_critical: .github/workflows/canon-critical-ci.yml
-    e2e_smoke: .github/workflows/e2e-smoke-ci.yml
+    auto_dev: .github/workflows/auto-dev-ci.yml
     e2e_full_scheduled: .github/workflows/e2e-full-regression.yml
     change_impact: tools/ci/change-impact.mjs
-    opencode_and_repo_map: .github/workflows/opencode-config-ci.yml
   policy:
     actions_pinned_to_sha: true
     branch_preview_required: true
