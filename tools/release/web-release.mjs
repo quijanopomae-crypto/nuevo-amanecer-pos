@@ -19,7 +19,7 @@ export function validateRelease(m, diff) {
   if(m.risk==='high'&&!m.review.kind.startsWith('independent-')) fail('independent review required');
   return true;
 }
-export const REQUIRED_CI={ 'CANON Critical CI':'.github/workflows/canon-critical-ci.yml', 'E2E Smoke CI':'.github/workflows/e2e-smoke-ci.yml', 'OpenCode Role Map CI':'.github/workflows/opencode-config-ci.yml' };
+export const REQUIRED_CI={ 'AUTO-DEV CI':'.github/workflows/auto-dev-ci.yml' };
 export function requireGreenRuns(runs,target) {
   for(const name of Object.keys(REQUIRED_CI)) {
     const expectedPath=REQUIRED_CI[name];
@@ -39,7 +39,7 @@ const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
 const paths=(base,target)=>execFileSync('git',['diff','--no-renames','--name-only','-z',base,target],{encoding:'utf8'}).split('\0').filter(Boolean);
 // Solo lo que el workflow de deploy publica o ejecuta (POS/**, Worker web, workflow de deploy, guard, el wrangler fijado en tools/cloudflare-lab y los 3 workflows de CI que definen los checks exigidos por requireGreenRuns).
 // Tests, docs y archivos eliminados fuera de esas rutas no cambian la web publicada y no se listan en el alcance.
-export const DEPLOYED_PREFIXES=['POS/','tools/cloudflare-pos-web/','tools/release/','.github/workflows/v1.3-pos-web-deploy.yml','tools/cloudflare-lab/package.json','tools/cloudflare-lab/package-lock.json',...Object.values(REQUIRED_CI)];
+export const DEPLOYED_PREFIXES=['POS/','tools/cloudflare-pos-web/','tools/release/','.github/workflows/v1.3-pos-web-deploy.yml','tools/cloudflare-lab/package.json','tools/cloudflare-lab/package-lock.json',...Object.values(REQUIRED_CI),'.github/workflows/canon-critical-ci.yml','.github/workflows/e2e-smoke-ci.yml','.github/workflows/opencode-config-ci.yml'];
 export const deployedOnly=list=>list.filter(p=>DEPLOYED_PREFIXES.some(x=>p===x||p.startsWith(x)));
 const releasePaths=(base,target)=>deployedOnly(paths(base,target));
 // Solo una diferencia EXCLUSIVAMENTE visual puede publicarse sin segundo PR.
