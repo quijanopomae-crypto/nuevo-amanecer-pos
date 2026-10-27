@@ -10,8 +10,6 @@ const critical = [
   /^POS\/js\/adapters\//,
   /^POS\/js\/compat\//,
   /^POS\/js\/config\//,
-  /^POS\/js\/config\/pos-permissions\.js$/,
-  /^POS\/js\/modules\/(?:ventas|stock|caja|credito|clientes|compras|pago)/i,
   /^POS\/js\/inventory\//,
   /^tools\/cloudflare-(?:lab|prod|backup)\//,
   /^infra\/database\/migrations\//,
