@@ -17,7 +17,7 @@ node --test tests/product-fixes/canonical-ui-contract.test.mjs   # contrato de U
 node --test tests/<carpeta>/<prueba-del-archivo>.test.mjs        # la prueba del módulo tocado
 ```
 
-No hay más pasos locales. CI en el PR ejecuta CANON Critical CI, E2E Smoke CI dirigido y OpenCode Role Map CI. La regresión Playwright completa se conserva para cambios críticos, revisión semanal y ejecución manual. Si una prueba ya fallaba en la base, no cuenta como fallo tuyo (compara con la base).
+No hay más pasos locales. CI en el PR ejecuta AUTO-DEV CI dirigido y OpenCode Role Map CI. La regresión Playwright completa se conserva para cambios críticos, revisión semanal y ejecución manual. Si una prueba ya fallaba en la base, no cuenta como fallo tuyo (compara con la base).
 
 ## 3. Revisión según riesgo
 
@@ -36,7 +36,7 @@ Un cambio que no toca Inicio ni Venta no necesita capturas.
 ## 5. Integrar y publicar
 
 - Integrar: merge del PR cuando CI esté verde. Borra la rama.
-- Publicar la web cuando el dueño lo pidió o dio un objetivo que incluye publicar al terminar (no esperes otro OK): CSS puro puede desplegarse automáticamente desde CANON al superar los tres CI sin PR de manifiesto; cambios con lógica o backend usan `docs/DEVELOPMENT_RISK_POLICY.md` (manifiesto con SHA de producción, rollback y alcance). El agente puede generar el alcance exacto con `--scope auto`, sin confundirlo con autorización. La lista de alcance incluye solo lo que se publica o define el gate: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/lock de `tools/cloudflare-lab` y los 3 workflows de CI exigidos.
+- Publicar la web cuando el dueño lo pidió o dio un objetivo que incluye publicar al terminar (no esperes otro OK): CSS puro puede desplegarse automáticamente desde CANON al superar AUTO-DEV CI sin PR de manifiesto; cambios con lógica o backend usan `docs/DEVELOPMENT_RISK_POLICY.md` (manifiesto con SHA de producción, rollback y alcance). El agente puede generar el alcance exacto con `--scope auto`, sin confundirlo con autorización. La lista de alcance incluye solo lo que se publica o define el gate: `POS/**`, `tools/cloudflare-pos-web/**`, `tools/release/**`, el workflow de deploy, el `package.json`/lock de `tools/cloudflare-lab` y el workflow AUTO-DEV CI exigido.
 
 ## Lo que no se toca (sigue protegido)
 
