@@ -28,6 +28,14 @@ test('WORK does not present the sample values as canonical data',()=>{
   assert.match(bridge,/rows\.forEach\(function\(row\)\{row\.remove\(\);\}\)/);
   assert.match(bridge,/no se mostrarán operaciones de ejemplo/i);
 });
+test('WORK is the only hosted Inicio visible; old landing stays internal',()=>{
+  assert.match(host,/var featureEnabled = hosted/);
+  assert.doesNotMatch(host,/mode === '0'/);
+  assert.match(host,/if \(hosted\) return;/);
+  assert.match(host,/root\.goPage\(id\)/);
+  assert.doesNotMatch(bridge,/closeMain|Volver al POS|post\('close'\)/);
+  assert.match(pos,/src="js\/work-host\.js" defer/);
+});
 test('WORK cannot create unapproved operations from the iframe',()=>{
   assert.match(host,/NA_ROLES\.api\('\/auth\/assistant\/chat'/);
   assert.doesNotMatch(host,/\/commands\//);
