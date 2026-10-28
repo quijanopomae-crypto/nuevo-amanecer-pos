@@ -35,8 +35,15 @@ for (const employee of [false, true]) {
     } else {
       await expect(drawer.locator('button')).toHaveCount(10);
       await expect(drawer.locator('#naMobileDrawerVersion')).toHaveText('Versión local');
-      await expect(drawer.locator('.na-mobile-drawer-head .na-mobile-drawer-logo')).toHaveCSS('background-image', /svg/);
+      // Same profile-only header as WORK: the business logo is already in the main app.
+      // El logotipo original permanece en el DOM pero no se duplica visualmente.
+      await expect(drawer.locator('.na-mobile-drawer-head .na-mobile-drawer-logo')).toBeHidden();
+      await expect(drawer.locator('.na-mobile-profile')).toHaveCount(1);
       await expect(drawer.locator('.na-mobile-drawer-head img')).toHaveCount(0);
+      const icons = await drawer.locator('.na-mobile-drawer-icon').evaluateAll(nodes =>
+        nodes.map(node => getComputedStyle(node, '::before').getPropertyValue('mask-image')));
+      expect(icons).toHaveLength(9);
+      for (const mask of icons) expect(mask).toContain('data:image/svg+xml');
     }
     const permitted = await page.evaluate(ids => ids.filter(id => (window as any).NA_MENU_NAVIGATION.canShowDrawerPage(id)), pages);
     const destinations = await drawer.locator('.na-mobile-drawer-link').evaluateAll(rows => rows.map(row => row.getAttribute('data-page')!));
@@ -87,4 +94,23 @@ test('desktop does not build drawer or load its stylesheet', async ({ page }) =>
   await expect(page.locator('#pageMenu')).toBeVisible();
   await expect(page.locator('#naMobileDrawer')).toHaveCount(0);
   await expect(page.locator('#naMobileDrawerStyles')).toHaveCount(0);
+});
+
+test('CANON module drawer inherits WORK styling without replacing protected routes', async ({ page }) => {
+  await page.goto('/index.html');
+  await openDrawer(page);
+  const drawer = page.locator('#naMobileDrawer');
+  const header = drawer.locator('.na-mobile-drawer-head');
+  await expect(header).toHaveCSS('background-image', /linear-gradient/);
+  await expect(drawer.locator('.na-mobile-drawer-version')).toBeHidden();
+  await expect(drawer.locator('.na-mobile-drawer-brand')).toBeHidden();
+  await expect(drawer.locator('.na-mobile-profile strong')).not.toHaveText('');
+  const current = drawer.locator('[data-page="pageMenu"]');
+  await expect(current).toHaveAttribute('aria-current', 'page');
+  expect(await current.locator('.na-mobile-drawer-icon').evaluate(el =>
+    getComputedStyle(el, '::before').getPropertyValue('mask-image'))).toContain('data:image/svg+xml');
+  await drawer.locator('[data-page="pageInventario"]').click();
+  await expect(page.locator('#pageInventario')).toHaveClass(/\\bactive\\b/);
+  await openDrawer(page);
+  await expect(drawer.locator('[data-page="pageInventario"]')).toHaveAttribute('aria-current', 'page');
 });
