@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { limaDate } from '../../tools/cloudflare-lab/src/a6-expenses.js';
 import { a6Fixture, response } from './a6-fixture.mjs';
 
 const migrations = [
@@ -86,7 +87,7 @@ test('expense.create preserves legacy cash semantics for cash, digital and outsi
   assert.equal(state.expected_cents,7500);
   assert.equal(state.revision,2);
 
-  const outside={...common(f,'expense-outside-op','expense-outside'),expense_date:'2026-09-26'};
+  const outside={...common(f,'expense-outside-op','expense-outside'),expense_date:limaDate(Date.now()-86400e3)};
   const outsideReceipt=await response(await f.fetch('http://localhost/commands/expense.create',{
     method:'POST',headers:auth('expense-token'),body:JSON.stringify(outside)
   }),201);
