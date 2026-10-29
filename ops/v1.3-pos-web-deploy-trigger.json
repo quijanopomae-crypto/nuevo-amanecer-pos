@@ -1,20 +1,17 @@
 {
   "format": "nuevo-amanecer-web-release-v2",
   "authorized": true,
-  "authorization": "Propietario, 26/10/2026: «publicalo» (DM, 09:58 Lima) y «ya les di una mision y terminenla y publiquenla» (sala, 08:53 Lima). Decisión del dueño (13:28 Lima, transmitida por el coordinador): abrir un PR mínimo que suba el tope del job E2E de 30 a 50 minutos y continuar la publicación con el Plan A. Alcance autorizado: SOLO Web, #1068 (NAWorkBusy con tope de 10 min) y #1070 (tabla honesta) más el cambio de CI del tope E2E. NO cubre Worker (#1071 no se toca), migraciones ni paquetes de Worker. (Citas transmitidas por el coordinador desde la sala/DM del dueño.)",
+  "authorization": "Owner channel request a57bdf35-744a-4bea-a745-ec54bade6db2: publish approved 42b4d7a sync optimization to hosted POS web only; no Worker or migrations",
   "risk": "high",
-  "approved_base": "915a3bdc72bfc4b8820a85f0644decba613773c0",
-  "target_commit": "f70738e1c752b6c4ea3ab2ea6e4903a3ff92be8a",
-  "rollback_ref": "915a3bdc72bfc4b8820a85f0644decba613773c0",
+  "approved_base": "6f81e8229de7fd4beebfa7cf62af601259a5885d",
+  "target_commit": "83871ab1ca19e99afeb554a80ade713a90df0417",
+  "rollback_ref": "6f81e8229de7fd4beebfa7cf62af601259a5885d",
   "allowed_paths": [
-    ".github/workflows/e2e-smoke-ci.yml",
-    "POS/index.html",
-    "POS/js/work-host.js",
-    "POS/work/work-canon-bridge.js"
+    "POS/js/sync/canonical-client.js"
   ],
   "review": {
     "kind": "independent-automated",
-    "evidence": "docs/reviews/web-release-WORK-gate-tabla-timeout-20261026.json"
+    "evidence": "docs/reviews/performance-targeted-reconcile-20261028.json"
   },
-  "requested_at_utc": "2026-10-26T18:37:11.275Z"
+  "requested_at_utc": "2026-10-29T02:15:25.708Z"
 }
