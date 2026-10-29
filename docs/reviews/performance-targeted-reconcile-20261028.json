@@ -1,5 +1,5 @@
 {
-  "reviewed_commit": "42b4d7a3600c958cac60b1df1c4b094921e16bac",
+  "reviewed_commit": "8feada41e98e1fdd7bde2659e2d336a60f11b623",
   "kind": "independent-automated",
   "result": "pass",
   "reviewer": "ASISTENTE 1 (agent-c814510b-25f1-4a54-a769-7d36927aa4af; revisión independiente de solo lectura)",
@@ -8,25 +8,30 @@
   "risk": "high",
   "authorization": "Propietario, 2026-10-28, canal PROYECTO POS, mensaje a57bdf35-744a-4bea-a745-ec54bade6db2: «Publiquenlo». Alcance: publicar en la web la optimización de reconciliación dirigida de 42b4d7a; no incluye otras mejoras pendientes, Worker ni migraciones.",
   "evidence": {
-    "review_message_id": "channel-result-96e18c98-0a77-486a-8065-4acdf779fec5-revision-6",
-    "verdict": "Aprobado para integrar; sin hallazgos bloqueantes.",
+    "review_message_id": "channel-result-2aca37a6-9b42-4199-a4fe-e3e65d6d28ad-revision-0",
+    "verdict": "Aprobado el diff de fixtures test-only; la ruta productiva sigue idéntica a 42b4d7a.",
     "findings": [
       "Las colecciones privadas sin cambios se referencian solo en next; replicaOf y publishReplica conservan las copias que aíslan la réplica publicada y el snapshot.",
       "refresh sigue single-flight; sameIdentity se comprueba tras las esperas y antes de publicar; fallos de lectura o validación no publican una réplica parcial.",
-      "No se encontró regresión de concurrencia ni mutación de commitBase introducida por el diff."
+      "No se encontró regresión de concurrencia ni mutación de commitBase introducida por el diff.",
+      "La revisión 42b4d7a..8feada4 modifica solo los dos tests de gastos y este recibo; las fechas fuera de sesión derivan de limaDate(Date.now()-86400e3), permanecen dentro de la ventana de política, y las assertions se conservan."
     ],
     "tests": {
       "implementer_report": "71/71 pruebas aprobadas, incluida canonical-reconcile-copy-budget.test.mjs.",
       "independent_review_report": "Dos grupos enfocados: 71/71 y 57/57 aprobadas (128/128 total).",
-      "diff_check": "git diff --check sin errores."
+      "diff_check": "git diff --check sin errores.",
+      "supplemental_review": "ASISTENTE 1 aprobó 8feada4 para CI exacta; no ejecutó pruebas."
     },
     "scope": [
       "POS/js/sync/canonical-client.js",
-      "tests/cloud-sync/canonical-reconcile-copy-budget.test.mjs"
+      "tests/cloud-sync/canonical-reconcile-copy-budget.test.mjs",
+      "tests/cloud-sync/canonical-expenses-backend.test.mjs",
+      "tests/cloud-sync/pos-permissions-server.test.mjs"
     ],
     "limitations": [
       "No se midió el rendimiento en el teléfono del propietario.",
       "Este recibo no aprueba las propuestas separadas para categorías ni pagos consecutivos."
-    ]
+    ],
+    "prior_review_message_id": "channel-result-96e18c98-0a77-486a-8065-4acdf779fec5-revision-6"
   }
 }
