@@ -955,10 +955,13 @@
           var commitBase = authorityBase(false);
           if (commitBase && commitBase.financial_revision === targeted.base && statusMeta.financial_revision === targeted.base + targeted.delta) {
             // Only this device's own operations happened since the validated base.
-            next.products = copy(commitBase.products); next.customers = copy(commitBase.customers); next.credits = copy(commitBase.credits);
-            next.payments = copy(commitBase.credit_payments); next.creditAccounts = copy(commitBase.credit_accounts || []); next.sales = copy(commitBase.sales || []);
-            next.saleItems = copy(commitBase.sale_items || []); next.inventoryMovements = copy(commitBase.inventory_movements || []); next.cashMovements = copy(commitBase.cash_movements || []);
-            next.cashSessions = copy(commitBase.cash_sessions || []); next.financialEvents = copy(commitBase.financial_events || []); next.expenses = copy(commitBase.expenses || []);
+            // These private rows are only replaced by applyEntries, never mutated.
+            // replicaOf below copies them before publication/persistence; copying
+            // the entire history here again blocks the UI without adding isolation.
+            next.products = commitBase.products; next.customers = commitBase.customers; next.credits = commitBase.credits;
+            next.payments = commitBase.credit_payments; next.creditAccounts = commitBase.credit_accounts || []; next.sales = commitBase.sales || [];
+            next.saleItems = commitBase.sale_items || []; next.inventoryMovements = commitBase.inventory_movements || []; next.cashMovements = commitBase.cash_movements || [];
+            next.cashSessions = commitBase.cash_sessions || []; next.financialEvents = commitBase.financial_events || []; next.expenses = commitBase.expenses || [];
             next.digests = copy(commitBase.digests || {});
             applyEntries([accountsResult].concat(partialResults));
             targetedBase = commitBase;
