@@ -1,3 +1,4 @@
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -51,20 +52,7 @@ async function authorityError(db,auth,b){
      row.device_role!=='writer'||row.device_status!=='active'||row.credential_hash!==auth.credentialHash)return'stale_authority';
   return null;
 }
-async function operationConflict(db,id){
-  const row=await db.prepare(`SELECT operation_id FROM (
-    SELECT operation_id FROM sales WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_expense_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_inventory_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_accounts WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_metadata WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_customer_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_command_receipts WHERE operation_id=?1
-  ) LIMIT 1`).bind(id).first();
-  return !!row;
-}
+const OWN_LEDGER=['canonical_customer_credit_policy_operations'];
 
 export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
   let raw;try{raw=await request.json();}catch{return json({error:'invalid_json'},400);}
@@ -79,10 +67,14 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
     authority_epoch:b.authority_epoch,idempotent:false
   };
   const token='credit-policy:'+crypto.randomUUID();
+  let ledgers=[];
   try{
+    ledgers=await operationLedgers(db,auth?.ledgerTables);
     // Build and execute the mutation inside the same guarded block so an
     // installation that predates migration 0018 still fails closed as 503.
     const statements=[
+      // Covers the ledgers the 0018 namespace trigger does not list (e.g. expense revisions).
+      foreignOperationAssertion(db,token+':foreign-operation',b.operation_id,ledgers,OWN_LEDGER),
       db.prepare(`INSERT INTO canonical_customer_credit_policy_operations
         (operation_id,command,request_hash,result_json,promotion_id,customer_id,mode,manual_limit_cents,reason,administrator_id,administrator_name,
          expected_policy_revision,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
@@ -109,7 +101,7 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
     }
     statements.push(
       db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':policy'),
-      db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(token+':operation',token+':policy')
+      db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2,?3)').bind(token+':operation',token+':policy',token+':foreign-operation')
     );
     // Happy path: one atomic database batch. Migration 0018 already revalidates
     // writer authority, customer identity, operation namespace and policy CAS
@@ -123,9 +115,10 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
     const stale=await authorityError(db,auth,b);if(stale)return json({error:stale},409);
     if(replay?.request_hash===requestHash)return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
     if(replay)return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
+    const foreign=await foreignOperationRead(db,b.operation_id,ledgers.length?ledgers:await operationLedgers(db,auth?.ledgerTables),OWN_LEDGER).first();
+    if(foreign)return json(crossLedgerConflict(b.operation_id,foreign),409);
     const customer=await db.prepare('SELECT provenance FROM canonical_customer_registry WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
     if(!customer)return json({error:'customer_not_found'},409);
-    if(await operationConflict(db,b.operation_id))return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
     const now=await db.prepare('SELECT revision FROM canonical_customer_credit_policies WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
     const currentRevision=Number(now?.revision)||0;
     if(currentRevision!==b.expected_policy_revision)return json({error:'stale_policy',current_policy_revision:currentRevision},409);
