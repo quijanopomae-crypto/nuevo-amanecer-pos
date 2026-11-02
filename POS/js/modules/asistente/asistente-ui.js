@@ -543,6 +543,8 @@
       (p.stock_actual != null ? '<tr><td>Stock</td><td class="r">' + E(p.stock_actual) + ' → <b>' + E(p.stock_despues) + '</b></td></tr>' : '');
     if (p.type === 'producto') rows = [['Nombre', E(p.nombre)], ['Precio', soles(p.precio)], ['Costo', p.costo != null ? soles(p.costo) : '-'], ['Stock inicial', p.stock_inicial != null ? E(p.stock_inicial) : '-'],
       ['Stock mínimo', p.stock_minimo != null ? E(p.stock_minimo) : '-'], ['Categoría', E(p.categoria || '-')], ['Código', E(p.codigo_barras || '-')]].map(function (r) { return '<tr><td>' + r[0] + '</td><td class="r">' + r[1] + '</td></tr>'; }).join('');
+    if (p.type === 'tamano_caja') rows = '<tr><td>' + E(p.nombre) + '<div class="note">Unidades por caja</div></td><td class="r">' + (p.unidades_antes != null ? E(p.unidades_antes) : 'sin dato') + ' → <b>' + E(p.unidades) + '</b></td></tr>' +
+      '<tr><td>Precio de la caja</td><td class="r">' + (p.precio_caja_antes != null ? soles(p.precio_caja_antes) + ' → ' : '') + '<b>' + soles(p.precio_caja) + '</b></td></tr>';
     var warn = '';
     if (p.type === 'compra' && p.fueraDeLimite) warn += '<div class="warn">' + (p.fueraDeLimite === 1 ? '1 fila pasa el límite: corrígela en la factura o quítala.' : p.fueraDeLimite + ' filas pasan el límite: corrígelas en la factura o quítalas.') + '</div>';
     if (p.type === 'compra' && p.omitidas && p.omitidas.length) warn += '<div class="warn">No se incluyó porque no lleva control de stock: ' + p.omitidas.map(function (o) { return E(o.nombre); }).join(', ') + '.</div>';
@@ -557,7 +559,7 @@
     var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
       configuracion: p.destino==='servidor'?'Al confirmar se guarda en el servidor. Afecta a toda la tienda.':'Al confirmar se aplica este ajuste. '+(p.alcance==='todos los aparatos'?'Afecta a toda la tienda.':'Solo cambia este aparato.'),
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo ' + (p.deChat ? 'nuevo' : 'de la factura') + '. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
-      ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
+      ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', tamano_caja: 'Al pulsar Aplicar se guarda en la ficha del producto. No cambia el stock ni el precio por unidad.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
     var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note" data-docnote></div>' : '';
     return '<h4>' + E(p.title) + (C.isServerConfig && C.isServerConfig(p) ? '<span class="pill">Toda la tienda</span>' : '<span class="pill">Solo Admin</span>') + '</h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
@@ -598,6 +600,8 @@
     var op = c.querySelector('[data-open]'); if (op) op.onclick = function () { var perm = C.canExecute(roles(), p); if (!perm.ok) { c.querySelector('.res').textContent = perm.msg; return; } op.disabled = true; Promise.resolve(C.EXECUTORS.documento(p, deps)).then(function (r) { c.querySelector('.res').textContent = r.msg; }, function () { c.querySelector('.res').textContent = 'No se pudo armar el documento.'; }).then(function () { op.disabled = false; }); };
     var no = c.querySelector('[data-no]'); if (no) no.onclick = function () { gate.cancel(key, 'cancelada'); c.dataset.st = 'cancelled'; res.textContent = 'Cancelado. No se hizo nada.'; };
     var ok = c.querySelector('[data-ok]'), left = c.querySelector('[data-left]');
+    // «Guardar tamaño de caja»: el botón dice «Aplicar» (un toque, sin PIN; el servidor guarda la ficha)
+    if (ok && p.type === 'tamano_caja') { c.dataset.btn = 'Aplicar'; ok.textContent = 'Aplicar'; }
     var exp = tokenExp(p), timer = null;
     // Filas «Revisa este dato»: Confirmar queda apagado hasta aceptar o quitar cada una (el servidor exige lo mismo).
     var decided = {};

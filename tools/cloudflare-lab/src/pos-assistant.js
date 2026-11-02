@@ -30,6 +30,8 @@ import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './p
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
   bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
+import { PACK_TOOL, PACK_CARD, PACK_TOOL_DEF, PACK_RULE, PACK_TOOL_RULE, SUPPLIER_PRICE_RULE, GENERAL_PACK_TEXT, GENERAL_PACK_EMPLOYEE_TEXT, asksPack, packTopic, asksGeneralPack, asksSupplierPrice, mentionsList, supplierNameWords,
+  packFactsMessage, holdPackCards, holdText, usedText, packToolProposal, resolvePackProposals, packPriceAskText, applyPackCard, supplierPriceFix } from './pos-assistant-tamanos.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
 import { CONFIG_CARD, CONFIG_DEST, isServerKey, employeeServerKey, CONFIG_ADMIN_ONLY_TEXT, resolveConfigProposals, applyConfigCard, configFillNames, configFillValue } from './pos-assistant-config-route.js';
 import { cutInfo, cutModelMessage, cutUserText, adjustRequests, unattendedRequests, unattendedText, MULTI_ADJUST_RULE, asksNegativeBulk, negativeBulkText, NEGATIVE_BULK_RULE } from './pos-assistant-varios.js';
@@ -50,7 +52,7 @@ export const USAGE_PREFIX = 'internal:asst:';
 // Herramienta -> acción de la tabla única de permisos (POS/js/config/pos-permissions.js).
 export const TOOL_ACTIONS = Object.freeze({ explicar_pasos: 'assistant.chat', consultar: 'assistant.query', preparar_documento: 'assistant.document',
   proponer_cambio_precio: 'assistant.price.propose', preparar_compra: 'assistant.purchase.propose', leer_factura_compra: 'assistant.purchase.propose',
-  proponer_ajuste_stock: 'assistant.stock.propose', proponer_producto_nuevo: 'assistant.product.propose', [LEVEL_TOOL]: 'assistant.levels.set', configurar_app: 'settings.set' });
+  proponer_ajuste_stock: 'assistant.stock.propose', proponer_producto_nuevo: 'assistant.product.propose', [LEVEL_TOOL]: 'assistant.levels.set', configurar_app: 'settings.set', [PACK_TOOL]: 'assistant.pack.set' });
 // Nunca se aceptan estos parámetros en una herramienta (el rol y el PIN no los decide el modelo).
 export const FORBIDDEN_PARAMS = Object.freeze(['role', 'rol', 'owner', 'dueno', 'pin', 'approval', 'approval_id', 'x-owner-approval', 'token', 'pos_role', 'admin']);
 export function hasForbiddenParam(value, depth = 0) {
@@ -1533,6 +1535,7 @@ const TOOL_DEFS = [
 ];
 TOOL_DEFS.push(SETTINGS_TOOL);
 TOOL_DEFS.push(LEVEL_TOOL_DEF); // solo Admin: nivel y permiso de costos de una persona (pos-assistant-levels-route.js)
+TOOL_DEFS.push(PACK_TOOL_DEF); // solo Admin y solo si el mensaje habla de cajas: tamaño de caja de UN producto (pos-assistant-tamanos.js)
 export function toolsForRole(role) {
   return TOOL_DEFS.filter((t) => toolAllowed(role, t.name))
     .map((t) => ({ type: 'function', function: role === 'owner' ? { name: t.name, description: t.description, parameters: t.parameters } : employeeTool(t, role) }));
@@ -1634,7 +1637,7 @@ export const STOCK_NOT_UP_RE = /\b(?:compr\w*|ingres\w*|registr\w*)\b[^.?!\n]{0,
 export const STOCK_NOT_UP_RULE = 'COMPRA QUE NO SUBE EL STOCK: 1) Inventario > Compras > Historial: ¿se guardó? Si no, regístrala en Nueva compra. 2) Si está, revisa su stock (stock_producto) y Kardex.';
 // Prompt por rol (pedido de alfa, 22-10): cada rol recibe solo sus líneas. El empleado no recibe las guías de caja, boleta/factura de compra
 // ni deudas/estado de cuenta (herramientas y tipos que no tiene); el Admin recibe todo. Los cortes del servidor siguen igual (defensa en profundidad).
-export function systemPrompt(role, ctx, text = '') {
+export function systemPrompt(role, ctx, text = '', opts = {}) {
   const business = sanitizeBusinessName(ctx && ctx.business), admin = role === 'owner';
   return [
     // Pedido del dueño (22-10): al presentarse, «tienda de abarrotes» (nunca otro tipo de negocio).
@@ -1679,6 +1682,10 @@ export function systemPrompt(role, ctx, text = '') {
     ...(PURCHASE_VOID_RE.test(String(text || '')) ? [role === 'owner' ? PURCHASE_VOID_RULE : PURCHASE_VOID_RULE_EMPLOYEE] : []),
     // (auditoría 500, CP-012) «a quién le compro el arroz» nombraba al proveedor de la última compra
     ...(SUPPLIER_OF_PRODUCT_RE.test(String(text || '')) ? [SUPPLIER_OF_PRODUCT_RULE] : []),
+    // (auditoría 500, UNI-018/019/032/033/007) cajas, displays y paquetes; precio de lista o factura. Solo cuando el mensaje lo pide.
+    ...(asksPack(text) || asksGeneralPack(text) ? [PACK_RULE] : []),
+    ...(toolAllowed(role, PACK_TOOL) && packTopic(text) ? [PACK_TOOL_RULE] : []),
+    ...(seesOwnerData(role) && (opts.supplierAsk ?? asksSupplierPrice(text, PRICE_ASK_RE)) ? [SUPPLIER_PRICE_RULE] : []),
     screensPromptLine(),
     'Guía: vender = Punto de Venta. Compra = Inventario > Compras > Nueva compra. Movimiento = Inventario > producto > Movimiento. Producto nuevo = Inventario > + Nuevo. Abono = Clientes > ficha > Abonar. Deudas = Clientes > Reporte de deuda.',
     // (lote en vivo 22-10, b) «compré 10 Inka Kola y no aparecen en el stock»
@@ -2009,6 +2016,7 @@ export function toProposal(call, role, ctx, n) {
   }
   if (name === 'configurar_app') return settingsProposal(args,ctx,id,role); // negocio/ticket: destino servidor, se completa con la base en chatCore
   if (name === LEVEL_TOOL) return levelToolProposal(args, id); // solo Admin (toolAllowed); se completa con la base en chatCore
+  if (name === PACK_TOOL) return packToolProposal(args, idx.get(safeId(args.product_id)), id); // solo Admin; antes/después con la base en chatCore
   if (name === 'consultar') {
     if (!QUERY_TYPES.includes(args.tipo)) return { dropped: 'bad_query', tool: name };
     if (role !== 'owner' && ADMIN_ONLY_QUERY_TYPES.includes(args.tipo)) return { dropped: 'query_admin_only', tool: name };
@@ -2211,8 +2219,8 @@ export async function reserveUsage(store, auth, env, nowMs, hasImage) {
 }
 
 // ---------- DeepSeek ----------
-export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceMemory, lessons, priceFacts, resumen = null, cards }) {
-  const messages = [{ role: 'system', content: systemPrompt(role, ctx, text) }, contextMessage(ctx)];
+export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceMemory, lessons, priceFacts, packFacts = null, resumen = null, cards, supplierAsk }) {
+  const messages = [{ role: 'system', content: systemPrompt(role, ctx, text, { supplierAsk }) }, contextMessage(ctx)];
   // Empleado (defensa en datos): el historial lo manda el aparato (un aparato que antes fue del dueño puede guardar respuestas con costos):
   // antes del modelo pasa por el mismo filtro de montos del dueño. El texto nuevo de la persona va tal cual (es lo que ella escribió).
   // Un turno anterior que nombra al dueño (costo, compré, margen, proveedor…) NO va al modelo: se cambia por un aviso corto (puede venir de
@@ -2226,6 +2234,7 @@ export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceM
   const taught = role === 'owner' ? taughtMemoryMessage(invoiceMemory, lessons) : null;
   if (taught) messages.push(taught);
   if (priceFacts) messages.push(priceFacts);
+  if (packFacts) messages.push(packFacts); // <tamanos_caja>: confirmado (ficha) o provisional (nombre), solo si el mensaje habla de cajas
   const cardNote = cardsMessage(cards); // estado real de las tarjetas: una cancelada no vuelve a salir como pendiente
   if (cardNote) messages.push(cardNote);
   if (toolAllowed(role, 'configurar_app') && settingsRequested(text,ctx)) messages.push(settingsMessage(ctx, role)); // Admin, o nivel 3 + «costos y cambios» (solo negocio y ticket)
@@ -2233,7 +2242,7 @@ export function buildDeepSeekRequest({ role, ctx, history, text, image, invoiceM
   messages.push(image
     ? { role: 'user', content: [{ type: 'text', text: userText }, { type: 'image_url', image_url: { url: image, detail: 'auto' } }] }
     : { role: 'user', content: userText });
-  return { model: DEEPSEEK_MODEL, messages, tools: toolsForRole(role).filter(t=>t.function.name!=='configurar_app'||settingsRequested(text,ctx)), tool_choice: 'auto', thinking: { type: 'disabled' },
+  return { model: DEEPSEEK_MODEL, messages, tools: toolsForRole(role).filter(t=>(t.function.name!=='configurar_app'||settingsRequested(text,ctx))&&(t.function.name!==PACK_TOOL||packTopic(text))), tool_choice: 'auto', thinking: { type: 'disabled' },
     temperature: 0.2, max_tokens: ASSISTANT_LIMITS.maxTokens, stream: false };
 }
 
@@ -2832,7 +2841,7 @@ function offBody(role) { return role === 'empleado:off' || role === 'empleado' |
 
 // ---------- Token de confirmación (un solo uso, 5 minutos) ----------
 const AUDIT_TOOL = Object.freeze({ consulta: 'consultar', documento: 'preparar_documento', pasos: 'explicar_pasos', costo: 'actualizar_costo' });
-const TYPE_TOOL = Object.freeze({ [LEVEL_CARD]: LEVEL_TOOL, configuracion: 'configurar_app', compra: 'preparar_compra', precio: 'proponer_cambio_precio', costo: 'proponer_cambio_precio', ajuste: 'proponer_ajuste_stock', producto: 'proponer_producto_nuevo' });
+const TYPE_TOOL = Object.freeze({ [LEVEL_CARD]: LEVEL_TOOL, configuracion: 'configurar_app', compra: 'preparar_compra', precio: 'proponer_cambio_precio', costo: 'proponer_cambio_precio', ajuste: 'proponer_ajuste_stock', producto: 'proponer_producto_nuevo', [PACK_CARD]: PACK_TOOL });
 const enc = new TextEncoder();
 function b64url(bytes) { let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function fromB64url(s) { const bin = atob(String(s).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(bin, (c) => c.charCodeAt(0)); }
@@ -3064,6 +3073,10 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   // Tarjeta de Configuración con destino servidor (Admin o nivel 3 + «costos y cambios»): el servidor guarda aquí y anota el aparato que aplicó.
   // Las del aparato (#972, sin destino servidor) las guarda el teléfono con su ejecutor, como antes.
   if (tok.t === CONFIG_CARD && (applied.destino === CONFIG_DEST || isServerKey(applied.ajuste))) { const cf = await applyConfigCard(deps.db, auth, role, applied, tok.op, deps.audit || auditWrite); if (cf.status !== 200) return json(cf.body, cf.status); applied = { ...applied, resultado: cf.body }; }
+  // Tarjeta «Guardar tamaño de caja» (solo Admin, un toque, sin PIN): el servidor escribe la revisión product.update y la anota (pos-assistant-tamanos.js).
+  // Si la caja de la ficha cambió desde la tarjeta: 409 stock_changed con tarjeta nueva firmada (como #983); la vieja no escribe ni se marca usada.
+  if (tok.t === PACK_CARD) { const pk = await applyPackCard(deps.db, auth, applied, tok.op, deps.audit || auditWrite, now, (fresh) => issueConfirmToken(fresh, role, auth, secret, now));
+    if (pk.status !== 200) return json(pk.body.error === 'stock_changed' ? { ...pk.body, operation_id: tok.op } : pk.body, pk.status); applied = { ...applied, resultado: pk.body }; }
   const rvUsed = tok.t === 'compra' ? { accept: applied.aceptadas || [], drop: applied.quitadas || [] } : null;
   if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(tok.t === 'compra' ? { acc: applied.aceptadas || [] } : {}),
     s: sess, rh: await replayHash(secret, tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
@@ -3308,8 +3321,18 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const lessons = role === 'owner' ? await readLessons(store, auth, now) : [];
   const rd0 = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
   const loadProducts = async () => { if (!rd0 || typeof rd0.products !== 'function') return null; try { return await rd0.products(); } catch { return null; } };
-  let sysProducts = PRICE_ASK_RE.test(parsed.text || '') ? await loadProducts() : null;
-  const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
+  const priceAsk = PRICE_ASK_RE.test(parsed.text || ''), packAsk = asksPack(parsed.text), generalPack = asksGeneralPack(parsed.text);
+  let sysProducts = priceAsk || packAsk ? await loadProducts() : null;
+  const priceFacts = sysProducts && priceAsk ? priceLookupMessage(role, parsed.text, sysProducts) : null;
+  // (auditoría 500, UNI-018/019) «son 2 cajas»: el tamaño conocido de los productos del mensaje y de los últimos de la persona.
+  const packFacts = sysProducts && packAsk ? packFactsMessage(sysProducts, matchProducts, parsed.text, parsed.history) : null;
+  // (UNI-007, revisión #999) «lista» sola es la lista de precios del POS; cuenta como del proveedor con «proveedor», «distribuidor»,
+  // «mayorista» o el nombre de un proveedor de las compras (solo se leen si el mensaje dice «lista»; nunca van al modelo).
+  let supplierWords = [];
+  if (seesOwnerData(role) && priceAsk && mentionsList(parsed.text) && !asksSupplierPrice(parsed.text, PRICE_ASK_RE) && rd0 && typeof rd0.purchases === 'function') {
+    try { const rows = await rd0.purchases(100); supplierWords = supplierNameWords((Array.isArray(rows) ? rows : []).map((r) => r && r.supplier).filter(Boolean)); } catch { supplierWords = []; }
+  }
+  const supplierAsk = seesOwnerData(role) && asksSupplierPrice(parsed.text, PRICE_ASK_RE, supplierWords);
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
   // (UNI-058 / INV-041 / INV-027) lo conocido en este pedido para el filtro final: productos (marca «Don Vittorio» no se tapa), clientes de la
@@ -3365,7 +3388,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
       histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;
     }
-    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenToModel, cards: parsed.cards });
+    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, packFacts, resumen: resumenToModel, cards: parsed.cards, supplierAsk });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
@@ -3428,6 +3451,16 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (checkCosts && !map.failed) unpricedNames = clearUnstatedCosts(proposals.filter((p) => costCalls.has(p)), userTexts, map.units);
   }
   const overNames = dropped.filter((d) => d.dropped === 'over_limit' && d.nombre).map((d) => d.nombre);
+  // (auditoría 500, UNI-033) ajuste dicho en cajas/displays/paquetes: solo con el tamaño CONFIRMADO en la ficha (o dicho en el mensaje).
+  // Sin lectura de la base no hay tamaño confirmado: se pregunta (falla cerrado).
+  let packHold = { held: [], used: [] };
+  if (packAsk && proposals.some((p) => p.type === 'ajuste')) {
+    const list = sysProducts || await timed(loadProducts);
+    packHold = holdPackCards(proposals, dropped, { text: parsed.text, history: parsed.history, sizes: Array.isArray(list) ? new Map(list.map((p) => [String(p.id), Number(p.caja) || 0])) : null });
+  }
+  // (UNI-032) «todas las cajas traen 12»: ninguna tarjeta de tamaño en ese turno. Tarjeta de UN producto: antes/después con la base.
+  if (generalPack) for (const p of proposals.filter((x) => x.type === PACK_CARD)) { proposals.splice(proposals.indexOf(p), 1); dropped.push({ dropped: 'pack_general_rule', tool: PACK_TOOL }); }
+  const packAsks = await timed(() => resolvePackProposals(reader, proposals, dropped));
   // La compra ya lleva el costo: al registrarla, el POS guarda ese costo en el producto (costo-compra-ficha.js). Tarjetas «Actualizar costo»
   // aparte solo si la persona pidió cambiar el costo con todas las letras.
   if (seesOwnerData(role) && asksCostChange(parsed.text)) for (const p of proposals.slice()) if (p.type === 'compra') proposals.push(...costProposals(p));
@@ -3576,6 +3609,16 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // (auditoría 500) CP-012: proveedor de un producto sin dato de líneas; CP-027: borrar una compra por un camino que no existe.
   if (role === 'owner' && SUPPLIER_OF_PRODUCT_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm)) reply = SUPPLIER_OF_PRODUCT_TEXT;
   if (PURCHASE_VOID_RE.test(parsed.text) && !proposals.some((p) => p.needsConfirm) && (VOID_PATH_RE.test(reply) || !proposals.length)) reply = role === 'owner' ? PURCHASE_VOID_TEXT : PURCHASE_VOID_EMPLOYEE_TEXT;
+  // (auditoría 500, unidades y cajas) textos fijos del servidor: tamaño sin confirmar, caja guardada usada, precio de caja que falta, regla general.
+  if (packHold.held.length) reply = holdText(packHold.held, parsed.text) + (proposals.some((p) => p.needsConfirm) ? ' Las otras tarjetas sí se pueden revisar.' : '');
+  else if (packHold.used.length) reply = (reply ? reply + ' ' : '') + usedText(packHold.used);
+  if (packAsks.length) reply = (proposals.some((p) => p.needsConfirm) ? reply + ' ' : '') + packPriceAskText(packAsks);
+  if (generalPack) reply = role === 'owner' ? GENERAL_PACK_TEXT : GENERAL_PACK_EMPLOYEE_TEXT;
+  // (UNI-007) monto de una lista de proveedor o factura: «precio del proveedor», nunca el precio de venta (solo quien ve datos del dueño).
+  if (supplierAsk) {
+    const hits = Array.isArray(sysProducts) ? matchProducts(sysProducts, parsed.text) : [];
+    reply = supplierPriceFix(reply, hits.length === 1 ? hits[0] : null);
+  }
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
   if (costReply) reply = proposals.some((p) => p.needsConfirm && p.type !== 'costo') ? reply + ' ' + costReply : costReply;
   // (auditoría 500, P-044) precio unas 100 veces el actual: la respuesta pregunta lo mismo que la tarjeta.
@@ -3610,7 +3653,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
+  if (role === 'owner' && !parsed.image && !resetAsk && !generalPack) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
     if (!sysProducts) sysProducts = await loadProducts(); await saveLesson(store, auth, now, redactModelOwner(fact), cust, [...(ctx.products || []), ...(sysProducts || [])]); } }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
