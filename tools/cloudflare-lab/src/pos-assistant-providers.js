@@ -102,6 +102,14 @@ function parseArgs(a) { if (a && typeof a === 'object') return a; try { const v 
 function dataUrl(url) { const m = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i.exec(String(url || '')); return m ? { mime: m[1].toLowerCase(), data: m[2].replace(/\s+/g, '') } : null; }
 const usageOf = (p, c) => ({ prompt_tokens: Number(p) || 0, completion_tokens: Number(c) || 0 });
 function busyOr(status, busy) { return busy.includes(status) ? 'upstream_busy' : 'upstream_error'; }
+// (auditoría 500, CLI-029) Filtro de contenido del proveedor (Azure OpenAI: 400 con code «content_filter» / «content management policy»).
+// Repetir lo mismo no sirve: sin reintento (400) y con su propio código, para que el aparato muestre un mensaje amable y no «upstream_error».
+export const CONTENT_FILTER_RE = /content_filter|content[ _]management[ _]policy|ResponsibleAIPolicyViolation/i;
+async function httpError(A, res) {
+  let filtered = false;
+  if (res.status === 400) { try { filtered = CONTENT_FILTER_RE.test(String(await res.text()).slice(0, 4000)); } catch { filtered = false; } }
+  return { error: filtered ? 'content_filtered' : A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
+}
 // Sin herramientas en el pedido (segunda llamada que explica una consulta): las llamadas y resultados viejos van como texto plano,
 // así Anthropic y Gemini no piden la definición de la herramienta.
 const toolText = (c) => '(consulta ' + String(c?.function?.name || '') + ' ' + String(c?.function?.arguments || '') + ')';
@@ -126,7 +134,7 @@ const openaiAdapter = {
   },
   parser: () => (j) => {
     const ev = [];
-    if (j?.error) return [{ t: 'error', error: /rate|overload|busy/i.test(String(j.error?.type || j.error?.code || '')) ? 'upstream_busy' : 'upstream_error' }];
+    if (j?.error) return [{ t: 'error', error: CONTENT_FILTER_RE.test(String(j.error?.code || '') + ' ' + String(j.error?.message || '')) ? 'content_filtered' : /rate|overload|busy/i.test(String(j.error?.type || j.error?.code || '')) ? 'upstream_busy' : 'upstream_error' }];
     if (j?.usage) ev.push({ t: 'usage', v: usageOf(j.usage.prompt_tokens, j.usage.completion_tokens) });
     const ch = j?.choices?.[0]; const d = ch?.delta || {};
     if (typeof d.content === 'string' && d.content) ev.push({ t: 'text', v: d.content });
@@ -337,7 +345,7 @@ async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetchImpl(A.url(cfg, false), { method: 'POST', signal: controller.signal, headers: A.headers(cfg, false), body: JSON.stringify(A.body(cfg, req, false)) });
-    if (!res.ok) return { error: A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
+    if (!res.ok) return httpError(A, res);
     return A.parseJson(await res.json());
   } catch (e) {
     return { error: e?.name === 'AbortError' || controller.signal.aborted ? 'upstream_timeout' : 'upstream_error' };
@@ -367,7 +375,7 @@ async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, 
   try {
     arm(firstMs); // hasta el primer byte: firstMs; luego, idleMs desde el último trozo
     const res = await fetchImpl(A.url(cfg, true), { method: 'POST', signal: controller.signal, headers: A.headers(cfg, true), body: JSON.stringify(A.body(cfg, req, true)) });
-    if (!res.ok) return { error: A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
+    if (!res.ok) return httpError(A, res);
     if (!res.body || typeof res.body.getReader !== 'function') return { error: 'upstream_error' };
     reader = res.body.getReader(); const dec = new TextDecoder(); const parse = A.parser(); let buf = '', done = false;
     const handle = (e) => {

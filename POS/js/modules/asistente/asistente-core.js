@@ -705,6 +705,8 @@
     rate_limited: [MSG.wait, true], HTTP_429: [MSG.wait, true], upstream_busy: [MSG.wait, true],
     daily_limit: ['Por hoy ya no quedan preguntas en este aparato. Mañana sigue.'], monthly_cap: ['El asistente llegó a su tope del mes. Avisa al Admin.'],
     network: [MSG.offline, true], offline: [MSG.offline, true], timeout: [MSG.slow, true], upstream_timeout: [MSG.slow, true],
+    // (auditoría 500, CLI-029) el filtro de contenido del proveedor bloqueó la pregunta: repetirla igual no sirve (sin «Reintentar»)
+    content_filtered: ['No pude responder esa pregunta. Inténtala con otras palabras.'],
     upstream_error: [MSG.again, true], stock_check_unavailable: ['No pude revisar el inventario ahora. Toca «Reintentar» en un momento.', true], HTTP_503: [MSG.again, true], HTTP_502: [MSG.again, true], HTTP_500: [MSG.again, true],
     confirm_expired: [MSG.expired], HTTP_410: [MSG.expired], proposal_changed: [MSG.changed], proposal_id_mismatch: [MSG.changed], HTTP_409: [MSG.changed],
     product_missing: ['Ese producto ya no está en el inventario.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
