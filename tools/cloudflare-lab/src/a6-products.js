@@ -1,3 +1,4 @@
+import { canDo } from './pos-permissions.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -221,7 +222,10 @@ function normalizeUpdate(body) {
   if (typeof body.created_at !== 'string' || !TIMESTAMP.test(body.created_at) || !Number.isFinite(Date.parse(body.created_at))) return { error:'invalid_product_update',field:'created_at' };
   const name=clean(body.name,240);
   if (!name) return { error:'invalid_product_update',field:'name' };
-  if (!uint(body.cost_cents) || !Number.isSafeInteger(body.price_cents) || body.price_cents<=0) return { error:'invalid_product_update',field:'price_cents' };
+  // B2: cost_cents may be omitted (= keep the current cost). When present it must be a valid uint.
+  const hasCost=Object.prototype.hasOwnProperty.call(body,'cost_cents');
+  if (hasCost && !uint(body.cost_cents)) return { error:'invalid_product_update',field:'cost_cents' };
+  if (!Number.isSafeInteger(body.price_cents) || body.price_cents<=0) return { error:'invalid_product_update',field:'price_cents' };
   const hasBoxPrice=body.box_price_cents!==null && body.box_price_cents!==undefined;
   const hasBoxUnits=body.units_per_box!==null && body.units_per_box!==undefined;
   if (hasBoxPrice!==hasBoxUnits) return { error:'invalid_product_update',field:'box_price_cents' };
@@ -238,7 +242,7 @@ function normalizeUpdate(body) {
   if (alternate.length>10 || alternate.some((value)=>!value)) return { error:'invalid_product_update',field:'alternate_codes' };
   const codes=[sku,barcode,...alternate].filter(Boolean).map((value)=>value.toLowerCase());
   if (new Set(codes).size!==codes.length) return { error:'duplicate_product_code' };
-  return { value:{
+  const value={
     operation_id:body.operation_id, product_id:body.product_id, promotion_id:body.promotion_id,
     authority_epoch:body.authority_epoch, expected_control_revision:body.expected_control_revision,
     client_contract:body.client_contract, created_at:body.created_at,
@@ -247,7 +251,10 @@ function normalizeUpdate(body) {
     icon:optionalText(body.icon,24), cost_cents:body.cost_cents, price_cents:body.price_cents,
     box_price_cents:hasBoxPrice?body.box_price_cents:null, units_per_box:hasBoxUnits?body.units_per_box:null,
     stock_min_quantity:body.stock_min_quantity, expiry_date:body.expiry_date || null
-  }};
+  };
+  // Absent cost stays absent (not undefined) so request_hash distinguishes «no cost sent» from any value.
+  if (!hasCost) delete value.cost_cents;
+  return { value };
 }
 
 // One statement: schema readiness, authority row and idempotent replay.
@@ -302,14 +309,26 @@ const CODE_OWNER_SQL=`WITH incoming(code) AS (
   SELECT o.product_id,o.name,o.code FROM owners o JOIN incoming i ON i.code=o.code
     WHERE o.product_id<>?2 AND i.code NOT IN (SELECT code FROM own) LIMIT 1`;
 
+// B2: a revision written without cost over a product whose cost is NULL marks result_json with
+// cost_kept_null. Its cost_cents column (NOT NULL in 0022) holds a placeholder 0 that is never a cost:
+// readers resolve such a revision's cost to NULL (the base cost stays the effective one).
+// REGLA para lectores nuevos: todo código que lea el costo de canonical_product_revisions debe usar
+// REVISION_COST_SQL(alias), nunca la columna cruda cost_cents (r.cost_cents, SELECT cost_cents, r.*), o
+// leería el 0 de relleno como costo real. Única excepción: la lectura de productos en a6-canonical.js
+// (loadCollectionRows), que aplica el mismo marcador en línea. La guarda
+// tests/cloud-sync/product-revision-cost-readers.test.mjs falla si aparece otro lector crudo.
+export const COST_KEPT_NULL='cost_kept_null';
+export const REVISION_COST_SQL=(alias)=>`CASE WHEN json_extract(${alias}.result_json,'$.${COST_KEPT_NULL}')=1 THEN NULL ELSE ${alias}.cost_cents END`;
+
 async function productState(db, body) {
   const codes=JSON.stringify([body.sku,body.barcode,...body.alternate_codes].filter(Boolean));
   const row=await db.prepare(`SELECT t.provenance,t.tracks_inventory,
       COALESCE((SELECT MAX(r.revision) FROM canonical_product_revisions r WHERE r.promotion_id=?1 AND r.product_id=?2),0) AS metadata_revision,
+      COALESCE((SELECT ${REVISION_COST_SQL('r')} FROM canonical_product_revisions r WHERE r.promotion_id=?1 AND r.product_id=?2 ORDER BY r.revision DESC LIMIT 1),t.cost_cents) AS current_cost_cents,
       (SELECT json_object('product_id',x.product_id,'name',x.name,'code',x.code) FROM (${CODE_OWNER_SQL}) x) AS code_owner
     FROM (
-      SELECT 'IMPORT' AS provenance,tracks_inventory,0 AS source_rank FROM products WHERE promotion_id=?1 AND product_id=?2
-      UNION ALL SELECT 'LIVE',tracks_inventory,1 FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
+      SELECT 'IMPORT' AS provenance,tracks_inventory,cost_cents,0 AS source_rank FROM products WHERE promotion_id=?1 AND product_id=?2
+      UNION ALL SELECT 'LIVE',tracks_inventory,cost_cents,1 FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
     ) t ORDER BY t.source_rank LIMIT 1`).bind(body.promotion_id,body.product_id,codes).first();
   return row;
 }
@@ -347,10 +366,21 @@ export async function updateCanonicalProduct(request, env, auth, json) {
     return json({error:'product_code_conflict',code:owner.code,product_id:owner.product_id,product_name:owner.name},409);
   }
 
+  // T-46: a role without purchases.costs.view never receives cost_cents in its replica, so whatever it
+  // sends there is not a cost decision. Keep the product's current cost (owner-managed). Owner unchanged.
+  // B2: an absent cost_cents means «keep the current cost», for every role. With a NULL current cost the
+  // revision keeps it NULL (placeholder 0 + cost_kept_null marker, see REVISION_COST_SQL); no error.
+  let storedCost=body.cost_cents, costKeptNull=false;
+  if (body.cost_cents===undefined) {
+    if (state.current_cost_cents != null) storedCost=Number(state.current_cost_cents);
+    else { storedCost=0; costKeptNull=true; }
+  } else if (auth.posRole != null && !canDo(auth.posRole,'purchases.costs.view') && state.current_cost_cents != null) storedCost=Number(state.current_cost_cents);
+
   const revision=body.expected_metadata_revision+1;
   const result={
     status:'created',command:'product.update',operation_id:body.operation_id,product_id:body.product_id,
-    promotion_id:body.promotion_id,authority_epoch:body.authority_epoch,metadata_revision:revision,idempotent:false
+    promotion_id:body.promotion_id,authority_epoch:body.authority_epoch,metadata_revision:revision,idempotent:false,
+    ...(costKeptNull?{[COST_KEPT_NULL]:true}:{})
   };
   try {
     await db.prepare(`INSERT INTO canonical_product_revisions
@@ -358,7 +388,7 @@ export async function updateCanonicalProduct(request, env, auth, json) {
        cost_cents,price_cents,box_price_cents,units_per_box,stock_min_quantity,expiry_date,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
       VALUES(?1,?2,?3,'product.update',?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)`)
       .bind(body.operation_id,body.promotion_id,body.product_id,requestHash,stableStringify(result),revision,body.name,body.sku,body.barcode,
-        JSON.stringify(body.alternate_codes),body.category,body.brand,body.description,body.icon,body.cost_cents,body.price_cents,
+        JSON.stringify(body.alternate_codes),body.category,body.brand,body.description,body.icon,storedCost,body.price_cents,
         body.box_price_cents,body.units_per_box,body.stock_min_quantity,body.expiry_date,body.authority_epoch,body.expected_control_revision,
         body.client_contract,auth.principalId,auth.credentialHash,body.created_at).run();
   } catch (error) {
