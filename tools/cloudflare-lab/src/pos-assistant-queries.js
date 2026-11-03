@@ -326,15 +326,16 @@ export function canonicalReader(db) {
       const c = await ctl();
       for (let i = 0; i < want.length; i += PRODUCT_ID_CHUNK) {
         const part = want.slice(i, i + PRODUCT_ID_CHUNK), marks = part.map((_, k) => '?' + (k + 2)).join(',');
-        const base = `SELECT product_id,name,tracks_inventory,unit FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`;
-        const live = `SELECT product_id,name,tracks_inventory,unit FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`;
+        const base = `SELECT product_id,name,tracks_inventory,current_stock_quantity,unit FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`;
+        const live = `SELECT product_id,name,tracks_inventory,current_stock_quantity,unit FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`;
         let rows;
         if (c.mode === 'ACTIVE') {
           try { rows = (await db.prepare(base + ' UNION ALL ' + live).bind(c.active_promotion_id, ...part).all()).results || []; }
           catch (e) { if (!/no such table: canonical_live_products/i.test(String(e?.message || e))) throw e; rows = null; }
         }
         if (!rows) rows = (await db.prepare(base).bind(c.active_promotion_id, ...part).all()).results || [];
-        for (const r of rows) out.set(String(r.product_id), { id: String(r.product_id), nombre: r.name, controla: r.tracks_inventory === 1 || r.tracks_inventory === true, unidad: r.unit ?? null });
+        for (const r of rows) out.set(String(r.product_id), { id: String(r.product_id), nombre: r.name, controla: r.tracks_inventory === 1 || r.tracks_inventory === true,
+          stock: r.current_stock_quantity == null ? null : Number(r.current_stock_quantity), unidad: r.unit ?? null });
       }
       return out;
     },
