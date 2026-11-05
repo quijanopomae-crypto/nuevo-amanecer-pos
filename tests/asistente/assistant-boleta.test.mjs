@@ -186,3 +186,29 @@ test('UI: solo Admin (chip y texto), carga diferida del módulo, foto por el mis
   assert.match(WORKER, /if \(url\.pathname === ASSISTANT_BOLETA_PATH\) \{\n\s+if \(String\(env\.ASSISTANT_ENABLED \|\| ''\) !== '1'\) return json\(\{ error: 'not_found' \}, 404\);\n\s+const auth = await authorizeSession\(request, env\);/);
   assert.doesNotMatch(BOL_SRC, /\.innerHTML\s*=|insertAdjacentHTML/);
 });
+
+// (auditoría OCR-021) Lista manuscrita derecha con dos precios ilegibles: la 1.ª lectura deja null (bien) y sale «casi todo null»
+// porque una lista no tiene cant/um/cod/importe. Antes se giraba igual y la relectura girada (que el modelo dice «rotacion 270»)
+// inventaba 165.20 y 2.75. Regla: solo se relee girada si el modelo dijo que estaba girada o si la 1.ª lectura no tiene NADA legible.
+const LISTA = (precios, rot) => ({ numero: null, fecha: null, total: null, rotacion: rot, items: [['Arroz Costeño 50 kg', precios[0]], ['Azúcar rubia 50 kg', precios[1]], ['Aceite Primor caja 12', precios[2]], ['Leche Gloria 24 x 395', precios[3]], ['Fideo Don Vittorio', precios[4]]]
+  .map(([descripcion, precio_unit]) => ({ cant: null, um: null, cod: null, descripcion, precio_unit, importe: null })) });
+test('OCR-021: con datos legibles y sin giro detectado NO se relee girada; lo ilegible sigue null (no se rellena con la relectura)', async () => {
+  store.clear();
+  const h = host([{ ok: true, boleta: LISTA([182, null, 118.5, 91, null], 0), checks: { mostly_null: true } }, { ok: true, boleta: LISTA([182, 165.2, 118.5, 91, 2.75], 270), checks: { mostly_null: true } }]);
+  await B.readAt(dec, 0, h.ctx, true);
+  assert.equal(h.calls.length, 1, 'sin relectura girada');
+  const card = h.msgs.byClass('na-asst-bol')[0];
+  assert.deepEqual(card.byClass('na-asst-bol-precio_unit').map((i) => i.value), ['182', '', '118.5', '91', '']);
+  assert.match(card.byClass('na-asst-bol-warn')[0].textContent, /no se leyeron|Casi nada se pudo leer/);
+});
+test('OCR-021: foto sin nada legible (o con giro detectado) sí se relee girada UNA vez y se usa la lectura derecha', async () => {
+  store.clear();
+  const blank = { numero: null, fecha: null, total: null, rotacion: 0, items: [{ cant: null, um: null, cod: null, descripcion: null, precio_unit: null, importe: null }] };
+  const h = host([{ ok: true, boleta: blank, checks: { mostly_null: true } }, { ok: true, boleta: { ...GOOD, total: 12.6, rotacion: 0 }, checks: { mostly_null: false } }]);
+  await B.readAt(dec, 0, h.ctx, true);
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.msgs.byClass('na-asst-bol')[0].byClass('na-asst-bol-descripcion')[0].value, 'Arroz 1kg');
+  const h2 = host([{ ok: true, boleta: { ...GOOD, rotacion: 90 }, checks: { mostly_null: false } }, { ok: true, boleta: { ...GOOD, total: 12.6, rotacion: 0 }, checks: { mostly_null: false } }]);
+  await B.readAt(dec, 0, h2.ctx, true);
+  assert.equal(h2.calls.length, 2, 'el modelo dijo que estaba girada');
+});

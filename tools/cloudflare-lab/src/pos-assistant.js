@@ -1700,9 +1700,21 @@ export function contextMessage(ctx) {
 
 // ---------- Validación de propuestas ----------
 function productIndex(ctx) { const m = new Map(); for (const p of ctx.products) m.set(p.id, p); return m; }
+// (auditoría OCR-024) Números de presentación/tamaño de un nombre («48X170», «24 LATAS X 395GR», «1,5 L») como conjunto.
+function sizeTokens(name) {
+  return new Set((String(name || '').replace(/(\d),(\d)/g, '$1.$2').match(/\d+(?:\.\d+)?/g) || []).map((n) => String(Number(n))));
+}
+// El product_id que manda el modelo solo vale si los números del nombre leído y del producto coinciden. Si alguno de los dos
+// no trae números no hay contradicción (se respeta el id). Si no coinciden, la fila queda sin vincular (reconcile exacto o Nueva compra).
+function sizesAgree(lineName, productName) {
+  const a = sizeTokens(lineName), b = sizeTokens(productName);
+  if (!a.size || !b.size) return true;
+  return a.size === b.size && [...a].every((n) => b.has(n));
+}
 function matchLine(line, idx) {
   const id = safeId(line?.product_id);
-  const p = id ? idx.get(id) : null;
+  let p = id ? idx.get(id) : null;
+  if (p && !sizesAgree(fmtClean(line?.nombre ?? ''), p.nombre)) p = null;
   return { product_id: p ? p.id : null, nombre: cleanText(p?.nombre || fmtClean(line?.nombre ?? ''), 80) };
 }
 

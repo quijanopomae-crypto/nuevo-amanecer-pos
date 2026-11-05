@@ -1,6 +1,6 @@
 /* Asistente (PROTOTIPO AISLADO): «Leer boleta con IA», solo Admin. Se carga SOLO cuando el Admin la pide (carga diferida).
    - La foto se endereza (EXIF) y se achica EN EL APARATO (lado máx. 2000 px, máx. 4 MB) y va a POST /auth/assistant/boleta.
-   - El modelo devuelve JSON y la «rotacion» que ve; si viene girada o casi todo en blanco, se gira aquí y se reintenta UNA vez sola.
+   - El modelo devuelve JSON y la «rotacion» que ve; si viene girada o sin nada legible, se gira aquí y se reintenta UNA vez sola.
    - Pantalla de REVISIÓN: todo editable, lo ilegible (null) resaltado, aviso si la suma de importes no da el total, aviso de foto
      borrosa o girada, botones para girar (90° izq./der., 180°) y volver a leer. NADA se guarda ni toca el stock: «Confirmar» solo
      PRELLENA la «Nueva compra» de siempre (el Admin pulsa «Registrar compra» ahí). Boleta ya confirmada en este aparato: pide
@@ -29,6 +29,11 @@
     sum = Math.round(sum * 100) / 100; var total = parseAmount(b.total);
     var mismatch = total != null && any ? Math.abs(sum - total) > Math.max(0.05, total * 0.005) : false, ratio = cells ? nulls / cells : 1;
     return { sum: sum, total: total, total_mismatch: mismatch, nulls: nulls, null_ratio: Math.round(ratio * 100) / 100, mostly_null: !(b.items || []).length || ratio >= 0.5, rotated: !!b.rotacion };
+  }
+  // Celdas con algo leído (cabecera + filas). 0 = la lectura no trae nada legible.
+  function legibleCells(b) {
+    var n = 0; if (!b) return 0; [b.numero, b.fecha, b.total].forEach(function (x) { if (x != null && x !== '') n++; });
+    (b.items || []).forEach(function (it) { FIELDS.forEach(function (f) { if (it && it[f] != null && it[f] !== '') n++; }); }); return n;
   }
   // Orientación EXIF (1..8) de un JPEG (ArrayBuffer). 1 si no hay o no se entiende.
   function exifOrientation(buf) {
@@ -189,9 +194,11 @@
     ctx.busy(true); ctx.state('pensando'); var pr = progress(ctx, 'Leyendo la boleta');
     try {
       var d = await readOnce(ctx, img);
-      if (d && d.ok && auto) { // auto-girar: el modelo dice que está girada, o casi todo vino en blanco -> se gira y se lee UNA vez más
-        var r = norm(d.boleta && d.boleta.rotacion || 0), mostly = d.checks ? d.checks.mostly_null : checks(d.boleta).mostly_null;
-        if (r || mostly) { var deg2 = norm(deg + (r || 90)); pr.set('La foto parece girada: la enderezo y la leo otra vez');
+      if (d && d.ok && auto) { // auto-girar: el modelo dice que está girada, o no se leyó NADA -> se gira y se lee UNA vez más
+        // (auditoría OCR-021) «casi todo null» con algo legible y sin giro detectado (p. ej. una lista de precios derecha) NO se relee:
+        // la relectura girada inventaba lo ilegible. Se queda la 1.ª lectura con sus null en amarillo y el aviso para completarlos.
+        var r = norm(d.boleta && d.boleta.rotacion || 0);
+        if (r || !legibleCells(d.boleta)) { var deg2 = norm(deg + (r || 90)); pr.set('La foto parece girada: la enderezo y la leo otra vez');
           var img2 = render(dec, deg2, ctx.doc), d2 = img2 ? await readOnce(ctx, img2) : null;
           if (d2 && d2.ok && checks(d2.boleta).nulls <= checks(d.boleta).nulls) { d = d2; img = img2; deg = deg2; } }
       } else if (d && !d.ok && auto && d.error === 'boleta_unreadable') {
@@ -274,7 +281,7 @@
   function markSeen(k) { var o = readSeen(); o[k] = new Date().toISOString(); var ks = Object.keys(o); if (ks.length > SEEN_MAX) ks.sort(function (a, b) { return String(o[a]).localeCompare(String(o[b])); }).slice(0, ks.length - SEEN_MAX).forEach(function (x) { delete o[x]; }); ls(SEEN_KEY, JSON.stringify(o)); }
 
   var api = { start: start, showLearned: showLearned, correctionsOf: correctionsOf, countEdits: countEdits, learnAdd: learnAdd, learnApply: learnApply, learnHints: learnHints, learnRead: learnRead, learnClear: learnClear,
-    parseAmount: parseAmount, checks: checks, exifOrientation: exifOrientation, rotateSpec: rotateSpec, orientSpec: orientSpec, compose: compose, fitScale: fitScale,
+    parseAmount: parseAmount, checks: checks, legibleCells: legibleCells, exifOrientation: exifOrientation, rotateSpec: rotateSpec, orientSpec: orientSpec, compose: compose, fitScale: fitScale,
     dataUrlBytes: dataUrlBytes, seenKey: seenKey, matchProduct: matchProduct, prep: prep, review: review, confirmBoleta: confirmBoleta, readAt: readAt,
     LIMITS: { IMG_MAX_SIDE: IMG_MAX_SIDE, IMG_MAX_BYTES: IMG_MAX_BYTES, CLIENT_TIMEOUT_MS: CLIENT_TIMEOUT_MS, LEARN_MAX: LEARN_MAX, HINTS_MAX: HINTS_MAX } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
