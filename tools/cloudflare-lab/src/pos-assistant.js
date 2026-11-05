@@ -2096,6 +2096,7 @@ export function createMemoryUsageStore() {
   return {
     async get(key) { const r = map.get(key); return r ? { value: JSON.parse(JSON.stringify(r.value)), revision: r.revision } : { value: {}, revision: 0 }; },
     async put(key, value, revision) { const r = map.get(key); if ((r?.revision || 0) !== revision) return false; map.set(key, { value, revision: revision + 1 }); return true; },
+    async purgeExpired(prefix, cutoff) { for (const [k, r] of map) if (k.startsWith(prefix) && !(Number.isFinite(r.value?.iat) && r.value.iat >= cutoff)) map.delete(k); },
     _map: map
   };
 }
@@ -2113,6 +2114,11 @@ export function createSettingsUsageStore(db) {
         ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,revision=pos_settings.revision+1,updated_at=excluded.updated_at
         WHERE pos_settings.revision=?4`).bind(key, JSON.stringify(value), new Date().toISOString(), revision).run();
       return !(res?.meta && res.meta.changes === 0);
+    },
+    // (INV-057) Borra las filas de un prefijo cuyo «iat» es anterior a cutoff (o no tiene: lista ya terminada «{}»). Solo ese prefijo.
+    async purgeExpired(prefix, cutoff) {
+      await db.prepare(`DELETE FROM pos_settings WHERE substr(key,1,?1)=?2
+        AND (json_extract(value_json,'$.iat') IS NULL OR CAST(json_extract(value_json,'$.iat') AS INTEGER) < ?3)`).bind(prefix.length, prefix, cutoff).run();
     }
   };
 }
@@ -2899,6 +2905,22 @@ export async function issueConfirmToken(proposal, role, auth, secret, nowMs) {
   const body = b64url(enc.encode(JSON.stringify(payload)));
   return body + '.' + (await hmac(secret, body));
 }
+// (revisión #996) Tarjeta de ajuste del lote con stock viejo: null si sigue vigente; 'unavailable' si la base no trae stock (falla cerrado).
+// Mismo cuerpo que el 409 stock_changed de #983 (error, nombre, stock_antes, stock_ahora, objetivo, proposal, message). El lote es un
+// cambio («súmale 2»): la tarjeta nueva es la MISMA entrada/salida sobre el stock de ahora, firmada y con otro id.
+const r3b = (n) => Math.round(n * 1000) / 1000;
+export async function staleBulkCard(card, current, role, auth, secret, now) {
+  const antes = Number(card?.stock_actual), ahora = current && current.stock != null ? Number(current.stock) : NaN, q = Number(card?.cantidad);
+  if (!Number.isFinite(antes) || !Number.isFinite(ahora) || !Number.isFinite(q)) return 'unavailable';
+  if (r3b(antes) === r3b(ahora)) return null;
+  const objetivo = r3b(ahora + (card.tipo === 'salida' ? -q : q)), nombre = String(card.nombre || 'este producto');
+  const { confirm_token, completar, ...rest } = card;
+  const fresh = { ...rest, id: String(card.id || 'ajuste') + '-r', stock_actual: r3b(ahora), stock_despues: objetivo, quedaNegativo: objetivo < 0, stock_de_servidor: true };
+  fresh.confirm_token = await issueConfirmToken(fresh, role, auth, secret, now);
+  return { error: 'stock_changed', nombre, stock_antes: r3b(antes), stock_ahora: r3b(ahora), objetivo, proposal: fresh,
+    message: 'El stock de ' + nombre + ' cambió de ' + r3b(antes) + ' a ' + r3b(ahora) + ' desde que preparé la tarjeta. Con ' + (card.tipo === 'salida' ? 'la salida' : 'la entrada')
+      + ' de ' + q + ' queda en ' + objetivo + '. Revisa la tarjeta nueva.' };
+}
 export async function readConfirmToken(token, secret) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig || token.length > 2000) return null;
@@ -3052,6 +3074,13 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
       if (missing.length) return json({ error: 'product_missing', message: 'Ese producto ya no está en el inventario. Pide la tarjeta de nuevo.' }, 409);
       const bad = lines.filter((l) => l.product_id && byId.get(String(l.product_id)).controla === false).map((l) => l.nombre);
       if (bad.length) return json({ error: 'sin_control_stock', nombres: bad, message: bad.map(NO_STOCK_TEXT).join(' ') }, 409);
+      // (revisión #996) Tarjeta del lote («sí»/«siguientes»): lleva el stock leído en el servidor en ese turno. Si la base ya tiene otro
+      // (una venta o movimiento en medio), no se aplica nada: 409 stock_changed con el formato de #983 (message + tarjeta NUEVA firmada).
+      if (tok.t === 'ajuste' && applied.stock_de_servidor === true) {
+        const sc = await staleBulkCard(applied, byId.get(String(applied.product_id)), role, auth, secret, now);
+        if (sc === 'unavailable') return unavailable();
+        if (sc) return json({ ...sc, operation_id: tok.op }, 409);
+      }
     }
   }
   // Límite de confirmaciones por aparato y minuto.
@@ -3310,7 +3339,19 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const loadProducts = async () => { if (!rd0 || typeof rd0.products !== 'function') return null; try { return await rd0.products(); } catch { return null; } };
   let sysProducts = PRICE_ASK_RE.test(parsed.text || '') ? await loadProducts() : null;
   const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
-  const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
+  // (INV-057) «sí» a la pregunta del tope o «siguientes»: la lista guardada en el servidor, sin llamar al modelo. El stock sale de la base
+  // (solo lectura, solo los productos de la lista): el contexto del aparato no cuenta para este turno.
+  const bulk = !resetAsk && !parsed.image ? await bulkTurn(store, auth, now, parsed) : null;
+  if (bulk) {
+    const ids = new Set(bulk.calls.map((c) => { try { return String(JSON.parse(c.arguments).product_id ?? ''); } catch { return ''; } }).filter(Boolean));
+    const srv = await loadProducts();
+    if (!srv) bulk.failed = true;
+    else {
+      ctx.products = sanitizeContext({ products: srv.filter((p) => p && ids.has(String(p.id))) }, role).products;
+      if (bulk.stage === 'first') bulk.lines = bulk.calls.map((c, k) => bulkLine(toProposal(c, role, ctx, k + 1), k));
+    }
+  }
+  const sse = parsed.stream && deps.sse && !resetAsk && !bulk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
   // (UNI-058 / INV-041 / INV-027) lo conocido en este pedido para el filtro final: productos (marca «Don Vittorio» no se tapa), clientes de la
   // lista (siempre tapados) y, para el Admin, los nombres seguros de los «producto #N» citados. Se lee solo si hace falta (prepKnown).
@@ -3345,7 +3386,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   let result, req = null; const bytes = [];
   // Códigos de cliente neutros (C-0001…) hacia la IA: un mapa para todo el pedido (primera y segunda llamada), ver pos-assistant-codigos.js.
   const ccfg = cfg.ok ? { ...cfg, codes: createCodeMap() } : cfg;
-  if (mode === 'mock') {
+  if (bulk) {
+    result = { content: '', calls: bulk.failed ? [] : bulk.calls.slice(bulk.from, bulk.to).map((c, k) => ({ id: 'lote' + (bulk.from + k + 1), name: c.name, arguments: c.arguments })), usage: null };
+    tm.bulk = bulk.stage;
+  } else if (mode === 'mock') {
     result = mockAssistantReply({ role, ctx, text: parsed.text, image: !!parsed.image });
     // Empleado: si la demostración trae una herramienta prohibida, no sale ningún texto (igual que el corte en DeepSeek).
     const bad = guard ? (result.calls || []).map((c) => guard({ name: c.name, arguments: typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments || {}) })).find(Boolean) : null;
@@ -3395,6 +3439,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   result.calls = result.calls.filter((c) => { let a = c?.arguments; if (typeof a === 'string') { try { a = JSON.parse(a); } catch { /* se queda como texto */ } }
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
+  // (revisión #996) Tarjetas de ajuste del lote: su stock_actual se leyó en el servidor en ESTE turno. La marca va firmada en el token y
+  // «Aplicar» vuelve a comparar ese stock con la base (confirmCore): si hubo una venta en medio -> 409 stale_stock.
+  if (bulk && !bulk.failed) for (const p of proposals) if (p.type === 'ajuste' && Number.isFinite(Number(p.stock_actual))) p.stock_de_servidor = true;
   arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
   // (auditoría 500, CP-037) costo que nadie dijo (ni en este mensaje ni en los anteriores de la persona): queda vacío y marcado, no inventado.
   // Solo compras dictadas por texto («compré…», «me llegaron…»); una factura leída trae sus costos.
@@ -3534,6 +3581,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (sc.card && !proposals.some((p) => p.type === 'costo' && String(p.product_id) === String(sc.card.product_id))) proposals.push(sc.card);
     costReply = sc.reply;
   }
+  const capCalls = !resetAsk && !bulk ? overCapCalls(proposals) : null; // (INV-057) antes de quitar _call
   for (const p of proposals) delete p._call;
   // Id único de propuesta: lo genera el SERVIDOR y queda firmado dentro del token (pid). El cliente nunca lo arma.
   for (const p of proposals) p.id = crypto.randomUUID();
@@ -3585,10 +3633,16 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
   // (auditoría 500, SEG) varias tarjetas de cambio de producto en una respuesta: el servidor dice cuántas son y que cada una se aplica aparte
   // (no depende del modelo). Si el texto ya cortado era el del tope, sigue marcado como cortado.
-  if (!resetAsk) { const was = capped !== null && reply === capped; const r2 = withChangeCount(reply, proposals); if (r2 !== reply) { reply = r2; if (was) capped = reply; } }
+  // (auditoría 500, INV-057) «súmale 10 a todo» sacó 19 tarjetas: con más de MAX_CHANGE_CARDS tarjetas de cambio el SERVIDOR no manda ninguna
+  // (quedan en dropped como tope_tarjetas) y pregunta si muestra la lista primero. De 2 a 5 sigue la frase «Son N productos…» de #987.
+  const overCap = !resetAsk && !bulk && capChangeCards(proposals, dropped);
+  if (overCap) { reply = overCap; if (capCalls) await saveBulk(store, auth, now, capCalls, /productos;/.test(overCap)); }
+  else if (bulk && bulk.failed) reply = BULK_READ_FAILED_TEXT; // sin avanzar: la lista sigue guardada
+  else if (bulk) { reply = bulk.stage === 'first' ? maskReplyPeople(bulkFirstText(bulk, bulk.lines)) : bulkNextText(bulk); await advanceBulk(store, bulk); }
+  else if (!resetAsk) { const was = capped !== null && reply === capped; const r2 = withChangeCount(reply, proposals); if (r2 !== reply) { reply = r2; if (was) capped = reply; } }
   // (auditoría 500) avisos fijos del servidor, cada uno en su línea (pos-assistant-varios.js): lo que no se atendió nunca se pierde en silencio.
   // Van DESPUÉS de la frase «Son N productos…» (que se pega a la última frase): así cada aviso queda en su propia línea y CHANGE_COUNT_RE no los toca.
-  if (!resetAsk) reply = await serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader: rd0 });
+  if (!resetAsk) reply = await serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader: rd0, overCap: !!overCap || !!bulk });
   tm.ms_db = Math.round(dbMs); tm.db_stmts = dbc.n; tm.ms_total = ms(t0); // antes de la bitácora (su escritura: +1 sentencia)
   const times = timingFields(tm); logTimings(tm);
   // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos. La primera fila lleva los tiempos del pedido (sin migración:
@@ -3623,13 +3677,13 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
 }
 
 // (auditoría 500) AJ-002 negativos en masa, AJ-043 varios movimientos sin tarjeta y VE-010 mensaje cortado: una línea aparte por aviso.
-async function serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader }) {
+async function serverNotices(reply, { role, parsed, proposals, dropped, noStock, reader, overCap }) {
   const lines = [];
   const canAdjust = toolAllowed(role, 'proponer_ajuste_stock'), adj = proposals.filter((p) => p.type === 'ajuste');
   if (canAdjust && asksNegativeBulk(parsed.text)) {
     let list = null; try { if (reader && typeof reader.products === 'function') list = await reader.products(); } catch { list = null; } // solo lectura
     lines.push(negativeBulkText(list, adj.map((p) => p.product_id)));
-  } else if (canAdjust && !proposals.some((p) => p.type === 'compra')) {
+  } else if (canAdjust && !overCap && !proposals.some((p) => p.type === 'compra')) { // con el tope ya se preguntó por la lista entera
     const reqs = adjustRequests(parsed.text);
     const left = reqs.length ? unattendedRequests(reqs, [...adj.map((p) => p.nombre), ...(noStock || [])]) : [];
     if (left.length) lines.push(unattendedText(left));
@@ -3642,6 +3696,81 @@ async function serverNotices(reply, { role, parsed, proposals, dropped, noStock,
 const PER_PRODUCT_CARDS = new Set(['precio', 'costo', 'ajuste', 'producto']);
 const CHANGE_COUNT_RE = /\s*Son \d+ productos; cada uno se aplica aparte con su «(?:Confirmar|Aplicar)»\./g;
 export function changeCountText(n) { return 'Son ' + n + ' productos; cada uno se aplica aparte con su «Aplicar».'; }
+// (INV-057) tope del servidor: más de 5 tarjetas de cambio en una respuesta -> ninguna tarjeta y una pregunta con el número real.
+export const MAX_CHANGE_CARDS = 5;
+export function changeCapText(n, allProducts = true) { return 'Son ' + n + (allProducts ? ' productos' : ' cambios') + '; ¿le muestro la lista para revisarla antes?'; }
+// Vacía proposals (y anota cada tarjeta en dropped) si hay más de MAX_CHANGE_CARDS tarjetas de cambio. Devuelve la pregunta o null.
+export function capChangeCards(proposals, dropped) {
+  const changes = (proposals || []).filter((p) => p && p.needsConfirm);
+  if (changes.length <= MAX_CHANGE_CARDS) return null;
+  for (const p of proposals) if (p && p.needsConfirm) dropped.push({ tool: AUDIT_TOOL[p.type] || TYPE_TOOL[p.type] || p.type, dropped: 'tope_tarjetas' });
+  proposals.length = 0;
+  return changeCapText(changes.length, changes.every((p) => PER_PRODUCT_CARDS.has(p.type)));
+}
+// (INV-057, revisión de #996) La lista pendiente queda en el SERVIDOR (pos_settings, como lo enseñado hoy; sin tabla nueva ni migración),
+// por aparato y 30 min: las llamadas del modelo tal cual (nombre + argumentos). «sí» a la pregunta -> la lista en texto (stock del servidor)
+// y las primeras 5 tarjetas en la MISMA respuesta; «siguientes» -> las 5 que siguen, hasta el final. Sin otra llamada al modelo: las tarjetas
+// salen de las llamadas guardadas por toProposal, con el rol de ESTE pedido (un empleado sigue sin poder lo que no podía).
+export const BULK_PREFIX = USAGE_PREFIX + 'lote:';
+export const BULK_TTL_MS = 30 * 60 * 1000, BULK_MAX_ITEMS = 200, BULK_LIST_CHARS = 1000;
+export const BULK_FIRST_TAIL = 'Le preparo los primeros ' + MAX_CHANGE_CARDS + ' para aplicar; dígame "siguientes" para los demás.';
+const BULK_YES_RE = /^(?:(?:si|claro|dale|ya|ok|okey|okay|bueno|listo|va|de una|porfa|por favor|a ver|pues|muestra(?:mela|la|me|melo)?|muestrame(?:la)?|ensena(?:mela|la|me)?|ver(?:la)?|la lista|mandala|pasala)[\s,.!]*)+$/;
+const BULK_NEXT_RE = /^(?:(?:ya|ok|dale|si|bueno)[\s,.!]+)?(?:(?:dame|pasa(?:me)?|manda(?:me)?|muestra(?:me)?|ver)\s+)?(?:l[oa]s\s+)?(?:siguientes?|demas|otros|que\s+faltan|que\s+siguen)(?:\s+(?:5|cinco))?(?:[\s,.!]+(?:por\s+favor|porfa))?[\s.!]*$/;
+const bulkFold = (t) => foldText(t).replace(/[¡¿"«»]/g, ' ').replace(/\s+/g, ' ').trim();
+export async function bulkKey(auth) { return BULK_PREFIX + (await sha256Hex(String(auth?.principalId || 'unknown'))).slice(0, 40); }
+// Antes de cerrar el tope: las llamadas del modelo de las tarjetas de cambio (null si alguna no viene de una llamada).
+export function overCapCalls(proposals) {
+  const ch = (proposals || []).filter((p) => p && p.needsConfirm);
+  if (ch.length <= MAX_CHANGE_CARDS || ch.some((p) => !p._call)) return null;
+  return ch.slice(0, BULK_MAX_ITEMS).map((p) => ({ name: String(p._call.name), arguments: typeof p._call.arguments === 'string' ? p._call.arguments : JSON.stringify(p._call.arguments || {}) }));
+}
+export async function saveBulk(store, auth, now, calls, productos) {
+  // (revisión #996) Al guardar una lista (de cualquier aparato) se borran las vencidas de TODOS: la tabla no crece con listas sin confirmar.
+  // Las vigentes de otros aparatos y las demás claves de pos_settings no se tocan. Si la limpieza falla, se guarda igual.
+  if (typeof store.purgeExpired === 'function') { try { await store.purgeExpired(BULK_PREFIX, now - BULK_TTL_MS); } catch { /* sin limpiar esta vez */ } }
+  try { const key = await bulkKey(auth); for (let i = 0; i < 4; i++) { const r = await store.get(key); if (await store.put(key, { iat: now, next: 0, productos: !!productos, calls }, r.revision)) return true; } } catch { /* sin guardar: «sí» va al modelo como siempre */ }
+  return false;
+}
+// ¿Este mensaje es «sí» a la pregunta del tope o «siguientes» de un lote? Solo si la ÚLTIMA respuesta del asistente fue esa y hay lista guardada.
+export async function bulkTurn(store, auth, now, parsed) {
+  const t = bulkFold(parsed && parsed.text); if (!t || t.length > 60) return null;
+  const last = [...((parsed && parsed.history) || [])].reverse().find((m) => m && m.role === 'assistant');
+  const lt = bulkFold(last && last.content);
+  const first = BULK_YES_RE.test(t) && /le muestro la lista para revisarla antes\??$/.test(lt);
+  const next = !first && BULK_NEXT_RE.test(t) && /diga?me siguientes para los demas\.?$/.test(lt);
+  if (!first && !next) return null;
+  try {
+    const key = await bulkKey(auth), r = await store.get(key), v = r && r.value;
+    if (!v || !Array.isArray(v.calls) || !v.calls.length || !Number.isFinite(v.iat) || now - v.iat > BULK_TTL_MS || now < v.iat) return null;
+    const total = v.calls.length, from = Number(v.next) || 0;
+    if (first ? from !== 0 : from <= 0 || from >= total) return null;
+    return { stage: first ? 'first' : 'next', key, revision: r.revision, value: v, total, from, to: Math.min(total, from + MAX_CHANGE_CARDS), calls: v.calls, productos: v.productos !== false };
+  } catch { return null; }
+}
+export async function advanceBulk(store, bulk) {
+  const done = bulk.to >= bulk.total;
+  try { await store.put(bulk.key, done ? {} : { ...bulk.value, next: bulk.to }, bulk.revision); } catch { /* sin avanzar: «siguientes» repite este lote */ }
+}
+const fmtN = (n) => (Number.isFinite(Number(n)) ? String(Math.round(Number(n) * 1000) / 1000) : 'sin dato');
+const fmtS = (n) => (Number.isFinite(Number(n)) ? 'S/ ' + Number(n).toFixed(2) : 'sin dato');
+// Una línea por tarjeta: producto, stock actual (del servidor) y el cambio. p: lo que devolvió toProposal.
+export function bulkLine(p, k) {
+  if (!p || p.dropped) return (k + 1) + '. ' + (p && p.nombre ? p.nombre : 'Producto') + ': no se puede preparar aquí (hágalo en Inventario).';
+  if (p.type === 'ajuste') return (k + 1) + '. ' + p.nombre + ': stock ' + fmtN(p.stock_actual) + ' → ' + fmtN(p.stock_despues) + ' (' + (p.tipo === 'entrada' ? '+' : '-') + fmtN(p.cantidad) + ')';
+  if (p.type === 'precio') return (k + 1) + '. ' + p.nombre + ': precio ' + fmtS(p.precio_actual) + ' → ' + fmtS(p.precio_nuevo);
+  if (p.type === 'producto') return (k + 1) + '. ' + p.nombre + ': producto nuevo, precio ' + fmtS(p.precio);
+  return (k + 1) + '. ' + (p.nombre || p.title || 'Cambio') + ': ' + (p.title || 'cambio');
+}
+export function bulkFirstText(bulk, lines) {
+  const out = []; let len = 0;
+  for (const l of lines) { if (len + l.length > BULK_LIST_CHARS) break; out.push(l); len += l.length + 1; }
+  const rest = lines.length - out.length;
+  return 'Esta es la lista (' + bulk.total + (bulk.productos ? ' productos' : ' cambios') + '):\n' + out.join('\n') + (rest ? '\n… y ' + rest + ' más.' : '') + '\n' + BULK_FIRST_TAIL;
+}
+export function bulkNextText(bulk) {
+  return 'Aquí van los ' + (bulk.productos ? 'productos ' : 'cambios ') + (bulk.from + 1) + ' a ' + bulk.to + ' de ' + bulk.total + '.' + (bulk.to < bulk.total ? ' Dígame "siguientes" para los demás.' : ' Ya no quedan más.');
+}
+export const BULK_READ_FAILED_TEXT = 'No pude leer el stock ahora. Pruebe de nuevo en un momento; la lista sigue guardada.';
 export function withChangeCount(reply, proposals) {
   const n = (proposals || []).filter((p) => p && p.needsConfirm && PER_PRODUCT_CARDS.has(p.type)).length;
   if (n < 2) return reply;

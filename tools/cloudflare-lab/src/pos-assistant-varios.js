@@ -31,7 +31,12 @@ const MOVE_RE = /(?<![a-z])(?:entrada|salida|ingres\w*|agreg\w*|aument\w*|sum\w*
 const NOT_MOVE_RE = /(?<![a-z])(?:precio\w*|costo\w*|cuesta\w*|vende\w*|soles)(?![a-z])|s\/\s*\d/;
 const STOP = new Set(['entrada', 'salida', 'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'uno', 'unos', 'unas', 'al', 'a', 'en', 'y', 'e', 'o', 'por', 'favor', 'con', 'mas', 'menos',
   'unid', 'unidad', 'unidades', 'und', 'uds', 'paquete', 'paquetes', 'caja', 'cajas', 'bolsa', 'bolsas', 'kg', 'kilo', 'kilos', 'litro', 'litros', 'me', 'se', 'le', 'les', 'lo',
-  'otra', 'otro', 'otras', 'otros', 'tambien', 'ademas', 'luego', 'despues', 'stock', 'inventario', 'que', 'hay', 'pon', 'ponle', 'dale', 'haz', 'hazme']);
+  'otra', 'otro', 'otras', 'otros', 'tambien', 'ademas', 'luego', 'despues', 'stock', 'inventario', 'que', 'hay', 'pon', 'ponle', 'dale', 'haz', 'hazme',
+  // (INV-045) relleno de un conteo: «… pero el sistema dice 4, ponlo en 0» no nombra otro producto.
+  'pero', 'sistema', 'dice', 'dijo', 'marca', 'sale', 'figura', 'tiene', 'esta', 'estan', 'queda', 'quede', 'todo', 'todos', 'toda', 'todas', 'mejor', 'ahora', 'nomas', 'solo',
+  'mismo', 'misma', 'igual', 'ese', 'esa', 'eso', 'este', 'esto', 'cero', 'nada']);
+// (INV-045) verbo con pronombre pegado («ponlo», «déjalo», «súbelo», «bájalo», «ajústalo», «cámbialo», «súmale»…): sigue hablando del MISMO producto.
+const CLITIC_VERB_RE = /^(?:pon|pong|dej|sub|baj|ajust|cambi|llev|cuadr|corrig|correg|arregl|agreg|aument|sum|rest|quit|descont|sac|met|carg|anot|registr|actualiz|hac|haz|marc)(?:a|e|ie)?(?:lo|la|los|las|le|les)$/;
 // Partes «verbo número producto» separadas por coma, punto y coma, salto de línea o « y » antes de otro verbo o número.
 export function adjustRequests(text) {
   const t = norm(text);
@@ -42,7 +47,7 @@ export function adjustRequests(text) {
   for (const part of parts) {
     const n = norm(part);
     if (!/\d/.test(n)) continue;
-    const words = n.split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 3 && !/^\d/.test(w) && !STOP.has(w) && !MOVE_RE.test(w));
+    const words = n.split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 3 && !/^\d/.test(w) && !STOP.has(w) && !MOVE_RE.test(w) && !CLITIC_VERB_RE.test(w));
     if (words.length) out.push({ texto: part.slice(0, 80), palabras: words });
   }
   return out.length >= 2 ? out : [];
