@@ -95,6 +95,33 @@
             }
         }
 
+        /* CORRECCIÓN POS móvil: la tarjeta crece con nombre/stock y nunca pinta sobre la fila siguiente. */
+        @media(max-width:700px){
+            #pagePOS .products-area{
+                grid-auto-rows:max-content;
+                align-items:start;
+            }
+            #pagePOS .product-card{
+                height:auto;
+                max-height:none;
+                min-height:190px;
+            }
+            #pagePOS .p-name{
+                width:100%;
+                min-height:2.7em;
+                white-space:normal;
+                overflow:visible;
+                text-overflow:clip;
+                overflow-wrap:anywhere;
+                word-break:break-word;
+                line-height:1.35;
+            }
+            #pagePOS .p-stock-badge{
+                white-space:normal;
+                line-height:1.25;
+            }
+        }
+
         /* CORRECCIÓN: mostrar el contenido completo de tarjetas en escritorio sin alterar el scroll móvil */
         @media(min-width:701px){
             #pageClientes .client-card{height:auto;max-height:none;flex:0 0 auto;min-height:64px}
