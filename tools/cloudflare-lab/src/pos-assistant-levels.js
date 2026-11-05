@@ -3,13 +3,14 @@
 // pos-assistant.js (herramientas), pos-assistant-review.js (revisión) y pos-assistant-levels-route.js (GET/POST del Admin).
 //
 //   Nivel 0  «Sin permiso»  (por defecto del empleado, igual que hoy: el asistente está apagado en su aparato).
-//   Nivel 1  «Con permiso»  el Admin da el permiso UNA vez en Configuración. Explica pasos y consulta stock y productos por reponer.
+//   Nivel 1  «Con permiso»  el Admin da el permiso UNA vez en Configuración. Explica pasos y consulta stock, productos por reponer
+//                           y cuánto debe UN cliente (deuda_cliente con su código; decisión del Admin 23-10).
 //   Nivel 2  «Completo en sus funciones, el resto solo lectura»: lo del 1 + listas imprimibles (precios y pedido). No propone cambios.
 //   Nivel 3  «Sin restricción»: lo del 2 + revisión de la app de punta a punta (errores, fallas, lentitud, pantallas, menús
 //            y cómo se ve en cada aparato, con /auth/assistant/review).
 //   Permiso aparte «costos y cambios» (costos: true), APAGADO por defecto, solo lo da o quita el Admin. SOLO cuenta en el nivel 3:
 //            en el nivel 0, 1 o 2 se guarda pero no hace nada. Con nivel 3 + permiso: ve costos y ganancias, consultas y documentos del
-//            negocio (sin deudas de clientes ni caja) y recibe tarjetas de cambio que él mismo aplica con UN toque en «Aplicar» (la
+//            negocio (sin las deudas de toda la tienda ni caja) y recibe tarjetas de cambio que él mismo aplica con UN toque en «Aplicar» (la
 //            bitácora anota SU aparato). Sin el permiso, el nivel 3 sigue igual que antes (sin costos ni cambios).
 //   Admin    siempre nivel 3 y además todo lo de hoy: cambios con UN toque en «Aplicar», costos, compras, fotos y configurar niveles.
 //            Sin PIN y sin otra autenticación (pedido del dueño). No se puede bajar.
@@ -26,10 +27,10 @@ export const LEVEL_LABELS = Object.freeze(['Sin permiso', 'Nivel 1: con permiso'
 
 const freezeAll = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Array.isArray(v) ? Object.freeze(v) : v])));
 const NONE = freezeAll({ asistente: false, herramientas: [], consultas: [], documentos: [], revision: false, cambios: false, cambios_masivos: false, costos: false, fotos: false, configurar: false });
-const L1 = freezeAll({ ...NONE, asistente: true, herramientas: ['explicar_pasos', 'consultar'], consultas: ['stock_producto', 'bajo_stock'] });
+const L1 = freezeAll({ ...NONE, asistente: true, herramientas: ['explicar_pasos', 'consultar'], consultas: ['stock_producto', 'bajo_stock', 'deuda_cliente'] });
 const L2 = freezeAll({ ...L1, herramientas: [...L1.herramientas, 'preparar_documento'], documentos: ['lista_precios', 'lista_pedido'] });
 const L3 = freezeAll({ ...L2, revision: true });
-// Nivel 3 + permiso «costos y cambios». Fuera siempre: deudas y estado de cuenta de clientes, caja, fotos, configurar niveles y
+// Nivel 3 + permiso «costos y cambios». Fuera siempre: deudas de toda la tienda y estado de cuenta de clientes, caja, fotos, configurar niveles y
 // cambios masivos (cambios_masivos: false, heredado de NONE): una tarjeta por producto, nunca una tarjeta que cambia muchos a la vez.
 // configurar_app: SOLO los datos del negocio y del ticket (destino servidor, pos-assistant-config-route.js); las claves de #972 siguen del Admin.
 const L3C = freezeAll({ ...L3, costos: true, cambios: true,

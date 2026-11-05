@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, redactFor, redactText, redactModelOwner, redactOwnerText, redactEmployeeText, sanitizeContext, toProposal, redactDeep, customerCode } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, redactFor, redactText, redactModelOwner, redactOwnerText, redactEmployeeText, sanitizeContext, toProposal, redactDeep, customerCode, pingBody, toolsForRole } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { cleanHints, boletaRequest } from '../../tools/cloudflare-lab/src/pos-assistant-boleta.js';
 import { memoryReader, runAssistantQuery } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 const require = createRequire(import.meta.url);
@@ -76,7 +76,7 @@ test('1) aparato: nombres y direcciones de clientes conocidos -> «cliente #cód
 });
 test('1) UI: el mensaje pasa por maskCustomers ANTES del redactor y del envío (el historial guarda lo mismo); la respuesta pinta el nombre local', () => {
   assert.match(UI, /var masked = C\.maskCustomers \? C\.maskCustomers\(text, deps\.clientes\(\), deps\.productos\(\), deps\.proveedores \? deps\.proveedores\(\) : \[\]\) : \{ text: text \};\n\s*var body = \{ text: C\.redactText\(masked\.text\), history/);
-  assert.match(UI, /if \(C\.customerCodesIn && isOwnerAccess\(\)\) linkCustomers\(bubble, C\.customerCodesIn\(d\.reply, deps\.clientes\(\)\)\);/);
+  assert.match(UI, /if \(C\.customerCodesIn && isAdmin\(\)\) linkCustomers\(bubble, C\.customerCodesIn\(d\.reply, deps\.clientes\(\)\)\);/); // Admin y empleado (23-10)
   assert.ok(!/text: C\.redactText\(text\)/.test(UI), 'ya no se manda el texto sin cambiar nombres');
 });
 test('1) servidor: el estado de cuenta va por cliente_id (código), nunca por nombre; la herramienta ya no pide el nombre', async () => {
@@ -158,12 +158,65 @@ test('(1) deudas_clientes: la TABLA también va con «cliente #código» (sin no
   const codes = C.customerCodesIn(cell.textContent, local); assert.deepEqual(codes, [local[0].id]);
   assert.equal(api.linkCustomers(cell, codes), 1);
   assert.equal(cell.byClass('na-asst-cli')[0].textContent, 'cliente #' + local[0].id + ' (' + local[0].nombre + ')');
-  // la línea real de addCard: Admin ve el nombre en la tarjeta; el empleado solo «cliente #código» (sin botón ni nombre)
-  const line = UI.split('\n').find((l) => l.includes("var qt = p.type === 'consulta'")); assert.ok(line && line.includes('isOwnerAccess()'), line);
+  // la línea real de addCard: el Admin y también el empleado ven el nombre en la tarjeta (decisión del Admin 23-10); sin acceso, solo el código
+  const line = UI.split('\n').find((l) => l.includes("var qt = p.type === 'consulta'")); assert.ok(line && line.includes('isAdmin()'), line);
   const card = (owner) => { const c = doc.createElement('div'), t = doc.createElement('table'); t.className = 'q'; const td = doc.createElement('td'); td.textContent = 'cliente #' + local[0].id; t.appendChild(td); c.appendChild(t);
     c.querySelector = (sel) => (sel === 'table.q' ? t : null);
-    new Function('p', 'c', 'C', 'deps', 'linkCustomers', 'isOwnerAccess', line)({ type: 'consulta' }, c, C, { clientes: () => local }, api.linkCustomers, () => owner); return t; };
-  const adm = card(true), emp = card(false);
-  assert.ok(adm.textContent.includes(local[0].nombre), 'Admin: nombre real en la tarjeta: ' + adm.textContent);
-  assert.equal(emp.textContent, 'cliente #' + local[0].id, 'empleado: solo el código'); assert.equal(emp.byClass('na-asst-cli').length, 0);
+    new Function('p', 'c', 'C', 'deps', 'linkCustomers', 'isAdmin', line)({ type: 'consulta' }, c, C, { clientes: () => local }, api.linkCustomers, () => owner); return t; };
+  const adm = card(true), off = card(false);
+  assert.ok(adm.textContent.includes(local[0].nombre), 'Admin y empleado con asistente: nombre real en la tarjeta: ' + adm.textContent);
+  assert.equal(off.textContent, 'cliente #' + local[0].id, 'sin acceso al asistente: solo el código'); assert.equal(off.byClass('na-asst-cli').length, 0);
+});
+
+// (revisión #1018) Regla del Admin 23-10: el empleado CON asistente (nivel 1 o más) ve el nombre en pantalla y puede pedir deuda_cliente.
+// El de nivel 0 («Sin permiso»), o el que quedó con un acceso viejo en el aparato después de que el Admin se lo quitó, no: en pantalla
+// solo «cliente #código», y el servidor responde 403 assistant_off sin llamar a la IA ni leer la base (ni deuda ni nombres hacia la IA).
+test('(1) empleado de nivel 0 o con acceso viejo en el aparato: en pantalla solo el código; ni deuda_cliente ni nombres hacia la IA (regla del Admin 23-10)', async () => {
+  // isAdmin()/isOwnerAccess() reales de asistente-ui.js, con el estado del aparato que se le dé
+  const defs = UI.split('\n').filter((l) => /^\s*function (isAdmin|isOwnerAccess)\(\)/.test(l)); assert.equal(defs.length, 2, 'isAdmin e isOwnerAccess');
+  const gate = (access, adminOff) => new Function('access', 'adminOff', defs.join('\n') + '\nreturn { isAdmin: isAdmin, isOwnerAccess: isOwnerAccess };')(access, adminOff);
+  const off0 = pingBody('empleado:off'); assert.equal(off0.level, 'off');
+  const cases = [
+    ['nivel 0 (ping del servidor)', { role: off0.role, level: off0.level }, false],
+    ['sin acceso (403 del ping: access = null)', null, false],
+    ['acceso viejo de nivel 1 en el aparato, el Admin lo apagó (adminOff)', { role: 'empleado', level: 'consultas' }, true]];
+  for (const [label, access, adminOff] of cases) assert.equal(gate(access, adminOff).isAdmin(), false, label);
+  assert.equal(gate({ role: 'empleado', level: 'consultas' }, false).isAdmin(), true, 'nivel 1 vigente: sí');
+  assert.equal(gate({ role: 'empleado', level: pingBody('empleado:completo').level }, false).isAdmin(), true, 'nivel 3 (el ping lo manda como consultas_documentos): sí');
+  // el 403 del ping borra el acceso guardado: lo viejo no sigue mostrando nombres
+  assert.match(UI, /d\.status === 403 \|\| d\.status === 401 \|\| d\.status === 404\)\) \{ access = null;/);
+  // la línea real de la tarjeta con ese isAdmin(): solo «cliente #código», sin botón ni nombre
+  const local = [{ id: 'R7', nombre: 'Rosa Prueba' }];
+  const { makeDoc } = await import('./fake-dom.mjs');
+  const doc = makeDoc(), el = (t, c) => { const e = doc.createElement(t); if (c) e.className = c; return e; };
+  const s0 = UI.indexOf('  var CLI_RE = '), s1 = UI.indexOf('  // ---------- «Leer boleta con IA»');
+  const api = new Function('root', 'doc', 'C', 'el', 'addMsg', 'deps', UI.slice(s0, s1) + '\nreturn { linkCustomers: linkCustomers };')({}, doc, C, el, () => {}, { clientes: () => local });
+  const line = UI.split('\n').find((l) => l.includes("var qt = p.type === 'consulta'"));
+  const bline = UI.split('\n').find((l) => l.includes('linkCustomers(bubble, C.customerCodesIn(d.reply'));
+  for (const [label, access, adminOff] of cases) {
+    const g = gate(access, adminOff);
+    const c = doc.createElement('div'), t = doc.createElement('table'); t.className = 'q'; const td = doc.createElement('td'); td.textContent = 'cliente #R7'; t.appendChild(td); c.appendChild(t);
+    c.querySelector = (sel) => (sel === 'table.q' ? t : null);
+    new Function('p', 'c', 'C', 'deps', 'linkCustomers', 'isAdmin', line)({ type: 'consulta' }, c, C, { clientes: () => local }, api.linkCustomers, g.isAdmin);
+    assert.equal(t.textContent, 'cliente #R7', label + ': tabla'); assert.equal(t.byClass('na-asst-cli').length, 0, label);
+    const bubble = doc.createElement('div'); bubble.textContent = 'cliente #R7 debe S/ 50.00';
+    new Function('bubble', 'd', 'C', 'deps', 'linkCustomers', 'isAdmin', bline)(bubble, { reply: bubble.textContent }, C, { clientes: () => local }, api.linkCustomers, g.isAdmin);
+    assert.equal(bubble.textContent, 'cliente #R7 debe S/ 50.00', label + ': burbuja'); assert.equal(bubble.byClass('na-asst-cli').length, 0, label);
+  }
+  // nivel 0: ni consultar ni deuda_cliente en sus herramientas
+  for (const role of ['empleado:off', 'empleado', 'sin_rol']) assert.ok(!JSON.stringify(toolsForRole(role)).includes('deuda_cliente'), role);
+  // servidor con acceso viejo: el aparato aún cree tener acceso y pregunta; el servidor resuelve nivel 0 -> 403, sin IA y sin leer la base
+  const data = { customers: [{ id: 'R7', nombre: 'Rosa Prueba', dni: '40998877' }], credits: [{ cliente: 'R7', saldo: 50, vence: '2026-11-05' }], products: [] };
+  for (const role of ['empleado:off', 'empleado', 'sin_rol']) for (const stream of [false, true]) {
+    const cap = [], reads = [], base = memoryReader(data), rd = {};
+    for (const k of Object.keys(base)) rd[k] = async (...a) => { reads.push(k); return base[k](...a); };
+    const fetch = async (_u, init) => { cap.push(String(init.body)); return jsonR({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: 'q', type: 'function', function: { name: 'consultar', arguments: JSON.stringify({ tipo: 'deuda_cliente', cliente_id: 'R7' }) } }] } }] }); };
+    const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: '¿cuánto debe cliente #R7?', stream }) }),
+      { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: 'secreto-de-prueba-0123456789abcdef', DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:x', posRole: 'empleado' }, jsonR,
+      { store: createMemoryUsageStore(), resolveRole: async () => role, fetch, reader: rd, audit: async () => {} });
+    const raw = await r.text(), tag = role + (stream ? ' (por partes)' : '');
+    assert.equal(r.status, 403, tag + ': ' + raw.slice(0, 200)); assert.match(raw, /assistant_off|admin_only/, tag);
+    assert.equal(cap.length, 0, tag + ': sin llamada a la IA'); assert.deepEqual(reads, [], tag + ': sin leer la base');
+    assert.ok(!/Rosa|40998877|50\.00|S\//.test(raw), tag + ': ' + raw);
+  }
 });

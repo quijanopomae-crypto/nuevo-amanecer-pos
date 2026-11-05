@@ -1543,7 +1543,8 @@ const QUERY_TYPE_TEXT = Object.freeze({
   stock_producto: 'stock de un producto (stock_producto)', bajo_stock: 'productos por reponer (bajo_stock)', sin_costo: 'productos sin costo (sin_costo)',
   ventas_periodo: 'ventas de un día o período (ventas_periodo)', top_productos: 'productos más vendidos (top_productos)', compras_recientes: 'compras recientes (compras_recientes)',
   ganancia: 'ganancia (ventas menos costo de lo vendido: «cuánto gané hoy», «utilidad»)', productos_sin_ventas: 'productos_sin_ventas (los que no se venden, por defecto los últimos 30 días)',
-  ventas_por_hora: 'ventas_por_hora (número de ventas y total por hora: «a qué hora vendo más»; sin período, esta semana)'
+  ventas_por_hora: 'ventas_por_hora (número de ventas y total por hora: «a qué hora vendo más»; sin período, esta semana)',
+  deuda_cliente: 'cuánto debe UN cliente (deuda_cliente: cliente_id = el código de «cliente #CODIGO», nunca el nombre)'
 });
 const DATED_QUERY_TYPES = Object.freeze(['ventas_periodo', 'top_productos', 'compras_recientes', 'ganancia', 'productos_sin_ventas', 'ventas_por_hora']);
 function employeeQueryDescription(only) {
@@ -1564,8 +1565,10 @@ function employeeTool(t, role) {
   const only = t.name === 'preparar_documento' ? caps.documentos : t.name === 'consultar' ? caps.consultas : null;
   if (!only) return { name: t.name, description: t.description, parameters: t.parameters };
   const description = t.name === 'preparar_documento' ? employeeDocDescription(only) : employeeQueryDescription(only);
-  // Solo los campos que sirven a sus tipos: sin cliente_id (deuda_cliente y estado de cuenta son del Admin).
-  const { cliente_id: _c, ...props } = t.parameters.properties;
+  // Solo los campos que sirven a sus tipos: cliente_id solo si su nivel tiene deuda_cliente (UN cliente, decisión del Admin 23-10);
+  // el estado de cuenta y las deudas de toda la tienda siguen del Admin.
+  const { cliente_id: cid, ...props } = t.parameters.properties;
+  if (cid && only.includes('deuda_cliente')) props.cliente_id = cid;
   return { name: t.name, description, parameters: { ...t.parameters, properties: { ...props, tipo: { type: 'string', enum: [...only] } } } };
 }
 // Pedido explícito de un documento que el empleado no puede ver: se responde 403 forbidden_document en JSON ANTES de abrir el canal
@@ -1634,14 +1637,16 @@ export const STOCK_NOT_UP_RE = /\b(?:compr\w*|ingres\w*|registr\w*)\b[^.?!\n]{0,
 export const STOCK_NOT_UP_RULE = 'COMPRA QUE NO SUBE EL STOCK: 1) Inventario > Compras > Historial: ¿se guardó? Si no, regístrala en Nueva compra. 2) Si está, revisa su stock (stock_producto) y Kardex.';
 // Prompt por rol (pedido de alfa, 22-10): cada rol recibe solo sus líneas. El empleado no recibe las guías de caja, boleta/factura de compra
 // ni deudas/estado de cuenta (herramientas y tipos que no tiene); el Admin recibe todo. Los cortes del servidor siguen igual (defensa en profundidad).
+// Empleado (decisión del Admin 23-10): cuánto debe UN cliente sí; el estado de cuenta y las deudas de toda la tienda, no.
+const EMPLOYEE_DEBT_RULE = ' Para cuánto debe UN cliente: consultar deuda_cliente con cliente_id = su código de «cliente #código».';
 export function systemPrompt(role, ctx, text = '') {
   const business = sanitizeBusinessName(ctx && ctx.business), admin = role === 'owner';
   return [
     // Pedido del dueño (22-10): al presentarse, «tienda de abarrotes» (nunca otro tipo de negocio).
     'Eres "Burbuja", el asistente del negocio «' + business + '», una tienda de abarrotes, y ayudas con la gestión del sistema (Perú, soles S/).',
     role === 'owner' ? 'Hablas con el ADMIN (administrador del negocio); llámalo Admin, nunca «dueño». Para el nivel del asistente de una persona o su permiso de costos usa configurar_nivel con la etiqueta de su aparato (por ejemplo «Caja 2»), nunca con su nombre.'
-      : hasCosts(role) ? 'Hablas con un EMPLEADO con permiso de costos y cambios: puedes mostrar costos y ganancias y proponer cambios (precios, stock, compras, productos), que él aplica con un toque. No muestres caja ni deudas de clientes.'
-      : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni deudas. No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el Admin desde su teléfono.',
+      : hasCosts(role) ? 'Hablas con un EMPLEADO con permiso de costos y cambios: puedes mostrar costos y ganancias y proponer cambios (precios, stock, compras, productos), que él aplica con un toque. No muestres caja ni las deudas de toda la tienda.' + EMPLOYEE_DEBT_RULE
+      : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni las deudas de toda la tienda.' + EMPLOYEE_DEBT_RULE + ' No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el Admin desde su teléfono.',
     // Pedido del dueño: fácil y sin marear.
     'FORMA DE RESPONDER: máximo 2 o 3 frases cortas. Español sencillo, como le hablarías a un compañero del negocio. Sin palabras técnicas (nada de "token", "id", "API", "servidor", "error", "base de datos", códigos ni números de error).',
     palabrasRule(business),
@@ -2773,6 +2778,9 @@ export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
 // Bot 5: lo que un EMPLEADO puede recibir de una consulta (pantalla y modelo). Lista blanca por tipo; todo lo demás (costos, márgenes,
 // ganancia, inversión, caja, deudas) se quita ANTES de mandar cualquier trozo y antes de dárselo al modelo.
 // «aviso» no va en esta lista: el del empleado se rearma aparte, solo con avisos de fechas y conteos (ver withNotice / employeeNoticeText).
+// Decisión del Admin (23-10): el empleado ve cuánto debe UN cliente (deuda_cliente), sin nombre (va «cliente #código»; el nombre lo pone
+// su aparato). Lista blanca propia: código, saldo, créditos abiertos y vencimiento. Nada de costos ni de totales de la tienda.
+const EMPLOYEE_DEBT_FIELDS = Object.freeze({ resumen: ['cliente', 'saldo_soles', 'creditos_abiertos', 'vence_primero', 'falta'], columnas: ['Vence', 'Saldo S/'] });
 const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'precio', 'stock', 'minimo', 'estado'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
 export const OWNER_ONLY_KEY = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles/i;
 const OWNER_ONLY_KEY_MODEL = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles|proveedor|supplier|compra|purchase|precio_compra/i;
@@ -2785,8 +2793,27 @@ export function stripOwnerKeys(v, depth = 0) {
 // (revisión de alfa, PR #984) «aviso» NO está en la lista blanca: puede venir de cualquier consulta y traer montos. Al empleado solo le llega
 // el aviso rearmado desde los avisos estructurados de fechas y conteos (NOTICES, ver employeeNoticeText): nunca plata.
 const withNotice = (res, aviso) => (aviso ? { ...res, aviso } : res);
+// (revisión #1018) Texto de deuda_cliente del empleado: solo una de las frases fijas de la consulta, armadas con lo que ya pasó la lista
+// blanca (código, saldo, créditos abiertos, vencimiento). Si el texto trae otra cosa (nombre, DNI, teléfono, otro cliente, totales de la
+// tienda), no pasa: se usa la frase armada aquí. El total solo puede ser el número de créditos abiertos (nunca plata).
+function employeeDebtText(texto, res) {
+  if (res.falta === 'cliente_id') return 'Dime el código del cliente (aparece como «cliente #código» en Clientes).';
+  const ref = typeof res.cliente === 'string' && /^cliente #[A-Za-z0-9_-]{1,40}$/.test(res.cliente) ? res.cliente : null;
+  if (!ref) return '';
+  const n = Number(res.creditos_abiertos), saldo = Number(res.saldo_soles), vence = /^\d{4}-\d{2}-\d{2}$/.test(String(res.vence_primero || '')) ? res.vence_primero : null;
+  const ok = Number.isInteger(n) && n > 0 && Number.isFinite(saldo)
+    ? [ref + ' debe S/ ' + saldo.toFixed(2) + ' en ' + n + (n === 1 ? ' crédito abierto' : ' créditos abiertos') + (vence ? '; el primero vence el ' + vence : '') + '.']
+    : ['No encontré deudas de ' + ref + '. Revise el código en Clientes.', ref + ' no tiene deudas pendientes.'];
+  return ok.includes(String(texto || '')) ? String(texto) : ok[0];
+}
 export function employeeQueryResult(r) {
   if (!r || r.error) return r;
+  if (r.tipo === 'deuda_cliente') {
+    const cols = Array.isArray(r.columnas) ? r.columnas : [], idx = cols.map((c, i) => EMPLOYEE_DEBT_FIELDS.columnas.includes(c) ? i : -1).filter((i) => i >= 0);
+    const res = r.resumen || {}, resumen = Object.fromEntries(EMPLOYEE_DEBT_FIELDS.resumen.filter((k) => k in res && (res[k] == null || typeof res[k] !== 'object')).map((k) => [k, res[k]]));
+    return { tipo: r.tipo, titulo: r.titulo, columnas: idx.map((i) => cols[i]), filas: (Array.isArray(r.filas) ? r.filas : []).map((f) => idx.map((i) => f[i])),
+      texto: employeeDebtText(r.texto, resumen), total: Number.isInteger(r.total) && r.total === resumen.creditos_abiertos ? r.total : null, resumen };
+  }
   const keep = (v) => Array.isArray(v) ? v.map(keep) : v && typeof v === 'object'
     ? Object.fromEntries(Object.entries(v).filter(([k]) => EMPLOYEE_QUERY_FIELDS.resumen.includes(k) && !OWNER_ONLY_KEY.test(k)).map(([k, x]) => [k, keep(x)])) : v;
   const cols = Array.isArray(r.columnas) ? r.columnas : [], idx = cols.map((c, i) => EMPLOYEE_QUERY_FIELDS.columnas.includes(c) ? i : -1).filter((i) => i >= 0);
@@ -3484,6 +3511,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const redactRefs = refList.length ? (t) => protectProductRefs(t, refList, redactText) : redactText;
     const forModel = r.error ? { error: r.error } : { tipo: r.tipo, resumen: redactDeep(seesOwnerData(role) ? r.resumen : stripOwnerKeys(r.resumen), 0, redactRefs) };
     for (const id of refList) refIds.add(id);
+    // deuda_cliente del empleado (decisión del Admin 23-10): el resumen ya pasó EMPLOYEE_DEBT_FIELDS (código, saldo, créditos, vencimiento).
+    if (!r.error && !seesOwnerData(role) && r.tipo === 'deuda_cliente') forModel.resumen = redactDeep(r.resumen, 0, redactRefs);
     if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: redactRefs(JSON.stringify(forModel)).slice(0, 2000) });
   }
   // mismo filtro que el texto en partes (Bot 5) y DESPUÉS el tope con aviso (Bot 2), igual que lo pintado
