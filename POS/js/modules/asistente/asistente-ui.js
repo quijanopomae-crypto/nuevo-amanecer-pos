@@ -473,7 +473,10 @@
   function showNew() { if (!newBtn || !msgsEl || noteSeen() || (liveCard && inView(liveCard))) return; msgsEl.appendChild(newBtn); newBtn.hidden = false; } // siempre al final de la lista (sticky abajo)
   function follow(stick) { if (stick) scrollEnd(); else showNew(); }
   // Lector de pantalla: la respuesta se anuncia UNA vez, completa, al final (la lista de mensajes no es aria-live: no lee trozo por trozo).
-  function announce(t) { if (!liveEl) return; liveEl.textContent = ''; var v = String(t || ''); setTimeout(function () { if (liveEl) liveEl.textContent = v; }, 30); }
+  // liveT: el aviso pendiente (30 ms); «Nueva conversación» lo cancela y vacía la región (está recortada, no display:none: sigue en innerText).
+  var liveT = 0;
+  function announce(t) { if (!liveEl) return; clearTimeout(liveT); liveEl.textContent = ''; var v = String(t || ''); liveT = setTimeout(function () { liveT = 0; if (liveEl) liveEl.textContent = v; }, 30); }
+  function unannounce() { clearTimeout(liveT); liveT = 0; if (liveEl) liveEl.textContent = ''; }
   function addMsg(kind, text, img) { var m = el('div', 'na-asst-msg ' + kind); if (kind === 'a') paintReply(m, text); else m.textContent = text; if (img) { var i = el('img'); i.src = img; i.alt = 'Foto enviada'; m.appendChild(i); } msgsEl.appendChild(m); scrollEnd(); return m; }
   // Respuesta del asistente: tablas «| … |» con «|---|» como tabla (a 480 px o menos, una ficha por fila). Solo createElement/textContent.
   function paintReply(m, t, opts) { m.textContent = ''; if (m.classList) m.classList.remove('na-asst-wide'); var r = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') m.classList.add('na-asst-wide'); m.appendChild(n); }, opts); r.push(String(t == null ? '' : t)); r.finish(); m._md = r; }
@@ -963,6 +966,7 @@
     mem = C.memNew ? C.memNew() : null;
     try { gate.forgetAll && gate.forgetAll(); } catch (_) {}
     [].slice.call(msgsEl.children).forEach(function (n) { if (n !== newBtn) n.remove(); }); if (newBtn) newBtn.hidden = true;
+    unannounce(); // (auditoría 500, CANON INV-008/009) la respuesta anterior tampoco queda en el texto oculto del lector
     var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = false;
     var m = el('div', 'na-asst-mode'); m.textContent = 'Conversación nueva.'; msgsEl.appendChild(m);
     if (inputEl) try { inputEl.focus(); } catch (_) {}
