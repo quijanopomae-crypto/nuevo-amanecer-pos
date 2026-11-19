@@ -139,19 +139,23 @@
     var attached=store&&typeof store.list==='function'?store.list():[];
     if(attached.length){
       openChat();
+      if(pending.size){bubble('theirs','La foto sigue adjunta. Espera a que finalice la consulta actual y toca la flecha azul para enviarla.');return;}
       if(attached.length!==1||!attached[0].file||!/^image\/(jpeg|png|webp|heic|heif|avif)$/.test(attached[0].file.type||'')){
         bubble('theirs','WORK admite una foto por mensaje (JPG, PNG o WebP). Otros archivos aun no se envian. Retiralos o elige solo una imagen.');
         return;
       }
       photoPreparing=true;
       var submit=$('#chatSend');if(submit)submit.disabled=true;
+      var preparing=bubble('theirs','Preparando foto para enviar…');
       try{
         var photo=await encodePhoto(attached[0].file);
+        if(preparing)preparing.remove();
         if(ask(txt||'Analiza esta imagen','chat',photo,attached[0].name)){
           field.value='';field.style.height='auto';
           if(store&&typeof store.clear==='function')store.clear();
         }
       }catch(_){
+        if(preparing)preparing.remove();
         bubble('theirs','No pude preparar esta foto. Prueba con una imagen mas pequeña en JPG o PNG.');
       }finally{photoPreparing=false;if(submit)submit.disabled=false;}
       return;
