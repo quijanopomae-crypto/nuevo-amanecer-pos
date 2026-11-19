@@ -8,7 +8,7 @@
   var menuMap={'Nueva venta':'pagePOS','Ventas':'pageVentas','Inventario':'pageInventario',
     'Clientes':'pageClientes','Caja':'pageCaja','Gastos':'pageGastos',
     'Próximamente':'pageProximamente','Configuración':'pageConfig','Inicio':'pageMenu'};
-  var msgId=0,pending=new Map(),spoken=false,speech=null,utterance=null;
+  var msgId=0,pending=new Map(),spoken=false,speech=null,utterance=null,photoPreparing=false;
   var $msgs=$('#chatMessages'),$chat=$('#workChat'),$voice=$('#workVoice');
   function post(type,data){win.parent.postMessage(Object.assign({type:'na-work:'+type},data||{}),win.location.origin);}
   function time(){try{return new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',timeZone:'America/Lima'});}catch(_){return new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});}}
@@ -40,16 +40,42 @@
       win.speechSynthesis.speak(utterance);
     }catch(_){setState('');}
   }
-  function ask(text,mode){
+  function ask(text,mode,image,photoName){
     text=String(text||'').trim();
-    if(!text)return;
-    if(win.navigator.onLine===false){bubble('theirs','Sin conexión. No se ha enviado ninguna operación.');return;}
+    if(!text&&!image)return false;
+    if(win.navigator.onLine===false){bubble('theirs','Sin conexión. No se ha enviado ninguna operación.');return false;}
+    if(image&&pending.size){bubble('theirs','Espera a que termine la consulta anterior antes de enviar una foto.');return false;}
     openChat();
-    bubble('user',text);
+    bubble('user',text+(image?'\n📷 '+String(photoName||'Imagen').slice(0,90):''));
     var id='work-'+(++msgId)+'-'+Date.now();
-    var loading=bubble('theirs','Consultando WORK…');
+    var loading=bubble('theirs',image?'Leyendo la imagen…':'Consultando WORK…');
     pending.set(id,{loading:loading,mode:mode||'chat'});
-    post('chat',{id:id,text:text});
+    var payload={id:id,text:text};if(image)payload.image=image;
+    post('chat',payload);
+    return true;
+  }
+  // El Worker acepta una sola imagen en data:image/jpeg;base64 y limita el cuerpo a 2,6 MB.
+  // Convertirla a JPEG elimina metadatos EXIF y ahorra datos en conexiones moviles.
+  function encodePhoto(file){
+    return new Promise(function(resolve,reject){
+      var url=win.URL.createObjectURL(file),img=new win.Image();
+      img.onload=function(){
+        try{
+          var size=Math.min(1,1600/Math.max(img.width,img.height)),canvas=doc.createElement('canvas');
+          canvas.width=Math.max(1,Math.round(img.width*size));
+          canvas.height=Math.max(1,Math.round(img.height*size));
+          var ctx=canvas.getContext('2d');if(!ctx)throw Error('canvas');
+          ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+          ctx.drawImage(img,0,0,canvas.width,canvas.height);
+          var q=.72,out=canvas.toDataURL('image/jpeg',q);
+          while(out.length>1400000&&q>.35){q-=.1;out=canvas.toDataURL('image/jpeg',q);}
+          if(out.length>1400000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(out))throw Error('image_too_large');
+          resolve(out);
+        }catch(e){reject(e);}finally{win.URL.revokeObjectURL(url);}
+      };
+      img.onerror=function(){win.URL.revokeObjectURL(url);reject(Error('bad_image'));};
+      img.src=url;
+    });
   }
   function intercept(el,eventName,handler){
     if(!el)return;
@@ -105,13 +131,29 @@
   var voiceLabel=$('.voice-eyebrow');
   if(voiceLabel)voiceLabel.textContent='WORK · VOZ POR TURNOS';
   // Intercept demo answers; never label a generated poster as an actual image.
-  intercept($('#chatComposeForm'),'submit',function(){
+  intercept($('#chatComposeForm'),'submit',async function(){
     var field=$('#chatInput');
-    if(!field)return;
+    if(!field||photoPreparing)return;
     var txt=field.value.trim();
-    var tray=$('#attachmentTray');
-    if(tray && tray.children.length) {
-      openChat();bubble('theirs','Los adjuntos están en vista previa local. Aún no se envían al servicio de WORK. Retíralos para enviar solo texto.');
+    var store=win.NA_WORK_ATTACHMENTS;
+    var attached=store&&typeof store.list==='function'?store.list():[];
+    if(attached.length){
+      openChat();
+      if(attached.length!==1||!attached[0].file||!/^image\/(jpeg|png|webp|heic|heif|avif)$/.test(attached[0].file.type||'')){
+        bubble('theirs','WORK admite una foto por mensaje (JPG, PNG o WebP). Otros archivos aun no se envian. Retiralos o elige solo una imagen.');
+        return;
+      }
+      photoPreparing=true;
+      var submit=$('#chatSend');if(submit)submit.disabled=true;
+      try{
+        var photo=await encodePhoto(attached[0].file);
+        if(ask(txt||'Analiza esta imagen','chat',photo,attached[0].name)){
+          field.value='';field.style.height='auto';
+          if(store&&typeof store.clear==='function')store.clear();
+        }
+      }catch(_){
+        bubble('theirs','No pude preparar esta foto. Prueba con una imagen mas pequeña en JPG o PNG.');
+      }finally{photoPreparing=false;if(submit)submit.disabled=false;}
       return;
     }
     if(!txt){var b=$('#voiceButton');if(b)b.click();return;}

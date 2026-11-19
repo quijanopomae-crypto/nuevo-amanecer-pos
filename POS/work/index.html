@@ -970,6 +970,11 @@ body.chat-active{overflow:hidden}
 const modelDescriptions={flash:'Rápido',pro:'Análisis',ultra:'Profundidad'};
 const modelLabels={flash:'⚡ Flash',pro:'✦ Pro',ultra:'◆ Ultra'};
 let selectedModel='flash',attachments=[],micRec=null,voiceActive=false,voiceMuted=false,voiceToken=0;
+// El puente CANON utiliza los archivos reales, no solamente las miniaturas de la vista previa.
+window.NA_WORK_ATTACHMENTS={
+  list:()=>attachments.slice(),
+  clear:()=>{attachments.forEach(a=>{if(a.objectUrl)URL.revokeObjectURL(a.objectUrl)});attachments=[];renderAttachments()}
+};
 const voiceScreen=$('#workVoice'),voicePhase=$('#voicePhase'),voiceSubtitle=$('#voiceSubtitle'),voiceUserSpeech=$('#voiceUserSpeech');
 const voiceCaptionBox=$('#voiceCaptionBox'),voiceHistoryPanel=$('#voiceHistoryPanel');
 let voiceReference=null;
@@ -1041,7 +1046,7 @@ filePicker.addEventListener('change',()=>{
   [...filePicker.files].slice(0,6).forEach(f=>{
     if(f.size>12*1024*1024){alert(f.name+' supera 12 MB; no se adjuntó.');return}
     const objectUrl=f.type.startsWith('image/')?URL.createObjectURL(f):null;
-    attachments.push({name:f.name,type:f.type||'file',size:f.size,objectUrl,preview:objectUrl});
+    attachments.push({name:f.name,type:f.type||'file',size:f.size,objectUrl,preview:objectUrl,file:f});
   });filePicker.value='';renderAttachments();
 });
 function cleanPendingFiles(){attachments=[];renderAttachments()}
