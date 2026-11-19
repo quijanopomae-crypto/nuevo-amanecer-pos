@@ -45,4 +45,40 @@ test.describe('WORK hosted design integration (synthetic browser, no production 
     await work.locator('#promptForm button[type="submit"]').click();
     await expect(work.locator('#chatMessages')).toContainText('Resultado de prueba canónico S/ 12.34');
   });
+
+  test('WORK muestra Enviar al adjuntar foto y envia imagen real al puente CANON', async ({ page }) => {
+    await page.goto('/index.html?work=1');
+    await page.evaluate(() => {
+      const roles = (window as any).NA_ROLES;
+      if (!roles) throw Error('Sin sesion de prueba');
+      (window as any).__workPhotoCalls = [];
+      (window as any).NA_ASISTENTE = { engine: { ready: () => true, prepare: (t: string) => ({ text: t, context: { screen: 'pageMenu', products: [] }, cards: [] }) } };
+      roles.api = async (path: string, body: any) => {
+        (window as any).__workPhotoCalls.push({ path, body });
+        if (body.ping) return { ok: true, role: 'owner', vision: true };
+        if (path === '/auth/assistant/chat?image=1') {
+          if (!String(body.image || '').startsWith('data:image/jpeg;base64,')) throw Error('Falta la foto real');
+          return { reply: 'Foto procesada por el puente de prueba', proposals: [] };
+        }
+        if (path === '/auth/assistant/chat') return { reply: 'Chat abierto', proposals: [] };
+        throw Error('Ruta inesperada: ' + path);
+      };
+    });
+    const work = page.frameLocator('#naWorkOverlay iframe');
+    await work.locator('#promptInput').fill('Hola');
+    await work.locator('#promptForm button[type="submit"]').click();
+    await expect(work.locator('#chatMessages')).toContainText('Chat abierto');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8//8/AwMDEwMDAwMDAwAkBgMB/DXemwAAAABJRU5ErkJggg==', 'base64');
+    await work.locator('#workFiles').setInputFiles({ name: 'foto-prueba.png', mimeType: 'image/png', buffer: png });
+    await expect(work.locator('#attachmentSendHint')).toContainText('Toca la flecha azul');
+    await expect(work.locator('#chatSend')).toHaveAttribute('aria-label', 'Enviar mensaje');
+    await expect(work.locator('#chatSend')).toBeEnabled();
+    await work.locator('#chatSend').click();
+    await expect(work.locator('#chatMessages')).toContainText('foto-prueba.png');
+    await expect(work.locator('#chatMessages')).toContainText('Foto procesada por el puente de prueba');
+    await expect(work.locator('#attachmentTray')).toBeHidden();
+    const calls = await page.evaluate(() => (window as any).__workPhotoCalls);
+    expect(calls.filter((c: any) => c.path === '/auth/assistant/chat?image=1')).toHaveLength(1);
+  });
+
 });
