@@ -476,3 +476,49 @@ test('hospedado (producción): un na-work:close del iframe no cierra WORK ni rea
  f.post({type:'na-work:close'});await tick(30);
  assert.ok(shown(f));
 });
+
+
+const SAMPLE_PHOTO='data:image/jpeg;base64,'+'A'.repeat(512);
+test('WORK transmite foto por la ruta de vision sin cambiar la ruta de texto',async()=>{
+  const calls=[];
+  const f=fixture({api:async(path,body)=>{
+    calls.push({path,body});
+    if(body.ping)return {ok:true,role:'owner',vision:true};
+    return {reply:'La imagen se recibio correctamente.',turns:[]};
+  }});
+  f.post({type:'na-work:chat',id:'img1',text:'Analiza esta imagen',image:SAMPLE_PHOTO});
+  await tick(45);
+  assert.equal(calls.length,2);
+  assert.equal(calls[0].path,'/auth/assistant/chat');
+  assert.deepEqual(calls[0].body,{ping:true});
+  assert.equal(calls[1].path,'/auth/assistant/chat?image=1');
+  assert.equal(calls[1].body.image,SAMPLE_PHOTO);
+  assert.match(calls[1].body.text,/Analiza esta imagen/);
+  assert.equal(f.sent.find(x=>x.action==='chat'&&x.id==='img1').ok,true);
+});
+
+test('WORK bloquea foto de empleado antes de transmitir bytes y sin llamar al Worker',async()=>{
+  const f=fixture({owner:false});
+  f.post({type:'na-work:chat',id:'img2',text:'Analiza',image:SAMPLE_PHOTO});
+  await tick();
+  assert.equal(f.calls.api.length,0);
+  assert.match(f.sent.find(x=>x.action==='chat'&&x.id==='img2').text,/Solo el Admin/);
+});
+
+test('WORK verifica que el proveedor tenga vision antes de enviar foto',async()=>{
+  const calls=[];
+  const f=fixture({api:async(path,body)=>{calls.push({path,body});return {role:'owner',vision:false};}});
+  f.post({type:'na-work:chat',id:'img3',text:'Analiza',image:SAMPLE_PHOTO});
+  await tick(40);
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].body,{ping:true});
+  assert.match(f.sent.find(x=>x.action==='chat'&&x.id==='img3').text,/no tiene lectura de imagenes/);
+});
+
+test('WORK rechaza una imagen mal formada sin enviarla al servidor',async()=>{
+  const f=fixture();
+  f.post({type:'na-work:chat',id:'img4',text:'Analiza',image:'data:image/svg+xml;base64,PHN2Zz4='});
+  await tick();
+  assert.equal(f.calls.api.length,0);
+  assert.match(f.sent.find(x=>x.action==='chat'&&x.id==='img4').text,/formato incorrecto/);
+});
