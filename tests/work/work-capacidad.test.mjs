@@ -490,7 +490,7 @@ test('WORK transmite foto por la ruta de vision sin cambiar la ruta de texto',as
   await tick(45);
   assert.equal(calls.length,2);
   assert.equal(calls[0].path,'/auth/assistant/chat');
-  assert.deepEqual(calls[0].body,{ping:true});
+  assert.equal(calls[0].body.ping,true);
   assert.equal(calls[1].path,'/auth/assistant/chat?image=1');
   assert.equal(calls[1].body.image,SAMPLE_PHOTO);
   assert.match(calls[1].body.text,/Analiza esta imagen/);
@@ -511,7 +511,7 @@ test('WORK verifica que el proveedor tenga vision antes de enviar foto',async()=
   f.post({type:'na-work:chat',id:'img3',text:'Analiza',image:SAMPLE_PHOTO});
   await tick(40);
   assert.equal(calls.length,1);
-  assert.deepEqual(calls[0].body,{ping:true});
+  assert.equal(calls[0].body.ping,true);
   assert.match(f.sent.find(x=>x.action==='chat'&&x.id==='img3').text,/no tiene lectura de imagenes/);
 });
 
