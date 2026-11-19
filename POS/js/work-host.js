@@ -615,7 +615,17 @@
     if (!r || !r.ok) { cardState(key, {state: 'failed', msg: plain(r && r.msg) || GENERIC_ERROR}); return; }
     closeToPos();
   }
-  async function ask(target,id,message) {
+  async function ask(target,id,message,image) {
+    var hasImage=typeof image==='string'&&image.length>0;
+    if(image!==undefined&&!hasImage){
+      respond(target,{action:'chat',id:id,ok:false,text:'La imagen no es valida. Intenta de nuevo.'});return;
+    }
+    if(hasImage&&!ownerDataAllowed()){
+      respond(target,{action:'chat',id:id,ok:false,text:'Solo el Admin puede enviar fotos al asistente.'});return;
+    }
+    if(hasImage&&(image.length>1400000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image))){
+      respond(target,{action:'chat',id:id,ok:false,text:'La foto supera el limite permitido o tiene un formato incorrecto.'});return;
+    }
     if (busy) { respond(target,{action:'chat',id:id,ok:false,text:'Espera a que termine la consulta actual.'}); return; }
     var requestGeneration = generation;
     if (String(message || '').length > MAX_TEXT) {
@@ -625,12 +635,23 @@
     busy = true;
     try {
       if (!sessionReady() || !root.NA_ROLES || typeof root.NA_ROLES.api!=='function') throw Error('Asistente no disponible en esta sesión');
+      if (hasImage) {
+        // Ping del Worker: no consume cupo ni envia foto si el acceso cambio o no hay vision.
+        var photoAccess=await root.NA_ROLES.api('/auth/assistant/chat',{ping:true});
+        if(requestGeneration!==generation||!sessionReady())return;
+        if(!photoAccess||photoAccess.role!=='owner'){
+          respond(target,{action:'chat',id:id,ok:false,text:'Solo el Admin puede enviar fotos al asistente.'});return;
+        }
+        if(photoAccess.vision!==true){
+          respond(target,{action:'chat',id:id,ok:false,text:'El modelo actual no tiene lectura de imagenes disponible.'});return;
+        }
+      }
       // Mismo motor del asistente original: nombres de clientes tapados, contexto real de productos (costos solo del Admin) y estado de tarjetas.
       var e = await waitEngine(6000);
       if (requestGeneration !== generation || !sessionReady()) return;
       // Pedido ambiguo («súbele un poco a las galletas»): una sola pregunta corta con opciones tocables, sin gastar una consulta al servidor.
       var Cc = core();
-      if (e && Cc && typeof Cc.clarifyAmbiguous === 'function' && typeof e.catalog === 'function' && ownerDataAllowed()) {
+      if (!hasImage && e && Cc && typeof Cc.clarifyAmbiguous === 'function' && typeof e.catalog === 'function' && ownerDataAllowed()) {
         var clar = null;
         try { clar = Cc.clarifyAmbiguous(String(message || ''), e.catalog()); } catch (_) { clar = null; }
         if (clar) {
@@ -657,7 +678,11 @@
         if (tx && tx !== lastProg) { lastProg = tx; if (requestGeneration === generation) respond(target,{action:'progress',id:id,text:tx}); }
       }, 1000);
       var answer;
-      try { answer=await root.NA_ROLES.api('/auth/assistant/chat',{text:finalText,history:history.slice(),context:prepared.context,cards:prepared.cards}); }
+      try {
+        var chatBody={text:finalText,history:history.slice(),context:prepared.context,cards:prepared.cards};
+        if(hasImage)chatBody.image=image;
+        answer=await root.NA_ROLES.api('/auth/assistant/chat'+(hasImage?'?image=1':''),chatBody);
+      }
       finally { if (typeof root.clearInterval === 'function') root.clearInterval(prog); }
       if (requestGeneration !== generation || !sessionReady()) return;
       var out=answer && typeof answer==='object' ? answer : {};
@@ -716,7 +741,7 @@
       return;
     }
     if (data.type==='na-work:chat' && typeof data.id==='string' && typeof data.text==='string' && data.text.trim().length>0) {
-      ask(event.source,data.id,data.text.trim());
+      ask(event.source,data.id,data.text.trim(),data.image);
     }
   });
   function mount() {
