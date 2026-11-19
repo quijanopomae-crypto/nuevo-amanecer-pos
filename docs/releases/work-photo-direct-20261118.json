@@ -1,0 +1,25 @@
+{
+  "mission": "Habilitar recepcion de una foto por mensaje en WORK usando el contrato existente de vision CANON",
+  "status": "approved_for_direct_web_release",
+  "pull_request": 1096,
+  "merged_commit": "f45c64332377d1c5aa00575b23dbb1a678a1f093",
+  "test_evidence": {
+    "pull_request_ci": "success",
+    "pull_request_visual": "success",
+    "main_branch_ci": "success"
+  },
+  "risk": "medium",
+  "runtime_paths": [
+    "POS/js/work-host.js",
+    "POS/work/index.html",
+    "POS/work/work-canon-bridge.js"
+  ],
+  "out_of_scope": [
+    "Worker",
+    "D1",
+    "ventas",
+    "inventario",
+    "permisos"
+  ],
+  "notes": "El gate verify-direct debe comprobar el SHA live, diferencias completas, permisos y pruebas antes de publicar. Nunca usar este documento como prueba de despliegue."
+}
