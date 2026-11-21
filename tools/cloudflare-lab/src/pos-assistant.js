@@ -3036,6 +3036,10 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   if (tok.t === 'compra') {
     // Una discrepancia del total/documento no se puede omitir aceptando filas: exige una nueva propuesta corregida.
     if (Array.isArray(body.proposal.revisar_documento) && body.proposal.revisar_documento.length) return json({error:'invoice_total_mismatch',fields:body.proposal.revisar_documento,operation_id:tok.op},422);
+    // Las discrepancias aritmeticas de una foto NO se pueden saltar con «Está bien».
+    const discrepancyFlags = new Set(['cantidad_empaque','unidades_por_paquete','importe_fila','costo_ilegible','cantidad_ilegible']);
+    const badPhotoRows = (body.proposal.lineas || []).flatMap((l,i)=>Array.isArray(l.revisar) && l.revisar.some(flag=>discrepancyFlags.has(flag)) ? [i] : []);
+    if (badPhotoRows.length) return json({error:'invoice_row_mismatch',rows:badPhotoRows,operation_id:tok.op},422);
     const flagged = flaggedRows(body.proposal), rv = body.review && typeof body.review === 'object' ? body.review : {};
     const ints = (a) => (Array.isArray(a) ? a : []).filter((i) => Number.isInteger(i) && i >= 0 && i < body.proposal.lineas.length);
     const accept = rv.op === tok.op ? ints(rv.accept) : [], drop = rv.op === tok.op ? ints(rv.drop) : [];
