@@ -10,6 +10,7 @@ export function normalizePhotoPurchaseLine(raw = {}) {
   const declared = nonnegative(raw.total_linea);
   const flags = [];
   if (unitCost === null) flags.push('costo_ilegible');
+  if (claimed === null && (packs === null || perPack === null)) flags.push('cantidad_ilegible');
   let quantity = claimed;
   if (packs !== null && perPack !== null) {
     const calculated = packs * perPack;
