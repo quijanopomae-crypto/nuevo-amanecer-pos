@@ -85,7 +85,7 @@
       target.postMessage(Object.assign({type:'na-work:response'},data),root.location.origin);
     }
   }
-  var history = [], generation = 0, busy = false, cards = Object.create(null), cardSeq = 0;
+  var history = [], invoiceMemory = null, generation = 0, busy = false, cards = Object.create(null), cardSeq = 0;
   var MAX_TEXT = 1500, MAX_CARDS = 30;
   function engine() { var a = root.NA_ASISTENTE; return a && a.engine ? a.engine : null; }
   function core() { return root.NA_ASISTENTE_CORE || null; }
@@ -108,7 +108,7 @@
     if (!e) return;
     try { e.cancel(key, 'cancelada'); } catch (_) {} try { e.forget(key); } catch (_) {}
   }
-  function resetConversation() { dropCards(); history = []; generation++; busy = false; }
+  function resetConversation() { dropCards(); history = []; invoiceMemory = null; generation++; busy = false; }
   function close() {
     resetConversation(); parked = false;
     if (overlay) { overlay.remove(); overlay=null; frame=null; doc.body.classList.remove('na-work-open'); }
@@ -200,6 +200,7 @@
     if (Array.isArray(p.completar) || Array.isArray(p.needFields)) return true;
     if (p.type === 'configuracion' && C && typeof C.isRucCard === 'function' && C.isRucCard(p)) return true;
     if (p.type === 'compra') {
+      if(Array.isArray(p.revisar_documento)&&p.revisar_documento.length)return true;
       var lines = Array.isArray(p.lineas) ? p.lineas : [];
       if (!lines.length) return true;
       return lines.some(function (l) { return !l || (l.revisar && l.revisar.length) || (l.limite && l.limite.length) || l.cantidad == null || l.cantidad === ''; });
@@ -257,7 +258,7 @@
       if (p.revisar) warn.push('Precio o costo fuera de lo normal. Revisa bien.');
     } else if (p.type === 'compra') {
       var lines = Array.isArray(p.lineas) ? p.lineas.slice(0, 30) : [];
-      for (i = 0; i < lines.length; i++) rows.push([str(lines[i].cantidad, 12) + ' × ' + str(lines[i].nombre, 80) + (lines[i].product_id ? '' : ' (no registrado)'), lines[i].costo_unitario != null ? money(lines[i].costo_unitario) : '-']);
+      for (i = 0; i < lines.length; i++) rows.push([str(lines[i].cantidad, 12) + ' × ' + str(lines[i].nombre, 80) + (lines[i].presentacion ? ' · ' + str(lines[i].presentacion,40) : '') + (lines[i].product_id ? '' : ' (no registrado)'), lines[i].costo_unitario != null ? money(lines[i].costo_unitario) + (lines[i].total_linea != null ? ' · total ' + money(lines[i].total_linea) : '') : '-']);
       var C = core(); if (C && typeof C.purchaseTotals === 'function') { var t = C.purchaseTotals(p); if (t && t.filas && t.filas.length !== t.sinCosto) rows.push(['Total de la compra', money(t.total)]); }
       if (p.sinProducto) warn.push(p.sinProducto === 1 ? '1 línea no tiene producto registrado: revísala.' : p.sinProducto + ' líneas no tienen producto registrado: revísalas.');
     } else if (p.type === 'configuracion') {
@@ -660,14 +661,15 @@
           return;
         }
       }
-      var prepared = e ? e.prepare(String(message || '')) : null;
+      var autoImage = hasImage && !String(message || '').trim();
+      var prepared = e ? e.prepare(autoImage ? 'Foto adjunta' : String(message || '')) : null;
       if (!prepared) {
         var eng = engine(), st = eng && typeof eng.accessState === 'function' ? eng.accessState() : 'pending';
         throw Error(st === 'denied'
           ? 'Este aparato no tiene permiso para usar el asistente (solo el Admin lo usa). No se envió nada. El resto del sistema funciona igual.'
           : 'El asistente no pudo conectarse todavía (revisa tu internet). No se envió nada. Intenta de nuevo en unos segundos o usa el asistente del POS.');
       }
-      var finalText = String(prepared.text || '');
+      var finalText = autoImage ? '' : String(prepared.text || '');
       if (finalText.length > MAX_TEXT) {
         respond(target,{action:'chat',id:id,ok:true,text:'Al tapar nombres y datos privados tu mensaje quedó de ' + finalText.length + ' letras y el máximo es ' + MAX_TEXT + '. No lo envié. Acórtalo e intenta de nuevo.'});
         return;
@@ -680,13 +682,16 @@
       var answer;
       try {
         var chatBody={text:finalText,history:history.slice(),context:prepared.context,cards:prepared.cards};
-        if(hasImage)chatBody.image=image;
+        if(hasImage){invoiceMemory=null;chatBody.image=image;}
+        else if(invoiceMemory)chatBody.invoice_memory=invoiceMemory;
         answer=await root.NA_ROLES.api('/auth/assistant/chat'+(hasImage?'?image=1':''),chatBody);
       }
       finally { if (typeof root.clearInterval === 'function') root.clearInterval(prog); }
       if (requestGeneration !== generation || !sessionReady()) return;
       var out=answer && typeof answer==='object' ? answer : {};
       if (out.error) { var codeErr = new Error(String(out.error).slice(0,80)); codeErr.data = out; throw codeErr; }
+      // El token solo lo firma el Worker y pertenece a esta sesion Admin. Nunca se fabrica en el cliente.
+      if(Object.prototype.hasOwnProperty.call(out,'invoice_memory')) invoiceMemory=typeof out.invoice_memory==='string'?out.invoice_memory:null;
       var text=out.texto || out.text || out.reply || out.respuesta || out.answer || out.message || '';
       if (typeof text!=='string') text='';
       if (!text && out.final) text=typeof out.final==='string'?out.final:out.final.text || out.final.respuesta || '';
@@ -740,7 +745,7 @@
       else if (data.type==='na-work:card-assistant') { closeToPos(); try { var a3=root.NA_ASISTENTE; if (a3 && typeof a3.open==='function') a3.open(); } catch (_) {} }
       return;
     }
-    if (data.type==='na-work:chat' && typeof data.id==='string' && typeof data.text==='string' && data.text.trim().length>0) {
+    if (data.type==='na-work:chat' && typeof data.id==='string' && typeof data.text==='string' && (data.text.trim().length>0 || typeof data.image==='string')) {
       ask(event.source,data.id,data.text.trim(),data.image);
     }
   });
