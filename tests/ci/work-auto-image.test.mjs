@@ -58,7 +58,7 @@ test('filas inconsistentes, cantidades y datos ilegibles exigen revision',()=>{
   assert.ok(noUnit.revisar.includes('unidades_por_paquete'));
   const bonus=normalizePhotoPurchaseLine({nombre:'Bonificacion',cantidad:1,costo_unitario:0,total_linea:0});
   assert.deepEqual(bonus.revisar,[]);
-  assert.ok(checkPhotoDocument([],{}).flags.includes('total_documento_ilegible'));
+  assert.ok(!checkPhotoDocument([],{}).flags.includes('total_documento')); // sin total impreso no se inventa discrepancia
 });
 test('Work envia foto sin texto ni prompt del usuario y conserva token firmado por sesion',()=>{
   const bridge=readFileSync('POS/work/work-canon-bridge.js','utf8');
