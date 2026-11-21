@@ -71,7 +71,7 @@ export async function writeInvoiceMemory({previous, image, proposals, reply, tex
   const keep = previous && !image && !newDocument;
   const m = fresh ? {v:1, scope:await scope(secret, auth), exp:keep ? previous.exp : now + TTL, invoices:purchases.slice(0,2).map(p => ({
     proveedor:clean(p.proveedor || '').slice(0,120), documento:clean(p.documento || '').slice(0,80), fecha:clean(p.fecha || '').slice(0,20),
-    lineas:(p.lineas || []).slice(0,30).map(l => ({nombre:clean(l.nombre || '').slice(0,160), cantidad:l.cantidad, costo_unitario:l.costo_unitario}))
+    lineas:(p.lineas || []).slice(0,30).map(l => ({nombre:clean(l.nombre || '').slice(0,160), cantidad:l.cantidad, costo_unitario:l.costo_unitario, unidad:clean(l.unidad || '').slice(0,25), presentacion:clean(l.presentacion || '').slice(0,80), paquetes:l.paquetes ?? null, unidades_por_paquete:l.unidades_por_paquete ?? null, total_linea:l.total_linea ?? null})), total_documento:p.total_documento ?? null, total_calculado:p.total_calculado ?? null, total_unidades:p.total_unidades ?? null
   })), lectura:clean(reply || '').slice(0,1500), clarifications:keep ? previous.clarifications : []}
     : previous ? {...previous} : {v:1, scope:await scope(secret, auth), exp:now + TTL, invoices:[], lectura:'', clarifications:[]};
   m.taught = taughtBefore.slice();
