@@ -1719,7 +1719,7 @@ function reconcileInvoiceProducts(proposal, products) {
     if (hits.length !== 1 || !safeId(hits[0].id)) continue;
     const product = hits[0]; line.product_id = String(product.id); line.nombre = cleanText(product.nombre, 80);
     line.costo_actual = product.costo == null ? null : money(product.costo);
-    const flags = reviewPurchaseLine(line, product); delete line.revisar; if (flags.length) line.revisar = flags;
+    const flags = [...new Set([...(Array.isArray(line.revisar) ? line.revisar : []), ...reviewPurchaseLine(line, product)])]; delete line.revisar; if (flags.length) line.revisar = flags;
   }
   proposal.sinProducto = proposal.lineas.filter((line) => !line.product_id).length;
   proposal.revisarFilas = proposal.lineas.filter((line) => line.revisar).length;
@@ -1787,6 +1787,7 @@ export function applyStockControl(proposals, dropped, map, qtys = null) {
     if (keep.length === p.lineas.length) continue;
     p.lineas.filter((l) => !keep.includes(l)).forEach((l) => { skipped.push(l.nombre); note(l.nombre, l.cantidad); });
     p.omitidas = p.lineas.filter((l) => !keep.includes(l)).map((l) => ({ nombre: l.nombre, motivo: 'no lleva control de stock' }));
+    if (Array.isArray(p.revisar_documento)) p.revisar_documento = [...new Set([...p.revisar_documento, 'filas_omitidas'])];
     p.lineas = keep;
     if (!keep.length) { dropped.push({ dropped: 'sin_control_stock', tool: 'preparar_compra' }); proposals.splice(k, 1); continue; }
     p.sinProducto = keep.filter((l) => !l.product_id).length; p.revisarFilas = keep.filter((l) => l.revisar).length;
