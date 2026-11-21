@@ -9,6 +9,7 @@ export function normalizePhotoPurchaseLine(raw = {}) {
   const claimed = positive(raw.cantidad), unitCost = nonnegative(raw.costo_unitario);
   const declared = nonnegative(raw.total_linea);
   const flags = [];
+  if (unitCost === null) flags.push('costo_ilegible');
   let quantity = claimed;
   if (packs !== null && perPack !== null) {
     const calculated = packs * perPack;
@@ -34,7 +35,8 @@ export function checkPhotoDocument(lines, source = {}) {
   if (units !== null && (!lines.every(l=>Number(l.cantidad)>0) || Math.abs(quantity-units)>0.0001)) flags.push('total_unidades');
   const complete = lines.length > 0 && lines.every(l=>Number(l.cantidad)>0 && l.costo_unitario !== null && Number.isFinite(Number(l.costo_unitario)));
   const totalCalculated=complete ? lines.reduce((n,l)=>n+cents(Number(l.cantidad)*Number(l.costo_unitario)),0) : null;
-  if (total !== null && (totalCalculated === null || !near(totalCalculated,cents(total)))) flags.push('total_documento');
+  if (total === null) flags.push('total_documento_ilegible');
+  else if (totalCalculated === null || !near(totalCalculated,cents(total))) flags.push('total_documento');
   return { flags, cantidad_calculada:quantity, total_calculado:totalCalculated === null ? null : totalCalculated/100,
     total_impreso:total, unidades_impresas:units, productos_impresos:count };
 }
