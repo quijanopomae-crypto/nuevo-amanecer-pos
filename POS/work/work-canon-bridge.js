@@ -150,7 +150,7 @@
       try{
         var photo=await encodePhoto(attached[0].file);
         if(preparing)preparing.remove();
-        if(ask(txt||'Analiza esta imagen','chat',photo,attached[0].name)){
+        if(ask(txt,'chat',photo,attached[0].name)){
           field.value='';field.style.height='auto';
           if(store&&typeof store.clear==='function')store.clear();
         }
