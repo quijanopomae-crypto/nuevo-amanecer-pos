@@ -1,12 +1,13 @@
 // Revisión determinista de cifras extraídas por la ÚNICA llamada multimodal de Work.
 // Los datos de la imagen son no confiables; jamás se inventan unidades o importes.
 const positive = value => value === null || value === undefined || value === '' ? null : Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null;
+const nonnegative = value => value === null || value === undefined || value === '' ? null : Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
 const cents = n => Math.round(n * 100);
 const near = (a,b) => Math.abs(a-b) <= 1; // tolerancia: un céntimo, no ajustes silenciosos
 export function normalizePhotoPurchaseLine(raw = {}) {
   const packs = positive(raw.paquetes), perPack = positive(raw.unidades_por_paquete);
-  const claimed = positive(raw.cantidad), unitCost = positive(raw.costo_unitario);
-  const declared = positive(raw.total_linea);
+  const claimed = positive(raw.cantidad), unitCost = nonnegative(raw.costo_unitario);
+  const declared = nonnegative(raw.total_linea);
   const flags = [];
   let quantity = claimed;
   if (packs !== null && perPack !== null) {
@@ -27,7 +28,7 @@ export function normalizePhotoPurchaseLine(raw = {}) {
 }
 export function checkPhotoDocument(lines, source = {}) {
   const flags = [];
-  const count=positive(source.numero_productos), units=positive(source.total_unidades), total=positive(source.total_documento);
+  const count=positive(source.numero_productos), units=positive(source.total_unidades), total=nonnegative(source.total_documento);
   if (count !== null && count !== lines.length) flags.push('numero_productos');
   const quantity = lines.reduce((n,l)=>n+(Number(l.cantidad)||0),0);
   if (units !== null && (!lines.every(l=>Number(l.cantidad)>0) || Math.abs(quantity-units)>0.0001)) flags.push('total_unidades');
